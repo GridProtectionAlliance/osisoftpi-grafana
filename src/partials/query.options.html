@@ -1,0 +1,51 @@
+<section class="grafana-metric-options gf-form-group">
+	<div class="gf-form-inline">
+		<div class="gf-form max-width-15">
+			<span class="gf-form-label">Max data points</span>
+			<input type="text"
+				class="gf-form-input"
+				ng-model="ctrl.panelCtrl.panel.maxDataPoints"
+				bs-tooltip="'Override max data points, automatically set to graph width in pixels.'"
+				data-placement="right"
+				ng-model-onblur ng-change="ctrl.panelCtrl.refresh()"
+				spellcheck='false'
+				placeholder="auto">
+			</input>
+		</div>
+	</div>
+	<div class="gf-form-inline">
+		<div class="gf-form">
+			<span class="gf-form-label width-12">
+				<i class="fa fa-info-circle"></i>
+				<a ng-click="ctrl.panelCtrl.toggleEditorHelp(1);" bs-tooltip="'click to show helpful info'" data-placement="bottom">
+					Shorter legend names
+				</a>
+			</span>
+			<span class="gf-form-label width-12">
+				<i class="fa fa-info-circle"></i>
+				<a ng-click="ctrl.panelCtrl.toggleEditorHelp(2);" bs-tooltip="'click to show helpful info'" data-placement="bottom">
+					Series as parameters
+				</a>
+			</span>
+			<span class="gf-form-label width-7">
+				<i class="fa fa-info-circle"></i>
+				<a ng-click="ctrl.panelCtrl.toggleEditorHelp(3)" bs-tooltip="'click to show helpful info'" data-placement="bottom">
+					Stacking
+				</a>
+			</span>
+			<span class="gf-form-label width-8">
+				<i class="fa fa-info-circle"></i>
+				<a ng-click="ctrl.panelCtrl.toggleEditorHelp(4)" bs-tooltip="'click to show helpful info'" data-placement="bottom">
+					Templating
+				</a>
+			</span>
+			<span class="gf-form-label width-10">
+				<i class="fa fa-info-circle"></i>
+				<a ng-click="ctrl.panelCtrl.toggleEditorHelp(5)" bs-tooltip="'click to show helpful info'" data-placement="bottom">
+					max data points
+				</a>
+			</span>
+		</div>
+	</div>
+</section>
+</div>
