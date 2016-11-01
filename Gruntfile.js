@@ -20,10 +20,10 @@ module.exports = function (grunt) {
       img_to_dist: {
         cwd: 'src',
         expand: true,
-        src: ['img/*'],
+        src: ['img/**/*'],
         dest: 'dist/'
       },
-      img_to_dist: {
+      docs_to_dist: {
         expand: true,
         src: ['docs/**/*'],
         dest: 'dist/'
@@ -62,5 +62,5 @@ module.exports = function (grunt) {
     }
   })
 
-  grunt.registerTask('default', ['clean', 'copy:src_to_dist', 'copy:img_to_dist', 'copy:pluginDef', 'babel'])
+  grunt.registerTask('default', ['clean', 'copy:src_to_dist', 'copy:img_to_dist', 'copy:docs_to_dist', 'copy:pluginDef', 'babel'])
 }

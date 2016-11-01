@@ -10,7 +10,7 @@ Install using the grafana-cli or clone the repository directly
 into your Grafana plugin directory.
 
 ```
-grafana-cli pluginx install gridprotectionalliance-osisoftpi-datasource
+grafana-cli plugins install gridprotectionalliance-osisoftpi-datasource
 ```
 
 ## Usage
