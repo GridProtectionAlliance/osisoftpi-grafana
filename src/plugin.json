@@ -15,18 +15,19 @@
   "info": {
     "description": "OSIsoft PI Web API Datasource",
     "author": {
-      "name": "EEParker",
-      "url": ""
+      "name": "Grid Protection Alliance",
+      "url": "https://github.com/GridProtectionAlliance/piwebapi-grafana"
     },
     "logos": {
       "small": "img/osi-logo.png",
       "large": "img/osi-logo.png"
     },
     "links": [
-      {"name": "GitHub", "url": "https://github.com/grafana/simple-json-datasource"}
+      {"name": "GitHub", "url": "https://github.com/GridProtectionAlliance/piwebapi-grafana"},
+      {"name": "MIT License", "url": "https://github.com/GridProtectionAlliance/piwebapi-grafana/blob/master/LICENSE"}
     ],
-    "version": "1.0.0",
-    "updated": "2016-08-01"
+    "version": "1.0.1",
+    "updated": "2016-11-01"
   },
 
   "dependencies": {
