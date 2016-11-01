@@ -1,12 +1,12 @@
 {
-  "name": "osisoft-piwebapi-datasource",
+  "name": "gridprotectionalliance-osipi-datasource",
   "private": true,
   "version": "1.0.0",
-  "description": "OSIsoft PI Web API Datasource",
+  "description": "datasource plugin for OSIsoft PI",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "GridProtectionAlliance",
+  "author": "Grid Protection Alliance",
   "license": "MIT",
   "devDependencies": {
     "babel": "~6.5.1",
