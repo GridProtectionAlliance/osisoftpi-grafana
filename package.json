@@ -1,13 +1,14 @@
 {
-  "name": "gridprotectionalliance-osipi-datasource",
+  "name": "gridprotectionalliance-osisoftpi-datasource",
   "private": true,
   "version": "1.0.0",
-  "description": "datasource plugin for OSIsoft PI",
+  "description": "Grafana datasource plugin for OSIsoft PI",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Grid Protection Alliance",
   "license": "MIT",
+  "repository": "https://github.com/GridProtectionAlliance/osisoftpi-grafana",
   "devDependencies": {
     "babel": "~6.5.1",
     "chai": "~3.5.0",

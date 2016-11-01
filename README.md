@@ -6,22 +6,33 @@ This data source provides access to OSIsoft PI and PI-AF data through PI Web API
 
 ## Installation
 
-Copy the contents of the "dist" folder to your Grafana plugin directory into a folder called "osisoft-piwebapi-datasource".
+Install using the grafana-cli or clone the repository directly 
+into your Grafana plugin directory.
+
+```
+grafana-cli pluginx install gridprotectionalliance-osisoftpi-datasource
+```
 
 ## Usage
 
-Create a new instance of the data source from the Grafana Data Sources administration page.
+Create a new instance of the data source from the Grafana Data Sources
+administration page.
 
-It is recommended to use "proxy" access settings. You may need to add "Basic" authentication to your PIWebAPI server configuration and add credentials to the data source settings.
+It is recommended to use "proxy" access settings.
+You may need to add "Basic" authentication to your PIWebAPI
+server configuration and add credentials to the data source settings.
 
-See [PI Web API Documentation](https://livelibrary.osisoft.com/LiveLibrary/content/en/web-api-v6/) for more information on configuring PI Web API.
+NOTE: If you are using PI-Coresight, it is recommended to create a new
+instance of PI Web API for use with this plugin.
+
+See [PI Web API Documentation](https://livelibrary.osisoft.com/LiveLibrary/content/en/web-api-v6/) 
+for more information on configuring PI Web API.
 
 
 ## Template Variables
 
-Currently child elements are the only supported template variables.
-The query interface requires a json query. This will be updated to use the 
-Grafana metric slices in the future.
+Child elements are the only supported template variables.
+Currently, the query interface requires a json query.
 
 An example config is shown below.  
 `{"path": "PISERVER\\DatabaseName\\ElementNameWithChildren"}`
@@ -35,8 +46,7 @@ This datasource can use AF Event Frames as annotations.
 ![event-frame](docs/img/event_frame.png)
 
 Creating an annotation query and use the Event Frame category as the query string.
-Color and regex replacement strings for the event frame name are supported.
-Template support will be added in a future version.
+Color and regex replacement strings for the name are supported.
 
 For example:  
 ![event-frame-setup-1](docs/img/event_frame_setup_1.png)
