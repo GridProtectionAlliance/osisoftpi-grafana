@@ -4,15 +4,6 @@ This data source provides access to OSIsoft PI and PI-AF data through PI Web API
 
 ![display](docs/img/system_overview.png)
 
-## Installation
-
-Install using the grafana-cli or clone the repository directly 
-into your Grafana plugin directory.
-
-```
-grafana-cli plugins install gridprotectionalliance-osisoftpi-datasource
-```
-
 ## Usage
 
 Create a new instance of the data source from the Grafana Data Sources
@@ -51,6 +42,15 @@ Color and regex replacement strings for the name are supported.
 For example:  
 ![event-frame-setup-1](docs/img/event_frame_setup_1.png)
 ![event-frame-setup-2](docs/img/event_frame_setup_2.png)  
+
+## Installation
+
+Install using the grafana-cli or clone the repository directly
+into your Grafana plugin directory.
+
+```
+grafana-cli plugins install gridprotectionalliance-osisoftpi-datasource
+```
 
 ## Trademarks
 
