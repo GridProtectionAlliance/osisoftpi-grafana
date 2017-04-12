@@ -11,7 +11,8 @@
 
   "metrics": true,
   "annotations": true,
-
+  "alerting": true,
+  
   "info": {
     "description": "Datasource plugin for OSIsoft PI Web API",
     "author": {

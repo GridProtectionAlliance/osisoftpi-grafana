@@ -105,9 +105,16 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           'EventWeightedIncludeBothEnds' // Events at both ends of the interval boundaries are included in the event weighted calculation.
           ];
 
-          _this.target.summary = _this.target.summary || { types: [], basis: 'EventWeighted', interval: '5m' };
+          _this.noDataReplacementSegment = _this.uiSegmentSrv.newSegment('Null');
+          _this.noDataReplacement = ['Null', // replace with nulls
+          'Drop', // drop items
+          'Previous', // use previous value if available
+          '0'];
+
+          _this.target.summary = _this.target.summary || { types: [], basis: 'EventWeighted', interval: '5m', nodata: 'Null' };
           _this.target.summary.types = _this.target.summary.types || [];
           _this.target.summary.basis = _this.target.summary.basis || 'EventWeighted';
+          _this.target.summary.nodata = _this.target.summary.nodata || 'Null';
           _this.target.summary.interval = _this.target.summary.interval || '5m';
 
           _this.target.target = _this.target.target || 'select element';
@@ -159,7 +166,8 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             });
 
             if (element !== oldElement || this.target.webid === undefined) {
-              if (this.segments[this.segments.length - 1].value !== 'select element') {
+              var segmentValue = this.segments[this.segments.length - 1].value;
+              if (!segmentValue.startsWith('Select AF')) {
                 this.panelCtrl.refresh();
               }
 
@@ -217,7 +225,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var arr = this.segments.slice(0, index);
 
             return _.reduce(arr, function (result, segment) {
-              if (segment.value !== 'select element') {
+              if (!segment.value.startsWith('Select AF')) {
                 return result ? result + '\\' + segment.value : segment.value;
               }
               return result;
@@ -229,7 +237,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var arr = this.attributes.slice(0, this.attributes.length);
 
             return _.reduce(arr, function (result, segment) {
-              if (segment.value !== 'select element') {
+              if (!segment.value.startsWith('Select AF')) {
                 return result ? result + ';' + segment.value : segment.value;
               }
               return result;
@@ -241,7 +249,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var arr = this.summaries.slice(0, this.summaries.length);
 
             return _.reduce(arr, function (result, segment) {
-              if (segment && segment.value !== 'select element') {
+              if (segment && !segment.value.startsWith('Select AF')) {
                 return result ? result + ',' + segment.value : segment.value;
               }
               return result;
@@ -290,19 +298,23 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var ctrl = this;
             var query = { path: ctrl.getSegmentPathUpTo(fromIndex + 1) };
 
+            if (ctrl.segments.length === 0) {
+              ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"));
+            }
+
             return ctrl.datasource.metricFindQuery(angular.toJson(query)).then(function (children) {
               if (children.length === 0) {
                 if (query.path !== '') {
                   ctrl.segments = ctrl.segments.splice(0, fromIndex);
                   if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                    ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric());
+                    ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"));
                   }
                 }
               } else /* if (this.isElementSegmentExpandable(segments[0])) */{
                   if (ctrl.segments.length === fromIndex) {
                     ctrl.segments = ctrl.segments.splice(0, fromIndex);
                     if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                      ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric());
+                      ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
                     }
                   } else {
                     return ctrl.checkOtherSegments(fromIndex + 1);
@@ -311,7 +323,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             }).catch(function (err) {
               ctrl.segments = ctrl.segments.splice(0, fromIndex);
               if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric());
+                ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
               }
               ctrl.error = err.message || 'Failed to issue metric query';
             });
@@ -337,7 +349,14 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
         }, {
           key: 'calcBasisValueChanged',
           value: function calcBasisValueChanged(segment, index) {
-            this.target.summary.basis = segment.value;
+            this.target.summary.basis = this.calculationBasisSegment.value;
+            this.targetChanged();
+            this.panelCtrl.refresh();
+          }
+        }, {
+          key: 'calcNoDataValueChanged',
+          value: function calcNoDataValueChanged(segment, index) {
+            this.target.summary.nodata = this.noDataReplacementSegment.value;
             this.targetChanged();
             this.panelCtrl.refresh();
           }
@@ -346,6 +365,15 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           value: function getCalcBasisSegments() {
             var ctrl = this;
             var segments = _.map(this.calculationBasis, function (item) {
+              return ctrl.uiSegmentSrv.newSegment({ value: item, expandable: true });
+            });
+            return this.$q.when(segments);
+          }
+        }, {
+          key: 'getNoDataSegments',
+          value: function getNoDataSegments() {
+            var ctrl = this;
+            var segments = _.map(this.noDataReplacement, function (item) {
               return ctrl.uiSegmentSrv.newSegment({ value: item, expandable: true });
             });
             return this.$q.when(segments);
@@ -466,6 +494,8 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
                 }));
               });
 
+              altSegments.unshift(ctrl.uiSegmentSrv.newSegment('-REMOVE-'));
+
               // add wildcard option
               // altSegments.unshift(ctrl.uiSegmentSrv.newSegment('*'))
               return altSegments;
@@ -477,19 +507,25 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
         }, {
           key: 'segmentValueChanged',
           value: function segmentValueChanged(segment, segmentIndex) {
-            this.error = null;
+            var ctrl = this;
+            ctrl.error = null;
 
-            if (segment.expandable) {
-              this.checkOtherSegments(segmentIndex + 1);
-              this.setSegmentFocus(segmentIndex + 1);
-              this.targetChanged();
-            } else {
-              this.segments = this.segments.splice(0, segmentIndex + 1);
+            if (ctrl.isValueEmpty(segment.value)) {
+              ctrl.segments.length = segmentIndex;
+              ctrl.checkOtherSegments(segmentIndex);
             }
 
-            this.setSegmentFocus(segmentIndex + 1);
-            this.checkAttributeSegments();
-            this.targetChanged();
+            if (segment.expandable) {
+              ctrl.checkOtherSegments(segmentIndex + 1);
+              ctrl.setSegmentFocus(segmentIndex + 1);
+              ctrl.targetChanged();
+            } else {
+              ctrl.segments = ctrl.segments.splice(0, segmentIndex + 1);
+            }
+
+            ctrl.setSegmentFocus(segmentIndex + 1);
+            ctrl.checkAttributeSegments();
+            ctrl.targetChanged();
           }
         }]);
 

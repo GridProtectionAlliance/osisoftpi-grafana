@@ -60,7 +60,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
           this.type = instanceSettings.type;
           this.url = instanceSettings.url.toString();
-          this.isProxy = /^http(s)?:\/\//.test(this.url);
+          this.piwebapiurl = instanceSettings.jsonData.url.toString();
+          this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
 
           this.name = instanceSettings.name;
           this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: null };
@@ -111,7 +112,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             var _this2 = this;
 
             options.targets = _.filter(options.targets, function (target) {
-              return target.target !== 'select element';
+              return !target.target.startsWith('Select AF');
             });
 
             options.targets = _.map(options.targets, function (target) {
@@ -169,6 +170,11 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   }) };
               });
             }
+          }
+        }, {
+          key: 'targetContainsTemplate',
+          value: function targetContainsTemplate(target) {
+            return this.templateSrv.variableExists(target.target);
           }
         }, {
           key: 'testDatasource',
@@ -301,39 +307,32 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             });
           }
         }, {
-          key: 'processBatchResults',
-          value: function processBatchResults(response, target, name) {
+          key: 'parsePiPointValueList',
+          value: function parsePiPointValueList(value, noDataReplacementMode) {
             var api = this;
-            // .then(response => {
-            // var name = target.attributes[idIndex++] || target.display || target.expression || target.elementPath
-            var isSummary = target.summary && target.summary.types && target.summary.types.length > 0;
-            if (target.regex && target.regex.enable) {
-              name = name.replace(new RegExp(target.regex.search), target.regex.replace);
-            }
 
-            var content = response.data['2'].Content;
+            var datapoints = [];
+            var previousValue = null;
+            _.each(value, function (item) {
+              var grafanaDataPoint = api.parsePiPointValue(item);
 
-            if (isSummary) {
-              var innerResults = [];
-              var groups = _.groupBy(content.Items, function (item) {
-                return item.Type;
-              });
-              _.forOwn(groups, function (value, key) {
-                innerResults.push({
-                  'target': name + '[' + key + ']',
-                  'datapoints': _.map(value, function (item) {
-                    return api.parsePiPointValue(item.Value);
-                  })
-                });
-              });
-              return innerResults;
-            }
+              if (item.Value === 'No Data' || !item.Good) {
+                if (noDataReplacementMode === 'Drop') {
+                  return;
+                } else if (noDataReplacementMode === '0') {
+                  grafanaDataPoint[0] = 0;
+                } else if (noDataReplacementMode === 'Null') {
+                  grafanaDataPoint[0] = null;
+                } else if (noDataReplacementMode === 'Previous' && previousValue !== null) {
+                  grafanaDataPoint[0] = previousValue;
+                }
+              } else {
+                previousValue = item.Value;
+              }
 
-            return [{
-              'target': name,
-              'datapoints': _.map(content.Items, api.parsePiPointValue)
-            }];
-            // }).catch(err => { api.error = err }))
+              datapoints.push(grafanaDataPoint);
+            });
+            return datapoints;
           }
         }, {
           key: 'processResults',
@@ -352,11 +351,10 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 return item.Type;
               });
               _.forOwn(groups, function (value, key) {
-                innerResults.push({
+
+                var datapoints = innerResults.push({
                   'target': name + '[' + key + ']',
-                  'datapoints': _.map(value, function (item) {
-                    return api.parsePiPointValue(item.Value);
-                  })
+                  'datapoints': api.parsePiPointValueList(value, target.summary.nodata)
                 });
               });
               return innerResults;
@@ -364,7 +362,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
             return [{
               'target': name,
-              'datapoints': _.map(content.Items, api.parsePiPointValue)
+              'datapoints': api.parsePiPointValueList(content.Items, target.summary.nodata)
             }];
             // }).catch(err => { api.error = err }))
           }
@@ -421,7 +419,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   }));
                 }
               } else {
-                url += '/streamsets';
+                url += 'streamsets';
                 if (isSummary) {
                   url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + _this4.getSummaryUrl(target.summary);
                 } else if (target.interpolate && target.interpolate.enable) {
@@ -432,23 +430,47 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
                 results.push(api.$q.all(_.map(target.attributes, function (attribute) {
                   return api.restGetWebId(target.elementPath + '|' + attribute);
-                })).then(function (webidsresponses) {
-                  var webids = _.reduce(webidsresponses, function (result, webid) {
-                    return webid.WebId ? result + '&webid=' + webid.WebId : result;
-                  }, '');
+                })).then(function (webidresponse) {
+                  var query = {};
+                  _.each(webidresponse, function (webid, index) {
+                    query[index + 1] = {
+                      "Method": "GET",
+                      "Resource": api.piwebapiurl + url + '&webid=' + webid.WebId
+                    };
+                  });
 
-                  return api.restPost(url + webids).then(function (response) {
+                  return api.restBatch(query).then(function (response) {
                     var targetResults = [];
-                    _.each(response.data.Items, function (item) {
-                      _.each(api.processResults(item, target, item.Name || targetName), function (targetResult) {
-                        targetResults.push(targetResult);
+
+                    _.each(response.data, function (value, key) {
+                      _.each(value.Content.Items, function (item) {
+                        _.each(api.processResults(item, target, item.Name || targetName), function (targetResult) {
+                          targetResults.push(targetResult);
+                        });
                       });
                     });
+
                     return targetResults;
                   }).catch(function (err) {
                     api.error = err;
                   });
                 }));
+                /*
+                .then(webidsresponses => {
+                  var webids = _.reduce(webidsresponses, function (result, webid) {
+                    return (webid.WebId) ? result + '&webid=' + webid.WebId : result
+                  }, '')
+                   return api.restPost(url + webids)
+                    .then(response => {
+                      var targetResults = []
+                      _.each(response.data.Items, item => {
+                        _.each(api.processResults(item, target, item.Name || targetName), targetResult => { targetResults.push(targetResult) })
+                      })
+                      return targetResults
+                    })
+                    .catch(err => { api.error = err })
+                }))
+                */
               }
             });
 

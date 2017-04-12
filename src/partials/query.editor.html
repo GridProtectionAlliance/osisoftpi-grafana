@@ -56,7 +56,16 @@
 				on-change="ctrl.targetBlur()">
 			</gf-form-switch>
 		</div>
+    <div class="gf-form">
+				<label class="gf-form-label query-keyword">
+					<span>Replace Bad Data</span>
+					<i class="fa fa-question-circle" bs-tooltip="'Replacement for bad quality values.'" data-placement="top"></i>
+				</label>
 
+			  <metric-segment segment="ctrl.noDataReplacementSegment" get-options="ctrl.getNoDataSegments()" on-change="ctrl.calcNoDataValueChanged()"></metric-segment>
+		</div>
+  </div>
+  <div class="gf-form-inline">  
 		<div class="gf-form">
 			<label class="gf-form-label query-keyword">Summary Period
 					<i class="fa fa-question-circle" bs-tooltip="'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'" data-placement="top"></i>
@@ -68,7 +77,7 @@
 					<span>Basis</span>
 					<i class="fa fa-question-circle" bs-tooltip="'Defines the possible calculation options when performing summary calculations over time-series data.'" data-placement="top"></i>
 				</label>
-			  <metric-segment segment="ctrl.calculationBasisSegment" get-options="ctrl.getCalcBasisSegments()" on-change="ctrl.calcBasisChanged(part, $index)"></metric-segment>
+			  <metric-segment segment="ctrl.calculationBasisSegment" get-options="ctrl.getCalcBasisSegments()" on-change="ctrl.calcBasisValueChanged(part, $index)"></metric-segment>
 		</div>
 		<div class="gf-form">
 			<label class="gf-form-label query-keyword">

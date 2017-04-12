@@ -20,6 +20,13 @@ System.register(['lodash', './css/query-editor.css!'], function (_export, _conte
         _classCallCheck(this, PiWebApiConfigCtrl);
 
         this.current.jsonData = this.current.jsonData || {};
+
+        if (!this.current.jsonData.url) {
+          this.current.jsonData.url = this.current.url;
+        }
+        if (!this.current.jsonData.access) {
+          this.current.jsonData.access = this.current.access;
+        }
       });
 
       _export('PiWebApiConfigCtrl', PiWebApiConfigCtrl);

@@ -43,9 +43,19 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       'EventWeightedIncludeBothEnds' // Events at both ends of the interval boundaries are included in the event weighted calculation.
     ]
 
-    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '5m' }
+    this.noDataReplacementSegment = this.uiSegmentSrv.newSegment('Null')
+    this.noDataReplacement = [
+      'Null', // replace with nulls
+      'Drop', // drop items
+      'Previous', // use previous value if available
+      '0', // replace with 0      
+    ]
+
+
+    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '5m', nodata: 'Null' }
     this.target.summary.types = this.target.summary.types || []
     this.target.summary.basis = this.target.summary.basis || 'EventWeighted'
+    this.target.summary.nodata = this.target.summary.nodata || 'Null'
     this.target.summary.interval = this.target.summary.interval || '5m'
 
 
@@ -88,7 +98,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     this.target.webids = _.map(ctrl.target.attributes, attrib => { return ctrl.availableAttributes[attrib] })
 
     if (element !== oldElement || this.target.webid === undefined) {
-      if (this.segments[this.segments.length - 1].value !== 'select element') {
+      var segmentValue = this.segments[this.segments.length - 1].value
+      if (!segmentValue.startsWith('Select AF')) {
         this.panelCtrl.refresh()
       }
 
@@ -164,7 +175,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     var arr = this.segments.slice(0, index)
 
     return _.reduce(arr, function (result, segment) {
-      if (segment.value !== 'select element') {
+      if (!segment.value.startsWith('Select AF')) {
         return result ? (result + '\\' + segment.value) : segment.value
       }
       return result
@@ -182,7 +193,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     var arr = this.attributes.slice(0, this.attributes.length)
 
     return _.reduce(arr, function (result, segment) {
-      if (segment.value !== 'select element') {
+      if (!segment.value.startsWith('Select AF')) {
         return result ? (result + ';' + segment.value) : segment.value
       }
       return result
@@ -200,7 +211,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     var arr = this.summaries.slice(0, this.summaries.length)
 
     return _.reduce(arr, function (result, segment) {
-      if (segment && segment.value !== 'select element') {
+      if (segment && !segment.value.startsWith('Select AF')) {
         return result ? (result + ',' + segment.value) : segment.value
       }
       return result
@@ -278,20 +289,24 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
   checkOtherSegments (fromIndex) {
     var ctrl = this
     var query = { path: ctrl.getSegmentPathUpTo(fromIndex + 1) }
+    
+    if (ctrl.segments.length === 0) {
+      ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"))
+    }
 
     return ctrl.datasource.metricFindQuery(angular.toJson(query)).then(children => {
       if (children.length === 0) {
         if (query.path !== '') {
           ctrl.segments = ctrl.segments.splice(0, fromIndex)
           if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-            ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric())
+            ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"))
           }
         }
       } else /* if (this.isElementSegmentExpandable(segments[0])) */ {
         if (ctrl.segments.length === fromIndex) {
           ctrl.segments = ctrl.segments.splice(0, fromIndex)
           if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-            ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric())
+            ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"))
           }
         } else {
           return ctrl.checkOtherSegments(fromIndex + 1)
@@ -300,7 +315,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     }).catch(err => {
       ctrl.segments = ctrl.segments.splice(0, fromIndex)
       if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-        ctrl.segments.push(ctrl.uiSegmentSrv.newSelectMetric())
+        ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"))
       }
       ctrl.error = err.message || 'Failed to issue metric query'
     })
@@ -329,10 +344,17 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
   }
   // get summary calculation basis
   calcBasisValueChanged (segment, index) {
-    this.target.summary.basis = segment.value
+    this.target.summary.basis = this.calculationBasisSegment.value
     this.targetChanged()
     this.panelCtrl.refresh()
   }
+
+ calcNoDataValueChanged (segment, index) {
+    this.target.summary.nodata = this.noDataReplacementSegment.value
+    this.targetChanged()
+    this.panelCtrl.refresh()
+  }
+
   // get summary calculation basis user interface segments
   getCalcBasisSegments () {
     var ctrl = this
@@ -341,6 +363,16 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     })
     return this.$q.when(segments)
   }
+
+ // get summary calculation basis user interface segments
+  getNoDataSegments () {
+    var ctrl = this
+    var segments = _.map(this.noDataReplacement, item => {
+      return ctrl.uiSegmentSrv.newSegment({value: item, expandable: true})
+    })
+    return this.$q.when(segments)
+  }
+
   // remove a summary from the user interface and the query
   removeSummary (part) {
     this.summaries = _.filter(this.summaries, function (item) { return item !== part })
@@ -433,7 +465,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       })
 
       if (altSegments.length === 0) { return altSegments }
-
+     
       // add template variables
       _.each(ctrl.templateSrv.variables, variable => {
         altSegments.unshift(ctrl.uiSegmentSrv.newSegment({
@@ -442,6 +474,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
           expandable: true
         }))
       })
+      
+      altSegments.unshift(ctrl.uiSegmentSrv.newSegment('-REMOVE-'))
 
       // add wildcard option
       // altSegments.unshift(ctrl.uiSegmentSrv.newSegment('*'))
@@ -453,19 +487,25 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
   }
   // changes the selecte af element segment
   segmentValueChanged (segment, segmentIndex) {
-    this.error = null
+    var ctrl = this;
+    ctrl.error = null
 
-    if (segment.expandable) {
-      this.checkOtherSegments(segmentIndex + 1)
-      this.setSegmentFocus(segmentIndex + 1)
-      this.targetChanged()
-    } else {
-      this.segments = this.segments.splice(0, segmentIndex + 1)
+    if (ctrl.isValueEmpty(segment.value)) {
+      ctrl.segments.length = segmentIndex;
+      ctrl.checkOtherSegments(segmentIndex);
     }
 
-    this.setSegmentFocus(segmentIndex + 1)
-    this.checkAttributeSegments()
-    this.targetChanged()
+    if (segment.expandable) {
+      ctrl.checkOtherSegments(segmentIndex + 1)
+      ctrl.setSegmentFocus(segmentIndex + 1)
+      ctrl.targetChanged()
+    } else {
+      ctrl.segments = ctrl.segments.splice(0, segmentIndex + 1)
+    }
+
+    ctrl.setSegmentFocus(segmentIndex + 1)
+    ctrl.checkAttributeSegments()
+    ctrl.targetChanged()
   }
 }
 

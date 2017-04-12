@@ -22,7 +22,8 @@ export class PiWebApiDatasource {
 
     this.type = instanceSettings.type
     this.url = instanceSettings.url.toString()
-    this.isProxy = /^http(s)?:\/\//.test(this.url)
+    this.piwebapiurl = instanceSettings.jsonData.url.toString()
+    this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
 
     this.name = instanceSettings.name
     this.piserver = {name: (instanceSettings.jsonData || {}).piserver, webid: null}
@@ -70,7 +71,7 @@ export class PiWebApiDatasource {
    */
   buildQueryParameters (options) {
     options.targets = _.filter(options.targets, target => {
-      return target.target !== 'select element'
+      return (!target.target.startsWith('Select AF'))
     })
 
     options.targets = _.map(options.targets, target => {
@@ -131,6 +132,20 @@ export class PiWebApiDatasource {
           return {data: flattened.sort((a, b) => { return +(a.target > b.target) || +(a.target === b.target) - 1 })}
         })
     }
+  }
+
+  
+
+  /**
+   * Alerting Implementation
+   * 
+   * @param {any} target
+   * @returns - boolean alert status
+   * 
+   * @memberOf PiWebApiDatasource
+   */
+  targetContainsTemplate(target) {
+    return this.templateSrv.variableExists(target.target);
   }
   
   /**
@@ -317,47 +332,34 @@ export class PiWebApiDatasource {
       target.attributes
     })
   }
+  
+  parsePiPointValueList(value, noDataReplacementMode) {
+    var api = this;
 
-  /**
-   * Process the results from a PI Web API "Batch" query.
-   * 
-   * @param {any} response - Response from PI Web API.
-   * @param {any} target - The target grafana metric.
-   * @param {any} name - The target metric name.
-   * @returns - Parsed metric in target/datapoint json format.
-   * 
-   * @memberOf PiWebApiDatasource
-   */
-  processBatchResults (response, target, name) {
-    var api = this
-    // .then(response => {
-    // var name = target.attributes[idIndex++] || target.display || target.expression || target.elementPath
-    var isSummary = target.summary && target.summary.types && target.summary.types.length > 0
-    if (target.regex && target.regex.enable) {
-      name = name.replace(new RegExp(target.regex.search), target.regex.replace)
-    }
+    var datapoints = [];
+    var previousValue = null;
+    _.each(value, item => {
+      var grafanaDataPoint = api.parsePiPointValue(item);
 
-    var content = response.data['2'].Content
+      if (item.Value === 'No Data' || !item.Good) {
+        if (noDataReplacementMode === 'Drop') {
+          return;
+        } else if (noDataReplacementMode === '0') {
+          grafanaDataPoint[0] = 0;
+        } else if (noDataReplacementMode === 'Null') {
+          grafanaDataPoint[0] = null;
+        } else if (noDataReplacementMode === 'Previous' && previousValue !== null) {
+          grafanaDataPoint[0] = previousValue;
+        }
+      } else {
+        previousValue = item.Value;
+      }
 
-    if (isSummary) {
-      var innerResults = []
-      var groups = _.groupBy(content.Items, item => { return item.Type })
-      _.forOwn(groups, (value, key) => {
-        innerResults.push({
-          'target': name + '[' + key + ']',
-          'datapoints': _.map(value, item => api.parsePiPointValue(item.Value))
-        })
-      })
-      return innerResults
-    }
-
-    return [{
-      'target': name,
-      'datapoints': _.map(content.Items, api.parsePiPointValue)
-    }]
-    // }).catch(err => { api.error = err }))
+      datapoints.push(grafanaDataPoint)
+    })
+    return datapoints;
   }
-
+  
   /**
    * Process the response from PI Web API for a single item.
    * 
@@ -381,9 +383,12 @@ export class PiWebApiDatasource {
       var innerResults = []
       var groups = _.groupBy(content.Items, item => { return item.Type })
       _.forOwn(groups, (value, key) => {
+        
+        var datapoints = 
+
         innerResults.push({
           'target': name + '[' + key + ']',
-          'datapoints': _.map(value, item => api.parsePiPointValue(item.Value))
+          'datapoints': api.parsePiPointValueList(value, target.summary.nodata)
         })
       })
       return innerResults
@@ -391,7 +396,7 @@ export class PiWebApiDatasource {
 
     return [{
       'target': name,
-      'datapoints': _.map(content.Items, api.parsePiPointValue)
+      'datapoints': api.parsePiPointValueList(content.Items, target.summary.nodata)
     }]
     // }).catch(err => { api.error = err }))
   }
@@ -452,7 +457,7 @@ export class PiWebApiDatasource {
               }))
         }
       } else {
-        url += '/streamsets'
+        url += 'streamsets'
         if (isSummary) {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary)
         } else if (target.interpolate && target.interpolate.enable) {
@@ -462,6 +467,30 @@ export class PiWebApiDatasource {
         }
 
         results.push(api.$q.all(_.map(target.attributes, attribute => { return api.restGetWebId(target.elementPath + '|' + attribute) }))
+        .then(webidresponse => {
+          var query = {};
+          _.each(webidresponse, function(webid, index) {
+            query[index + 1] = {
+              "Method": "GET",
+              "Resource": api.piwebapiurl + url + '&webid=' + webid.WebId
+            }
+          });
+
+          return api.restBatch(query)
+            .then(response => {
+              var targetResults = []
+
+              _.each(response.data, (value, key) => {
+                _.each(value.Content.Items, item => {
+                  _.each(api.processResults(item, target, item.Name || targetName), targetResult => { targetResults.push(targetResult) })
+                })
+              })
+              
+              return targetResults
+            })
+            .catch(err => { api.error = err })
+        }))
+        /*
         .then(webidsresponses => {
           var webids = _.reduce(webidsresponses, function (result, webid) {
             return (webid.WebId) ? result + '&webid=' + webid.WebId : result
@@ -477,6 +506,7 @@ export class PiWebApiDatasource {
             })
             .catch(err => { api.error = err })
         }))
+        */
       }
     })
 
