@@ -117,7 +117,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           _this.target.summary.nodata = _this.target.summary.nodata || 'Null';
           _this.target.summary.interval = _this.target.summary.interval || '5m';
 
-          _this.target.target = _this.target.target || 'select element';
+          _this.target.target = _this.target.target || ';';
 
           _this.target.interpolate = _this.target.interpolate || { enable: false };
           if (_this.target.interpolate === false || _this.target.interpolate === true) {
