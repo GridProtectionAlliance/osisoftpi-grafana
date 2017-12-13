@@ -305,7 +305,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             return ctrl.datasource.metricFindQuery(angular.toJson(query)).then(function (children) {
               if (children.length === 0) {
                 if (query.path !== '') {
-                  ctrl.segments = ctrl.segments.splice(0, fromIndex);
+                  ctrl.segments = ctrl.segments.splice(0, fromIndex + 1);
                   if (ctrl.segments[ctrl.segments.length - 1].expandable) {
                     ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"));
                   }
