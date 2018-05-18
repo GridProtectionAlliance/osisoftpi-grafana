@@ -91,6 +91,9 @@ export class PiWebApiDatasource {
         // items: results
       }
 
+      if (tar.expression) {
+        tar.expression = this.templateSrv.replace(tar.expression);
+      }
 
       if (tar.summary.types !== undefined) {
         tar.summary.types = _.filter(tar.summary.types, item => { return item !== undefined && item !== null && item !== '' })

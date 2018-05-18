@@ -68,7 +68,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
         function PiWebApiDatasourceQueryCtrl($scope, $injector, uiSegmentSrv, templateSrv, $q) {
           _classCallCheck(this, PiWebApiDatasourceQueryCtrl);
 
-          var _this = _possibleConstructorReturn(this, Object.getPrototypeOf(PiWebApiDatasourceQueryCtrl).call(this, $scope, $injector));
+          var _this = _possibleConstructorReturn(this, (PiWebApiDatasourceQueryCtrl.__proto__ || Object.getPrototypeOf(PiWebApiDatasourceQueryCtrl)).call(this, $scope, $injector));
 
           _this.uiSegmentSrv = uiSegmentSrv;
           _this.templateSrv = templateSrv;

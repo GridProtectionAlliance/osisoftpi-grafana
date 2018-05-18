@@ -130,9 +130,13 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 webids: target.webids || [],
                 regex: target.regex || { enable: false },
                 expression: target.expression || '',
-                summary: target.summary || { types: [] }
-                // items: results
-              };
+                summary: target.summary || { types: []
+                  // items: results
+                } };
+
+              if (tar.expression) {
+                tar.expression = _this2.templateSrv.replace(tar.expression);
+              }
 
               if (tar.summary.types !== undefined) {
                 tar.summary.types = _.filter(tar.summary.types, function (item) {
@@ -460,7 +464,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   var webids = _.reduce(webidsresponses, function (result, webid) {
                     return (webid.WebId) ? result + '&webid=' + webid.WebId : result
                   }, '')
-                   return api.restPost(url + webids)
+                    return api.restPost(url + webids)
                     .then(response => {
                       var targetResults = []
                       _.each(response.data.Items, item => {
