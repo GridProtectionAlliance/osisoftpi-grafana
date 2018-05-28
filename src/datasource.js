@@ -83,6 +83,7 @@ export class PiWebApiDatasource {
         refId: target.refId,
         hide: target.hide,
         interpolate: target.interpolate || {enable: false},
+        recordedValues: target.recordedValues || {enable: false},
         webid: target.webid,
         webids: target.webids || [],
         regex: target.regex || {enable: false},
@@ -90,7 +91,10 @@ export class PiWebApiDatasource {
         summary: target.summary || {types: []}
         // items: results
       }
-
+      
+      if (tar.expression) {
+        tar.expression = this.templateSrv.replace(tar.expression);
+      }
 
       if (tar.summary.types !== undefined) {
         tar.summary.types = _.filter(tar.summary.types, item => { return item !== undefined && item !== null && item !== '' })
@@ -462,6 +466,8 @@ export class PiWebApiDatasource {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary)
         } else if (target.interpolate && target.interpolate.enable) {
           url += '/interpolated' + timeRange + '&interval=' + intervalTime
+        } else if (target.recordedValues && target.recordedValues.enable) {
+          url += '/recorded' + timeRange + '&maxCount=' + target.recordedValues.maxNumber
         } else {
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints
         }
