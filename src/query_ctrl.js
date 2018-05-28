@@ -66,7 +66,13 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       this.target.interpolate = { enable: this.target.interpolate }
     }
     this.target.interpolate.enable = this.target.interpolate.enable || false
-
+    
+    this.target.recordedValues = this.target.recordedValues || {enable: false}
+    if (this.target.recordedValues === false || this.target.recordedValues === true) {
+      this.target.recordedValues = { enable: this.target.recordedValues }
+    }
+    this.target.recordedValues.enable = this.target.recordedValues.enable || false
+    
     if (this.segments.length === 0) {
       this.segments.push(this.uiSegmentSrv.newSelectMetric())
     }
