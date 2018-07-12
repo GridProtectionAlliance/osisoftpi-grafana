@@ -427,7 +427,7 @@ export class PiWebApiDatasource {
       // perhaps add a check to see if interpolate override time < query.interval
       var intervalTime = ((target.interpolate.interval) ? target.interpolate.interval : query.interval)
       var timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON()
-      var targetName = target.display || target.expression || target.elementPath
+      var targetName = target.expression || target.elementPath
       if (target.expression) {
         url += '/calculation'
 
@@ -446,7 +446,7 @@ export class PiWebApiDatasource {
               api.restGetWebId(target.elementPath + '|' + attribute)
               .then(webidresponse => {
                 return api.restPost(url + webidresponse.WebId)
-                .then(response => { return api.processResults(response.data, target, attribute || targetName) })
+                .then(response => { return api.processResults(response.data, target, target.display || attribute || targetName) })
                 .catch(err => { api.error = err })
               }))
           })
@@ -455,7 +455,7 @@ export class PiWebApiDatasource {
             api.restGetWebId(target.elementPath)
               .then(webidresponse => {
                 return api.restPost(url + webidresponse.WebId)
-                .then(response => { return api.processResults(response.data, target, targetName) })
+                .then(response => { return api.processResults(response.data, target, target.display || targetName) })
                 .catch(err => { api.error = err })
               }))
         }
@@ -485,7 +485,7 @@ export class PiWebApiDatasource {
 
               _.each(response.data, (value, key) => {
                 _.each(value.Content.Items, item => {
-                  _.each(api.processResults(item, target, item.Name || targetName), targetResult => { targetResults.push(targetResult) })
+                  _.each(api.processResults(item, target, target.display || item.Name || targetName), targetResult => { targetResults.push(targetResult) })
                 })
               })
               
