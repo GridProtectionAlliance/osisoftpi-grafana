@@ -390,7 +390,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               // perhaps add a check to see if interpolate override time < query.interval
               var intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
               var timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
-              var targetName = target.display || target.expression || target.elementPath;
+              var targetName = target.expression || target.elementPath;
               if (target.expression) {
                 url += '/calculation';
 
@@ -407,7 +407,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   _.each(target.attributes, function (attribute) {
                     results.push(api.restGetWebId(target.elementPath + '|' + attribute).then(function (webidresponse) {
                       return api.restPost(url + webidresponse.WebId).then(function (response) {
-                        return api.processResults(response.data, target, attribute || targetName);
+                        return api.processResults(response.data, target, target.display || attribute || targetName);
                       }).catch(function (err) {
                         api.error = err;
                       });
@@ -416,7 +416,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 } else {
                   results.push(api.restGetWebId(target.elementPath).then(function (webidresponse) {
                     return api.restPost(url + webidresponse.WebId).then(function (response) {
-                      return api.processResults(response.data, target, targetName);
+                      return api.processResults(response.data, target, target.display || targetName);
                     }).catch(function (err) {
                       api.error = err;
                     });
@@ -448,7 +448,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
                     _.each(response.data, function (value, key) {
                       _.each(value.Content.Items, function (item) {
-                        _.each(api.processResults(item, target, item.Name || targetName), function (targetResult) {
+                        _.each(api.processResults(item, target, target.display || item.Name || targetName), function (targetResult) {
                           targetResults.push(targetResult);
                         });
                       });
@@ -464,7 +464,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   var webids = _.reduce(webidsresponses, function (result, webid) {
                     return (webid.WebId) ? result + '&webid=' + webid.WebId : result
                   }, '')
-                    return api.restPost(url + webids)
+                   return api.restPost(url + webids)
                     .then(response => {
                       var targetResults = []
                       _.each(response.data.Items, item => {
