@@ -52,11 +52,11 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     ]
 
 
-    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '5m', nodata: 'Null' }
+    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' }
     this.target.summary.types = this.target.summary.types || []
-    this.target.summary.basis = this.target.summary.basis || 'EventWeighted'
+    this.target.summary.basis = this.target.summary.basis
     this.target.summary.nodata = this.target.summary.nodata || 'Null'
-    this.target.summary.interval = this.target.summary.interval || '5m'
+    this.target.summary.interval = this.target.summary.interval || ''
 
 
     this.target.target = this.target.target || ';'
