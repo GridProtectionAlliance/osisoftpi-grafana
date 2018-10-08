@@ -125,6 +125,12 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           }
           _this.target.interpolate.enable = _this.target.interpolate.enable || false;
 
+          _this.target.recordedValues = _this.target.recordedValues || { enable: false };
+          if (_this.target.recordedValues === false || _this.target.recordedValues === true) {
+            _this.target.recordedValues = { enable: _this.target.recordedValues };
+          }
+          _this.target.recordedValues.enable = _this.target.recordedValues.enable || false;
+
           if (_this.segments.length === 0) {
             _this.segments.push(_this.uiSegmentSrv.newSelectMetric());
           }
