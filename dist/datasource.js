@@ -447,7 +447,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   }));
                 }
               } else {
-                url += 'streamsets';
+                url += '/streamsets';
                 if (isSummary) {
                   url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + _this5.getSummaryUrl(target.summary);
                 } else if (target.interpolate && target.interpolate.enable) {

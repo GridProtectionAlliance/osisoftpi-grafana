@@ -498,7 +498,7 @@ export class PiWebApiDatasource {
         }
 
       } else {
-        url += 'streamsets'
+        url += '/streamsets'
         if (isSummary) {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary)
         } else if (target.interpolate && target.interpolate.enable) {
