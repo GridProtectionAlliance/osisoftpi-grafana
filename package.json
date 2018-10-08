@@ -21,7 +21,7 @@
     "grunt-execute": "~0.2.2",
     "grunt-mocha-test": "~0.12.7",
     "grunt-systemjs-builder": "^0.2.5",
-    "jsdom": "12.2.0",
+    "jsdom": "~12.2.0",
     "load-grunt-tasks": "~3.2.0",
     "prunk": "~1.2.1",
     "q": "~1.4.1"
