@@ -600,7 +600,10 @@ export class PiWebApiDatasource {
       url: this.url + '/batch',
       data: batch,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'message/http'
+      }
     })
   }
 
@@ -618,6 +621,7 @@ export class PiWebApiDatasource {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-Requested-With': 'message/http',
         'X-PIWEBAPI-HTTP-METHOD': 'GET',
         'X-PIWEBAPI-RESOURCE-ADDRESS': path
       }

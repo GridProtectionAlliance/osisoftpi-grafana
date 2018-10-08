@@ -126,6 +126,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 refId: target.refId,
                 hide: target.hide,
                 interpolate: target.interpolate || { enable: false },
+                recordedValues: target.recordedValues || { enable: false },
                 webid: target.webid,
                 webids: target.webids || [],
                 regex: target.regex || { enable: false },
@@ -135,6 +136,10 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 endTime: options.range.to.toJSON()
                 // items: results
               };
+
+              if (tar.expression) {
+                tar.expression = _this2.templateSrv.replace(tar.expression);
+              }
 
               if (tar.summary.types !== undefined) {
                 tar.summary.types = _.filter(tar.summary.types, function (item) {
@@ -447,6 +452,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                   url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + _this5.getSummaryUrl(target.summary);
                 } else if (target.interpolate && target.interpolate.enable) {
                   url += '/interpolated' + timeRange + '&interval=' + intervalTime;
+                } else if (target.recordedValues && target.recordedValues.enable) {
+                  url += '/recorded' + timeRange + '&maxCount=' + target.recordedValues.maxNumber;
                 } else {
                   url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints;
                 }
@@ -521,7 +528,10 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               url: this.url + '/batch',
               data: batch,
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'message/http'
+              }
             });
           }
         }, {
@@ -532,6 +542,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
+                'X-Requested-With': 'message/http',
                 'X-PIWEBAPI-HTTP-METHOD': 'GET',
                 'X-PIWEBAPI-RESOURCE-ADDRESS': path
               }
