@@ -374,7 +374,7 @@ export class PiWebApiDatasource {
    * 
    */
   parsePiPointValue (value, isSummary = false, target) {
-    var num = Number(value.Value)
+    var num = (!isSummary && typeof value.Value === "object") ? Number(value.Value.Value) : Number(value.Value)
     if (isSummary) {
       num = Number(value.Value.Value)
       if (target.summary.interval == ""){
