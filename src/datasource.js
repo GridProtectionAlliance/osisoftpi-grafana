@@ -76,8 +76,8 @@ export class PiWebApiDatasource {
 
     options.targets = _.map(options.targets, target => {
       var tar = {
-        target: this.templateSrv.replace(target.elementPath),
-        elementPath: this.templateSrv.replace(target.elementPath),
+        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         attributes: _.map(target.attributes, att => { return this.templateSrv.replace(att) }),
         display: target.display,
         refId: target.refId,
