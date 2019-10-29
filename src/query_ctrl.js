@@ -32,7 +32,13 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       'AllForNonNumeric' // A convenience for requesting all available summary calculations for non-numeric data.
     ]
 
-    this.calculationBasisSegment = this.uiSegmentSrv.newSegment('EventWeighted')
+    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' }
+    this.target.summary.types = this.target.summary.types || []
+    this.target.summary.basis = this.target.summary.basis
+    this.target.summary.nodata = this.target.summary.nodata || 'Null'
+    this.target.summary.interval = this.target.summary.interval || ''
+
+    this.calculationBasisSegment = this.uiSegmentSrv.newSegment(this.target.summary.basis)
     this.calculationBasis = [
       'TimeWeighted', // Weight the values in the calculation by the time over which they apply. Interpolation is based on whether the attribute is stepped. Interpolated events are generated at the boundaries if necessary.
       'EventWeighted', // Evaluate values with equal weighting for each event. No interpolation is done. There must be at least one event within the time range to perform a successful calculation. Two events are required for standard deviation. In handling events at the boundary of the calculation, the AFSDK uses following rules:
@@ -43,21 +49,13 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       'EventWeightedIncludeBothEnds' // Events at both ends of the interval boundaries are included in the event weighted calculation.
     ]
 
-    this.noDataReplacementSegment = this.uiSegmentSrv.newSegment('Null')
+    this.noDataReplacementSegment = this.uiSegmentSrv.newSegment(this.target.summary.nodata)
     this.noDataReplacement = [
       'Null', // replace with nulls
       'Drop', // drop items
       'Previous', // use previous value if available
       '0', // replace with 0      
     ]
-
-
-    this.target.summary = this.target.summary || { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' }
-    this.target.summary.types = this.target.summary.types || []
-    this.target.summary.basis = this.target.summary.basis
-    this.target.summary.nodata = this.target.summary.nodata || 'Null'
-    this.target.summary.interval = this.target.summary.interval || ''
-
 
     this.target.target = this.target.target || ';'
 
