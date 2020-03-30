@@ -76,8 +76,8 @@ export class PiWebApiDatasource {
 
     options.targets = _.map(options.targets, target => {
       var tar = {
-        target: this.templateSrv.replace(target.elementPath),
-        elementPath: this.templateSrv.replace(target.elementPath),
+        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         attributes: _.map(target.attributes, att => { return this.templateSrv.replace(att) }),
         display: target.display,
         refId: target.refId,
@@ -354,12 +354,15 @@ export class PiWebApiDatasource {
     var previousValue = null;
     _.each(value, item => {
       var grafanaDataPoint = api.parsePiPointValue(item, isSummary, target);
+      var drop = false;
       if (isSummary){
-        grafanaDataPoint, previousValue = this.noDataReplace(item.Value, target.summary.nodata, grafanaDataPoint)
+        grafanaDataPoint, previousValue, drop = this.noDataReplace(item.Value, target.summary.nodata, grafanaDataPoint)
       } else{
-        grafanaDataPoint, previousValue = this.noDataReplace(item, target.summary.nodata, grafanaDataPoint)
+        grafanaDataPoint, previousValue, drop = this.noDataReplace(item, target.summary.nodata, grafanaDataPoint)
       }
-      datapoints.push(grafanaDataPoint)
+      if (!drop) {
+        datapoints.push(grafanaDataPoint)
+      }
     })
     return datapoints;
   }
@@ -374,7 +377,7 @@ export class PiWebApiDatasource {
    * 
    */
   parsePiPointValue (value, isSummary = false, target) {
-    var num = Number(value.Value)
+    var num = (!isSummary && typeof value.Value === "object") ? Number(value.Value.Value) : Number(value.Value)
     if (isSummary) {
       num = Number(value.Value.Value)
       if (target.summary.interval == ""){
@@ -397,9 +400,10 @@ export class PiWebApiDatasource {
    */
   noDataReplace(item, noDataReplacementMode, grafanaDataPoint){
     var previousValue = null;
-    if (item.Value === 'No Data' || !item.Good) {
+    var drop = false;
+    if (item.Value === 'No Data' || (item.Value.Name && item.Value.Name === 'No Data') || !item.Good) {
       if (noDataReplacementMode === 'Drop') {
-        return;
+        drop = true
       } else if (noDataReplacementMode === '0') {
         grafanaDataPoint[0] = 0;
       } else if (noDataReplacementMode === 'Null') {
@@ -410,7 +414,7 @@ export class PiWebApiDatasource {
     } else {
       previousValue = item.Value;
     }
-    return grafanaDataPoint, previousValue
+    return grafanaDataPoint, previousValue, drop
   }
 
   /**
