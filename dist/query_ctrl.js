@@ -95,7 +95,13 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           'AllForNonNumeric' // A convenience for requesting all available summary calculations for non-numeric data.
           ];
 
-          _this.calculationBasisSegment = _this.uiSegmentSrv.newSegment('EventWeighted');
+          _this.target.summary = _this.target.summary || { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' };
+          _this.target.summary.types = _this.target.summary.types || [];
+          _this.target.summary.basis = _this.target.summary.basis;
+          _this.target.summary.nodata = _this.target.summary.nodata || 'Null';
+          _this.target.summary.interval = _this.target.summary.interval || '';
+
+          _this.calculationBasisSegment = _this.uiSegmentSrv.newSegment(_this.target.summary.basis);
           _this.calculationBasis = ['TimeWeighted', // Weight the values in the calculation by the time over which they apply. Interpolation is based on whether the attribute is stepped. Interpolated events are generated at the boundaries if necessary.
           'EventWeighted', // Evaluate values with equal weighting for each event. No interpolation is done. There must be at least one event within the time range to perform a successful calculation. Two events are required for standard deviation. In handling events at the boundary of the calculation, the AFSDK uses following rules:
           'TimeWeightedContinuous', // Apply weighting as in TimeWeighted, but do all interpolation between values as if they represent continuous data, (standard interpolation) regardless of whether the attribute is stepped.
@@ -105,17 +111,11 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           'EventWeightedIncludeBothEnds' // Events at both ends of the interval boundaries are included in the event weighted calculation.
           ];
 
-          _this.noDataReplacementSegment = _this.uiSegmentSrv.newSegment('Null');
+          _this.noDataReplacementSegment = _this.uiSegmentSrv.newSegment(_this.target.summary.nodata);
           _this.noDataReplacement = ['Null', // replace with nulls
           'Drop', // drop items
           'Previous', // use previous value if available
           '0'];
-
-          _this.target.summary = _this.target.summary || { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' };
-          _this.target.summary.types = _this.target.summary.types || [];
-          _this.target.summary.basis = _this.target.summary.basis;
-          _this.target.summary.nodata = _this.target.summary.nodata || 'Null';
-          _this.target.summary.interval = _this.target.summary.interval || '';
 
           _this.target.target = _this.target.target || ';';
 

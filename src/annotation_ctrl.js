@@ -11,7 +11,7 @@ export class PiWebApiAnnotationsQueryCtrl {
   templateChanged () {
 
   }
-  databaseChanged () {
+  databaseChanged ($event) {
     this.getEventFrames()
   }
   getDatabases () {
@@ -22,7 +22,7 @@ export class PiWebApiAnnotationsQueryCtrl {
   }
   getEventFrames () {
     var ctrl = this
-    ctrl.datasource.getEventFrameTemplates(ctrl.database.WebId).then(templates => {
+    ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(templates => {
       ctrl.templates = templates
     })
   }
