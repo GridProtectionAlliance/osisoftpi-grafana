@@ -185,7 +185,8 @@ export class PiWebApiDatasource {
       return this.$q.when([])
     }
 
-    var query = this.templateSrv.replace(options.annotation.query, {}, 'glob')
+    var categoryName = this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob')
+    var nameFilter = this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob')
     var annotationOptions = {
       name: options.annotation.name,
       datasource: options.annotation.datasource,
@@ -193,11 +194,19 @@ export class PiWebApiDatasource {
       iconColor: options.annotation.iconColor,
       showEndTime: options.annotation.showEndTime,
       regex: options.annotation.regex,
-      query: query
+      categoryName: categoryName,
+      nameFilter: nameFilter
+    }
+
+    var filter = 'categoryName=' + annotationOptions.categoryName
+    if (!annotationOptions.categoryName && annotationOptions.nameFilter) {
+      filter = 'nameFilter=' + annotationOptions.nameFilter
+    } else if (annotationOptions.nameFilter) {
+      filter = 'categoryName=' + annotationOptions.categoryName + '&nameFilter=' + annotationOptions.nameFilter
     }
 
     return this.backendSrv.datasourceRequest({
-      url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?categoryName=' + annotationOptions.query +
+      url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter +
                                                                                '&startTime=' + options.range.from.toJSON() +
                                                                                '&endTime=' + options.range.to.toJSON(),
       // data: annotationQuery,
@@ -384,7 +393,7 @@ export class PiWebApiDatasource {
         return [(!isNaN(num) ? num : 0), new Date(target.endTime).getTime()]
       }
       return [(!isNaN(num) ? num : 0), new Date(value.Value.Timestamp).getTime()]
-    }
+    }    
     return [(!isNaN(num) ? num : 0), new Date(value.Timestamp).getTime()]
   }
 
@@ -403,7 +412,7 @@ export class PiWebApiDatasource {
     var drop = false;
     if (item.Value === 'No Data' || (item.Value.Name && item.Value.Name === 'No Data') || !item.Good) {
       if (noDataReplacementMode === 'Drop') {
-        drop = true
+        drop = true;
       } else if (noDataReplacementMode === '0') {
         grafanaDataPoint[0] = 0;
       } else if (noDataReplacementMode === 'Null') {

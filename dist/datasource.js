@@ -3,7 +3,7 @@
 System.register(['angular', 'lodash'], function (_export, _context) {
   "use strict";
 
-  var angular, _, _createClass, PiWebApiDatasource;
+  var angular, _, _typeof, _createClass, PiWebApiDatasource;
 
   function _classCallCheck(instance, Constructor) {
     if (!(instance instanceof Constructor)) {
@@ -18,6 +18,12 @@ System.register(['angular', 'lodash'], function (_export, _context) {
       _ = _lodash.default;
     }],
     execute: function () {
+      _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) {
+        return typeof obj;
+      } : function (obj) {
+        return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+      };
+
       _createClass = function () {
         function defineProperties(target, props) {
           for (var i = 0; i < props.length; i++) {
@@ -117,8 +123,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
             options.targets = _.map(options.targets, function (target) {
               var tar = {
-                target: _this2.templateSrv.replace(target.elementPath),
-                elementPath: _this2.templateSrv.replace(target.elementPath),
+                target: _this2.templateSrv.replace(target.elementPath, options.scopedVars),
+                elementPath: _this2.templateSrv.replace(target.elementPath, options.scopedVars),
                 attributes: _.map(target.attributes, function (att) {
                   return _this2.templateSrv.replace(att);
                 }),
@@ -204,7 +210,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               return this.$q.when([]);
             }
 
-            var query = this.templateSrv.replace(options.annotation.query, {}, 'glob');
+            var categoryName = this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob');
+            var nameFilter = this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob');
             var annotationOptions = {
               name: options.annotation.name,
               datasource: options.annotation.datasource,
@@ -212,11 +219,19 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               iconColor: options.annotation.iconColor,
               showEndTime: options.annotation.showEndTime,
               regex: options.annotation.regex,
-              query: query
+              categoryName: categoryName,
+              nameFilter: nameFilter
             };
 
+            var filter = 'categoryName=' + annotationOptions.categoryName;
+            if (!annotationOptions.categoryName && annotationOptions.nameFilter) {
+              filter = 'nameFilter=' + annotationOptions.nameFilter;
+            } else if (annotationOptions.nameFilter) {
+              filter = 'categoryName=' + annotationOptions.categoryName + '&nameFilter=' + annotationOptions.nameFilter;
+            }
+
             return this.backendSrv.datasourceRequest({
-              url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?categoryName=' + annotationOptions.query + '&startTime=' + options.range.from.toJSON() + '&endTime=' + options.range.to.toJSON(),
+              url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter + '&startTime=' + options.range.from.toJSON() + '&endTime=' + options.range.to.toJSON(),
               // data: annotationQuery,
               method: 'GET'
             }).then(function (result) {
@@ -328,12 +343,15 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             var previousValue = null;
             _.each(value, function (item) {
               var grafanaDataPoint = api.parsePiPointValue(item, isSummary, target);
+              var drop = false;
               if (isSummary) {
-                grafanaDataPoint, previousValue = _this4.noDataReplace(item.Value, target.summary.nodata, grafanaDataPoint);
+                grafanaDataPoint, previousValue, drop = _this4.noDataReplace(item.Value, target.summary.nodata, grafanaDataPoint);
               } else {
-                grafanaDataPoint, previousValue = _this4.noDataReplace(item, target.summary.nodata, grafanaDataPoint);
+                grafanaDataPoint, previousValue, drop = _this4.noDataReplace(item, target.summary.nodata, grafanaDataPoint);
               }
-              datapoints.push(grafanaDataPoint);
+              if (!drop) {
+                datapoints.push(grafanaDataPoint);
+              }
             });
             return datapoints;
           }
@@ -343,7 +361,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             var isSummary = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
             var target = arguments[2];
 
-            var num = Number(value.Value);
+            var num = !isSummary && _typeof(value.Value) === "object" ? Number(value.Value.Value) : Number(value.Value);
             if (isSummary) {
               num = Number(value.Value.Value);
               if (target.summary.interval == "") {
@@ -357,9 +375,10 @@ System.register(['angular', 'lodash'], function (_export, _context) {
           key: 'noDataReplace',
           value: function noDataReplace(item, noDataReplacementMode, grafanaDataPoint) {
             var previousValue = null;
-            if (item.Value === 'No Data' || !item.Good) {
+            var drop = false;
+            if (item.Value === 'No Data' || item.Value.Name && item.Value.Name === 'No Data' || !item.Good) {
               if (noDataReplacementMode === 'Drop') {
-                return;
+                drop = true;
               } else if (noDataReplacementMode === '0') {
                 grafanaDataPoint[0] = 0;
               } else if (noDataReplacementMode === 'Null') {
@@ -370,7 +389,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             } else {
               previousValue = item.Value;
             }
-            return grafanaDataPoint, previousValue;
+            return grafanaDataPoint, previousValue, drop;
           }
         }, {
           key: 'processResults',

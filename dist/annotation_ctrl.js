@@ -50,7 +50,7 @@ System.register(['lodash'], function (_export, _context) {
           value: function templateChanged() {}
         }, {
           key: 'databaseChanged',
-          value: function databaseChanged() {
+          value: function databaseChanged($event) {
             this.getEventFrames();
           }
         }, {
@@ -65,7 +65,7 @@ System.register(['lodash'], function (_export, _context) {
           key: 'getEventFrames',
           value: function getEventFrames() {
             var ctrl = this;
-            ctrl.datasource.getEventFrameTemplates(ctrl.database.WebId).then(function (templates) {
+            ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(function (templates) {
               ctrl.templates = templates;
             });
           }
