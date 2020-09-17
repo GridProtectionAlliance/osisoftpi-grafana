@@ -274,6 +274,8 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
         }, {
           key: 'checkAttributeSegments',
           value: function checkAttributeSegments() {
+            var _this3 = this;
+
             var ctrl = this;
             var query = {
               path: this.getSegmentPathUpTo(this.segments.length),
@@ -288,7 +290,8 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
               });
 
               var filteredAttributes = _.filter(ctrl.attributes, function (attrib) {
-                return validAttributes[attrib.value] !== undefined;
+                var changedValue = _this3.templateSrv.replace(attrib.value);
+                return validAttributes[changedValue] !== undefined;
               });
 
               ctrl.availableAttributes = validAttributes;

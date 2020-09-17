@@ -45,16 +45,24 @@ export class PiWebApiDatasource {
    * 
    * @memberOf PiWebApiDatasource
    */
-  eventFrameToAnnotation (annotationOptions, endTime, eventFrame) {
+  eventFrameToAnnotation (annotationOptions, endTime, eventFrame, attributeDataItems) {
     if (annotationOptions.regex && annotationOptions.regex.enable) {
       eventFrame.Name = eventFrame.Name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace)
     }
 
+    var attributeText = ''
+    if (attributeDataItems) {
+      _.each(attributeDataItems, (attributeData) => {
+        const attributeValue = attributeData.Value.Value ? attributeData.Value.Value.Name || attributeData.Value.Value.Value || attributeData.Value.Value : null
+        attributeText += ('<br />' + attributeData.Name + ': ' + attributeValue)
+      })
+    }
     return {
       annotation: annotationOptions,
       title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
       time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
       text: eventFrame.Name +
+            attributeText +
             '<br />Start: ' + eventFrame.StartTime +
             '<br />End: ' + eventFrame.EndTime
       // tags: eventFrame.CategoryNames.join()
@@ -91,7 +99,6 @@ export class PiWebApiDatasource {
         summary: target.summary || {types: []},
         startTime: options.range.from.toJSON(),
         endTime: options.range.to.toJSON()
-        // items: results
       }
       
       if (tar.expression) {
@@ -183,10 +190,11 @@ export class PiWebApiDatasource {
   annotationQuery (options) {
     if (!this.afdatabase.webid) {
       return this.$q.when([])
-    }
+    } 
 
-    var categoryName = this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob')
-    var nameFilter = this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob')
+    var categoryName = options.annotation.query.categoryName ? this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob') : null
+    var nameFilter = options.annotation.query.nameFilter ? this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob') : null
+    var templateName = options.annotation.template ? options.annotation.template.Name : null
     var annotationOptions = {
       name: options.annotation.name,
       datasource: options.annotation.datasource,
@@ -194,33 +202,79 @@ export class PiWebApiDatasource {
       iconColor: options.annotation.iconColor,
       showEndTime: options.annotation.showEndTime,
       regex: options.annotation.regex,
+      attribute: options.annotation.attribute,
       categoryName: categoryName,
+      templateName: templateName,
       nameFilter: nameFilter
     }
 
-    var filter = 'categoryName=' + annotationOptions.categoryName
-    if (!annotationOptions.categoryName && annotationOptions.nameFilter) {
-      filter = 'nameFilter=' + annotationOptions.nameFilter
-    } else if (annotationOptions.nameFilter) {
-      filter = 'categoryName=' + annotationOptions.categoryName + '&nameFilter=' + annotationOptions.nameFilter
+    var filter = []
+    if (!!annotationOptions.categoryName) {
+      filter.push('categoryName=' + annotationOptions.categoryName)
     }
+    if (!!annotationOptions.nameFilter) {
+      filter.push('nameFilter=' + annotationOptions.nameFilter)
+    }
+    if (!!annotationOptions.templateName) {
+      filter.push('templateName=' + annotationOptions.templateName)
+    }
+    if (!filter.length) {
+      return this.$q.when([])
+    }
+    filter.push('startTime=' + options.range.from.toJSON())
+    filter.push('endTime=' + options.range.to.toJSON())
 
-    return this.backendSrv.datasourceRequest({
-      url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter +
-                                                                               '&startTime=' + options.range.from.toJSON() +
-                                                                               '&endTime=' + options.range.to.toJSON(),
-      // data: annotationQuery,
-      method: 'GET'
-    }).then(result => {
-      var annotations = _.map(result.data.Items, _.curry(this.eventFrameToAnnotation)(annotationOptions, false))
-
-      if (options.annotation.showEndTime) {
-        var ends = _.map(result.data.Items, _.curry(this.eventFrameToAnnotation)(annotationOptions, true))
-        _.each(ends, end => { annotations.push(end) })
+    if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+      var resourceUrl = this.piwebapiurl +'/streamsets/{0}/value?selectedFields=Items.WebId;Items.Value;Items.Name'
+      if (!!annotationOptions.attribute.name) {
+        resourceUrl = this.piwebapiurl +'/streamsets/{0}/value?nameFilter=' + annotationOptions.attribute.name + '&selectedFields=Items.WebId;Items.Value;Items.Name'
       }
+      var query = {}
+      query["1"] = {
+        'Method': 'GET',
+        'Resource': this.piwebapiurl +'/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')
+      },
+      query["2"] = {
+        'Method': 'GET',
+        'RequestTemplate': {
+          'Resource': resourceUrl,
+        },
+        'Parameters': [
+            '$.1.Content.Items[*].WebId'
+        ],
+        'ParentIds': [
+            '1'
+        ]
+      }
+      return this.restBatch(query).then((result) => {
+        const data = result.data["1"].Content
+        const valueData = result.data["2"].Content
 
-      return annotations
-    })
+        var annotations = _.map(data.Items, (item, index) => {
+          return _.curry(this.eventFrameToAnnotation)(annotationOptions, false, item, valueData.Items[index].Content.Items)
+        })
+  
+        if (options.annotation.showEndTime) {
+          var ends = _.map(data.Items, (item, index) => {
+            return _.curry(this.eventFrameToAnnotation)(annotationOptions, true, item, valueData.Items[index].Content.Items)
+          })
+          _.each(ends, end => { annotations.push(end) })
+        }
+  
+        return annotations
+      })
+    } else {
+      return this.restGet('/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')).then(result => {
+        var annotations = _.map(result.data.Items, _.curry(this.eventFrameToAnnotation)(annotationOptions, false))
+  
+        if (options.annotation.showEndTime) {
+          var ends = _.map(result.data.Items, _.curry(this.eventFrameToAnnotation)(annotationOptions, true))
+          _.each(ends, end => { annotations.push(end) })
+        }
+  
+        return annotations
+      })
+    }
   }
 
   /**
@@ -347,7 +401,7 @@ export class PiWebApiDatasource {
       target.attributes
     })
   }
-  
+
   /**
    * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
    * 
@@ -745,7 +799,7 @@ export class PiWebApiDatasource {
     if (querystring === '?') { querystring = '' }
 
     return this.restGet('/assetdatabases/' + databaseId + '/elements' + querystring)
-    .then(response => { return response.data.Items })
+      .then(response => { return response.data.Items })
   }
 
   /**

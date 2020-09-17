@@ -4,11 +4,13 @@ export class PiWebApiAnnotationsQueryCtrl {
   constructor ($scope) {
     this.$scope = $scope
     this.annotation.query = (this.annotation.query || {})
-    this.databases = []
-    this.templates = []
-    this.getDatabases()
+    this.annotation.databases = (this.annotation.databases || [])
+    this.annotation.templates = (this.annotation.templates || [])
+    this.getDatabases().then(() => {
+      return this.getEventFrames()
+    })
   }
-  templateChanged () {
+  templateChanged ($event) {
 
   }
   databaseChanged ($event) {
@@ -16,14 +18,14 @@ export class PiWebApiAnnotationsQueryCtrl {
   }
   getDatabases () {
     var ctrl = this
-    ctrl.datasource.getDatabases(this.datasource.afserver.webid).then(dbs => {
-      ctrl.databases = dbs
+    return ctrl.datasource.getDatabases(this.datasource.afserver.webid).then(dbs => {
+      ctrl.annotation.databases = dbs
     })
   }
   getEventFrames () {
     var ctrl = this
-    ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(templates => {
-      ctrl.templates = templates
+    return ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(templates => {
+      ctrl.annotation.templates = templates
     })
   }
 }
