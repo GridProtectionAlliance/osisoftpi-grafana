@@ -36,18 +36,22 @@ System.register(['lodash'], function (_export, _context) {
 
       _export('PiWebApiAnnotationsQueryCtrl', PiWebApiAnnotationsQueryCtrl = function () {
         function PiWebApiAnnotationsQueryCtrl($scope) {
+          var _this = this;
+
           _classCallCheck(this, PiWebApiAnnotationsQueryCtrl);
 
           this.$scope = $scope;
           this.annotation.query = this.annotation.query || {};
-          this.databases = [];
-          this.templates = [];
-          this.getDatabases();
+          this.annotation.databases = this.annotation.databases || [];
+          this.annotation.templates = this.annotation.templates || [];
+          this.getDatabases().then(function () {
+            return _this.getEventFrames();
+          });
         }
 
         _createClass(PiWebApiAnnotationsQueryCtrl, [{
           key: 'templateChanged',
-          value: function templateChanged() {}
+          value: function templateChanged($event) {}
         }, {
           key: 'databaseChanged',
           value: function databaseChanged($event) {
@@ -57,16 +61,16 @@ System.register(['lodash'], function (_export, _context) {
           key: 'getDatabases',
           value: function getDatabases() {
             var ctrl = this;
-            ctrl.datasource.getDatabases(this.datasource.afserver.webid).then(function (dbs) {
-              ctrl.databases = dbs;
+            return ctrl.datasource.getDatabases(this.datasource.afserver.webid).then(function (dbs) {
+              ctrl.annotation.databases = dbs;
             });
           }
         }, {
           key: 'getEventFrames',
           value: function getEventFrames() {
             var ctrl = this;
-            ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(function (templates) {
-              ctrl.templates = templates;
+            return ctrl.datasource.getEventFrameTemplates(ctrl.annotation.database.WebId).then(function (templates) {
+              ctrl.annotation.templates = templates;
             });
           }
         }]);

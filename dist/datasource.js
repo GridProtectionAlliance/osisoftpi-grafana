@@ -99,16 +99,23 @@ System.register(['angular', 'lodash'], function (_export, _context) {
 
         _createClass(PiWebApiDatasource, [{
           key: 'eventFrameToAnnotation',
-          value: function eventFrameToAnnotation(annotationOptions, endTime, eventFrame) {
+          value: function eventFrameToAnnotation(annotationOptions, endTime, eventFrame, attributeDataItems) {
             if (annotationOptions.regex && annotationOptions.regex.enable) {
               eventFrame.Name = eventFrame.Name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
             }
 
+            var attributeText = '';
+            if (attributeDataItems) {
+              _.each(attributeDataItems, function (attributeData) {
+                var attributeValue = attributeData.Value.Value ? attributeData.Value.Value.Name || attributeData.Value.Value.Value || attributeData.Value.Value : null;
+                attributeText += '<br />' + attributeData.Name + ': ' + attributeValue;
+              });
+            }
             return {
               annotation: annotationOptions,
               title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
               time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
-              text: eventFrame.Name + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime
+              text: eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime
               // tags: eventFrame.CategoryNames.join()
             };
           }
@@ -140,7 +147,6 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 summary: target.summary || { types: [] },
                 startTime: options.range.from.toJSON(),
                 endTime: options.range.to.toJSON()
-                // items: results
               };
 
               if (tar.expression) {
@@ -210,8 +216,9 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               return this.$q.when([]);
             }
 
-            var categoryName = this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob');
-            var nameFilter = this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob');
+            var categoryName = options.annotation.query.categoryName ? this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob') : null;
+            var nameFilter = options.annotation.query.nameFilter ? this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob') : null;
+            var templateName = options.annotation.template ? options.annotation.template.Name : null;
             var annotationOptions = {
               name: options.annotation.name,
               datasource: options.annotation.datasource,
@@ -219,33 +226,78 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               iconColor: options.annotation.iconColor,
               showEndTime: options.annotation.showEndTime,
               regex: options.annotation.regex,
+              attribute: options.annotation.attribute,
               categoryName: categoryName,
+              templateName: templateName,
               nameFilter: nameFilter
             };
 
-            var filter = 'categoryName=' + annotationOptions.categoryName;
-            if (!annotationOptions.categoryName && annotationOptions.nameFilter) {
-              filter = 'nameFilter=' + annotationOptions.nameFilter;
-            } else if (annotationOptions.nameFilter) {
-              filter = 'categoryName=' + annotationOptions.categoryName + '&nameFilter=' + annotationOptions.nameFilter;
+            var filter = [];
+            if (!!annotationOptions.categoryName) {
+              filter.push('categoryName=' + annotationOptions.categoryName);
             }
+            if (!!annotationOptions.nameFilter) {
+              filter.push('nameFilter=' + annotationOptions.nameFilter);
+            }
+            if (!!annotationOptions.templateName) {
+              filter.push('templateName=' + annotationOptions.templateName);
+            }
+            if (!filter.length) {
+              return this.$q.when([]);
+            }
+            filter.push('startTime=' + options.range.from.toJSON());
+            filter.push('endTime=' + options.range.to.toJSON());
 
-            return this.backendSrv.datasourceRequest({
-              url: this.url + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter + '&startTime=' + options.range.from.toJSON() + '&endTime=' + options.range.to.toJSON(),
-              // data: annotationQuery,
-              method: 'GET'
-            }).then(function (result) {
-              var annotations = _.map(result.data.Items, _.curry(_this3.eventFrameToAnnotation)(annotationOptions, false));
-
-              if (options.annotation.showEndTime) {
-                var ends = _.map(result.data.Items, _.curry(_this3.eventFrameToAnnotation)(annotationOptions, true));
-                _.each(ends, function (end) {
-                  annotations.push(end);
-                });
+            if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+              var resourceUrl = this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId;Items.Value;Items.Name';
+              if (!!annotationOptions.attribute.name) {
+                resourceUrl = this.piwebapiurl + '/streamsets/{0}/value?nameFilter=' + annotationOptions.attribute.name + '&selectedFields=Items.WebId;Items.Value;Items.Name';
               }
+              var query = {};
+              query["1"] = {
+                'Method': 'GET',
+                'Resource': this.piwebapiurl + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')
+              }, query["2"] = {
+                'Method': 'GET',
+                'RequestTemplate': {
+                  'Resource': resourceUrl
+                },
+                'Parameters': ['$.1.Content.Items[*].WebId'],
+                'ParentIds': ['1']
+              };
+              return this.restBatch(query).then(function (result) {
+                var data = result.data["1"].Content;
+                var valueData = result.data["2"].Content;
 
-              return annotations;
-            });
+                var annotations = _.map(data.Items, function (item, index) {
+                  return _.curry(_this3.eventFrameToAnnotation)(annotationOptions, false, item, valueData.Items[index].Content.Items);
+                });
+
+                if (options.annotation.showEndTime) {
+                  var ends = _.map(data.Items, function (item, index) {
+                    return _.curry(_this3.eventFrameToAnnotation)(annotationOptions, true, item, valueData.Items[index].Content.Items);
+                  });
+                  _.each(ends, function (end) {
+                    annotations.push(end);
+                  });
+                }
+
+                return annotations;
+              });
+            } else {
+              return this.restGet('/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')).then(function (result) {
+                var annotations = _.map(result.data.Items, _.curry(_this3.eventFrameToAnnotation)(annotationOptions, false));
+
+                if (options.annotation.showEndTime) {
+                  var ends = _.map(result.data.Items, _.curry(_this3.eventFrameToAnnotation)(annotationOptions, true));
+                  _.each(ends, function (end) {
+                    annotations.push(end);
+                  });
+                }
+
+                return annotations;
+              });
+            }
           }
         }, {
           key: 'metricQueryTransform',

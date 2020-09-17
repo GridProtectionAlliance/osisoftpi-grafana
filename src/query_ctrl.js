@@ -268,7 +268,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       })
 
       var filteredAttributes = _.filter(ctrl.attributes, attrib => {
-        return validAttributes[attrib.value] !== undefined
+        const changedValue = this.templateSrv.replace(attrib.value)
+        return validAttributes[changedValue] !== undefined
       })
 
       ctrl.availableAttributes = validAttributes
