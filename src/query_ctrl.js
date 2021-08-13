@@ -54,7 +54,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       'Null', // replace with nulls
       'Drop', // drop items
       'Previous', // use previous value if available
-      '0', // replace with 0      
+      '0', // replace with 0
+      'Keep', // Keep value      
     ]
 
     this.target.target = this.target.target || ';'
@@ -70,6 +71,12 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       this.target.recordedValues = { enable: this.target.recordedValues }
     }
     this.target.recordedValues.enable = this.target.recordedValues.enable || false
+    
+    this.target.digitalStates = this.target.digitalStates || {enable: false}
+    if (this.target.digitalStates === false || this.target.digitalStates === true) {
+      this.target.digitalStates = { enable: this.target.digitalStates }
+    }
+    this.target.digitalStates.enable = this.target.digitalStates.enable || false
     
     if (this.segments.length === 0) {
       this.segments.push(this.uiSegmentSrv.newSelectMetric())
