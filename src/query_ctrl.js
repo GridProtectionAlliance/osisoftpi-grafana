@@ -13,6 +13,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     this.segments = []
     this.attributes = []
     this.availableAttributes = {}
+    this.piServer = []
     this.attributeSegment = this.uiSegmentSrv.newPlusButton()
 
     this.summaries = []
@@ -115,9 +116,12 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
         this.panelCtrl.refresh()
       }
 
-      this.datasource.getElement(element).then(results => {
-        this.target.webid = results.WebId
-      })
+      if (this.target.isPiPoint === false) {
+        this.datasource.getElement(element).then(results => {
+          this.target.webid = results.WebId
+          ctrl.refresh()
+        })
+      }
     }
   }
 
@@ -196,7 +200,29 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     }, '')
   }
 
-  /**
+/**
+   * Gets the webid of the current selected pi data server.
+   * 
+   * @memberOf PiWebApiDatasourceQueryCtrl
+   */
+ getSelectedPIServer () {
+  var webID = ''
+
+  this.piServer.forEach(s => {
+    var parts = this.target.target.split(';')
+
+    if (parts.length >= 2) {
+      if (parts[0] === s.text) {
+        webID = s.WebId
+        return
+      }
+    }
+  })
+  
+  return webID
+}
+
+/**
    * Gets the currently selected child attributes.
    * 
    * @returns - String of selected attributes.
@@ -317,9 +343,9 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
       if (children.length === 0) {
         if (query.path !== '') {
           ctrl.segments = ctrl.segments.splice(0, fromIndex + 1)
-          if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-            ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF"))
-          }
+          // if (ctrl.segments[ctrl.segments.length - 1].expandable) {
+          //   ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF"))
+          // }
         }
       } else /* if (this.isElementSegmentExpandable(segments[0])) */ {
         if (ctrl.segments.length === fromIndex) {
@@ -333,12 +359,15 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
           return ctrl.checkOtherSegments(fromIndex + 1)
         }
       }
+
+      ctrl.refresh()
     }).catch(err => {
       ctrl.segments = ctrl.segments.splice(0, fromIndex)
       if (ctrl.segments[ctrl.segments.length - 1].expandable) {
         if (!ctrl.target.isPiPoint) {
           ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"))
         } 
+        ctrl.refresh()
       }
       ctrl.error = err.message || 'Failed to issue metric query'
     })
@@ -413,6 +442,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     var plusButton = this.uiSegmentSrv.newPlusButton()
     this.summarySegment.value = plusButton.value
     this.summarySegment.html = plusButton.html
+    this.summarySegment.fake = plusButton.fake
+    this.summarySegment.type = plusButton.type
     this.panelCtrl.refresh()
   }
   // change a summary query
@@ -453,6 +484,8 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     var plusButton = this.uiSegmentSrv.newPlusButton()
     this.attributeSegment.value = plusButton.value
     this.attributeSegment.html = plusButton.html
+    this.attributeSegment.fake = plusButton.fake
+    this.attributeSegment.type = plusButton.type
     this.panelCtrl.refresh()
   }
   // change an attribute
@@ -465,13 +498,31 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
     this.panelCtrl.refresh()
   }
   // get the list of attributes for the user interface
-  getAttributeSegments () {
+  getAttributeSegments (attributeText) {
     var ctrl = this
     var segments = []
 
+    if (this.target.isPiPoint === true) {
+      var query = { path: '', webId: this.getSelectedPIServer(), pointName: '*' + attributeText + '*' }
+
+      return this.datasource.metricFindQuery(angular.toJson(query), this.target.isPiPoint)
+      .then(items => {
+        _.forOwn(items, (item) => {
+          segments.push(ctrl.uiSegmentSrv.newSegment({value: item.text, expandable: true}))
+        })
+
+        segments.unshift(ctrl.uiSegmentSrv.newSegment('-REMOVE-'))
+
+        return this.$q.when(segments)
+      }).catch(err => {
+        ctrl.error = err.message || 'Failed to issue metric query'
+        return this.$q.when(segments)
+      })
+    } else {
     _.forOwn(ctrl.availableAttributes, (val, key) => {
       segments.push(ctrl.uiSegmentSrv.newSegment({value: key, expandable: true}))
     })
+    }
     segments.unshift(ctrl.uiSegmentSrv.newSegment('-REMOVE-'))
 
     return this.$q.when(segments)
@@ -483,6 +534,7 @@ export class PiWebApiDatasourceQueryCtrl extends QueryCtrl {
 
     return this.datasource.metricFindQuery(angular.toJson(query), this.target.isPiPoint)
     .then(items => {
+      this.piServer = items
       var altSegments = _.map(items, item => {
         return ctrl.uiSegmentSrv.newSegment({value: item.text, expandable: item.expandable})
       })
