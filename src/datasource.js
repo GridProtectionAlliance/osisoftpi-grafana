@@ -466,7 +466,7 @@ export class PiWebApiDatasource {
         num = value.Value.Name
       }
 
-      if (!value.Good) {
+      if (!value.Value.Good) {
         num = value.Value.Name
       }
 
