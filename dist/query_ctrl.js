@@ -100,6 +100,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           _this.target.summary.basis = _this.target.summary.basis;
           _this.target.summary.nodata = _this.target.summary.nodata || 'Null';
           _this.target.summary.interval = _this.target.summary.interval || '';
+          _this.target.isPiPoint = _this.target.isPiPoint || false;
 
           _this.calculationBasisSegment = _this.uiSegmentSrv.newSegment(_this.target.summary.basis);
           _this.calculationBasis = ['TimeWeighted', // Weight the values in the calculation by the time over which they apply. Interpolation is based on whether the attribute is stepped. Interpolated events are generated at the boundaries if necessary.
@@ -131,9 +132,9 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
           }
           _this.target.recordedValues.enable = _this.target.recordedValues.enable || false;
 
-          if (_this.segments.length === 0) {
-            _this.segments.push(_this.uiSegmentSrv.newSelectMetric());
-          }
+          // if (this.segments.length === 0) {
+          //   this.segments.push(this.uiSegmentSrv.newSelectMetric())
+          // }
 
           _this.textEditorChanged();
           return _this;
@@ -195,9 +196,11 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var segments = [];
             var attributes = [];
 
-            _.each(splitElements, function (item) {
-              segments.push(ctrl.uiSegmentSrv.newSegment({ value: item, expandable: true }));
-            });
+            if (splitElements.length > 1 || splitElements.length === 1 && splitElements[0] !== '') {
+              _.each(splitElements, function (item) {
+                segments.push(ctrl.uiSegmentSrv.newSegment({ value: item, expandable: true }));
+              });
+            }
 
             _.each(splitAttributes, function (item) {
               attributes.push(ctrl.uiSegmentSrv.newSegment({ value: item, expandable: true }));
@@ -282,7 +285,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
               type: 'attributes'
             };
 
-            return this.datasource.metricFindQuery(angular.toJson(query)).then(function (attributes) {
+            return this.datasource.metricFindQuery(angular.toJson(query), this.target.isPiPoint).then(function (attributes) {
               var validAttributes = {};
 
               _.each(attributes, function (attribute) {
@@ -294,8 +297,10 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
                 return validAttributes[changedValue] !== undefined;
               });
 
-              ctrl.availableAttributes = validAttributes;
-              ctrl.attributes = filteredAttributes;
+              if (!ctrl.target.isPiPoint) {
+                ctrl.availableAttributes = validAttributes;
+                ctrl.attributes = filteredAttributes;
+              }
             }).catch(function (err) {
               ctrl.error = err.message || 'Failed to issue metric query';
               ctrl.attributes = [];
@@ -307,23 +312,27 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var ctrl = this;
             var query = { path: ctrl.getSegmentPathUpTo(fromIndex + 1) };
 
-            if (ctrl.segments.length === 0) {
-              ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"));
+            if (ctrl.segments.length === 0 && ctrl.target.isPiPoint === false) {
+              ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF"));
+            } else if (ctrl.segments.length === 0 && ctrl.target.isPiPoint === true) {
+              ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select Dataserver"));
             }
 
-            return ctrl.datasource.metricFindQuery(angular.toJson(query)).then(function (children) {
+            return ctrl.datasource.metricFindQuery(angular.toJson(query), this.target.isPiPoint).then(function (children) {
               if (children.length === 0) {
                 if (query.path !== '') {
                   ctrl.segments = ctrl.segments.splice(0, fromIndex + 1);
                   if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                    ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Database"));
+                    ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF"));
                   }
                 }
               } else /* if (this.isElementSegmentExpandable(segments[0])) */{
                   if (ctrl.segments.length === fromIndex) {
                     ctrl.segments = ctrl.segments.splice(0, fromIndex);
                     if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                      ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
+                      if (!ctrl.target.isPiPoint) {
+                        ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
+                      }
                     }
                   } else {
                     return ctrl.checkOtherSegments(fromIndex + 1);
@@ -332,7 +341,9 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             }).catch(function (err) {
               ctrl.segments = ctrl.segments.splice(0, fromIndex);
               if (ctrl.segments[ctrl.segments.length - 1].expandable) {
-                ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
+                if (!ctrl.target.isPiPoint) {
+                  ctrl.segments.push(ctrl.uiSegmentSrv.getSegmentForValue(null, "Select AF Element"));
+                }
               }
               ctrl.error = err.message || 'Failed to issue metric query';
             });
@@ -485,7 +496,7 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             var ctrl = this;
             var query = { path: this.getSegmentPathUpTo(index) };
 
-            return this.datasource.metricFindQuery(angular.toJson(query)).then(function (items) {
+            return this.datasource.metricFindQuery(angular.toJson(query), this.target.isPiPoint).then(function (items) {
               var altSegments = _.map(items, function (item) {
                 return ctrl.uiSegmentSrv.newSegment({ value: item.text, expandable: item.expandable });
               });
@@ -535,6 +546,12 @@ System.register(['angular', 'lodash', 'app/plugins/sdk', './css/query-editor.css
             ctrl.setSegmentFocus(segmentIndex + 1);
             ctrl.checkAttributeSegments();
             ctrl.targetChanged();
+          }
+        }, {
+          key: 'togglePiPointSearch',
+          value: function togglePiPointSearch() {
+            this.textEditorChanged();
+            this.panelCtrl.refresh();
           }
         }]);
 

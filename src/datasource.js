@@ -99,7 +99,8 @@ export class PiWebApiDatasource {
         expression: target.expression || '',
         summary: target.summary || {types: []},
         startTime: options.range.from.toJSON(),
-        endTime: options.range.to.toJSON()
+        endTime: options.range.to.toJSON(),
+        isPiPoint: target.isPiPoint
       }
       
       if (tar.expression) {
@@ -305,7 +306,7 @@ export class PiWebApiDatasource {
    * 
    * @memberOf PiWebApiDatasource
    */
-  metricFindQuery (query) {
+  metricFindQuery (query, isPiPoint) {
     query = angular.fromJson(query)
 
     var ds = this
@@ -314,6 +315,9 @@ export class PiWebApiDatasource {
       query.type = querydepth[0]
     } else if (query.type !== 'attributes') {
       query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))]
+    }
+    if (isPiPoint) {
+      query.type = 'dataserver'
     }
 
     query.path = this.templateSrv.replace(query.path)
@@ -341,7 +345,9 @@ export class PiWebApiDatasource {
         .then(element => {
           return ds.getAttributes(element.WebId, {searchFullHierarchy: 'true', selectedFields: 'Items.WebId;Items.Name;Items.Path'})
             .then(ds.metricQueryTransform) })
-    }
+    } else if (query.type === 'dataserver'){
+      return ds.getDataServers()
+        .then(ds.metricQueryTransform)}
   }
 
   /**
@@ -590,7 +596,7 @@ export class PiWebApiDatasource {
         if (target.attributes.length > 0) {
           _.each(target.attributes, attribute => {
             results.push(
-              api.restGetWebId(target.elementPath + '|' + attribute)
+              api.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint)
               .then(webidresponse => {
                 return api.restPost(url + webidresponse.WebId)
                 .then(response => { return api.processResults(response.data, target, target.display || attribute || targetName) })
@@ -599,7 +605,7 @@ export class PiWebApiDatasource {
           })
         } else {
           results.push(
-            api.restGetWebId(target.elementPath)
+            api.restGetWebId(target.elementPath, target.isPiPoint)
               .then(webidresponse => {
                 return api.restPost(url + webidresponse.WebId)
                 .then(response => { return api.processResults(response.data, target, target.display || targetName) })
@@ -619,7 +625,7 @@ export class PiWebApiDatasource {
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints
         }
 
-        results.push(api.$q.all(_.map(target.attributes, attribute => { return api.restGetWebId(target.elementPath + '|' + attribute) }))
+        results.push(api.$q.all(_.map(target.attributes, attribute => { return api.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint) }))
         .then(webidresponse => {
           var query = {};
           _.each(webidresponse, function(webid, index) {
@@ -667,12 +673,12 @@ export class PiWebApiDatasource {
   /**
    * Resolve a Grafana query into a PI Web API webid. Uses client side cache when possible to reduce lookups.
    * 
-   * @param {any} assetPath - The AF Path to the asset.
+   * @param {any} assetPath - The AF Path or the Pi Point Path (\\ServerName\piPointName) to the asset.
    * @returns - URL query parameters.
    * 
    * @memberOf PiWebApiDatasource
    */
-  restGetWebId (assetPath) {
+  restGetWebId (assetPath, isPiPoint) {
     var ds = this
 
     // check cache
@@ -681,11 +687,16 @@ export class PiWebApiDatasource {
       return ds.$q.when({Path: assetPath, WebId: cachedWebId})
     }
 
-    // no cache hit, query server
-    var path = ((assetPath.indexOf('|') >= 0)
-                ? '/attributes?selectedFields=WebId;Name;Path&path=\\\\'
-                : '/elements?selectedFields=WebId;Name;Path&path=\\\\') +
-                assetPath
+    if (!isPiPoint){
+      // no cache hit, query server
+      var path = ((assetPath.indexOf('|') >= 0)
+        ? '/attributes?selectedFields=WebId;Name;Path&path=\\\\'
+        : '/elements?selectedFields=WebId;Name;Path&path=\\\\') + assetPath
+    } else {
+      var path = '/points?selectedFields=WebId;Name;Path&path=\\\\' + assetPath.replace('|', '\\')
+    }
+
+    
 
     return this.backendSrv.datasourceRequest({
       url: this.url + path,
@@ -897,7 +908,6 @@ export class PiWebApiDatasource {
    */
   getWebId (target) {
     var api = this
-
     var isAf = target.target.indexOf('\\') >= 0
     var isAttribute = target.target.indexOf('|') >= 0
     if (!isAf && target.target.indexOf('.') === -1) { return api.$q.when([{ WebId: target.target, Name: target.display || target.target }]) }
