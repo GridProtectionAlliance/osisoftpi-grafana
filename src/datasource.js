@@ -318,6 +318,10 @@ export class PiWebApiDatasource {
     }
     if (isPiPoint) {
       query.type = 'dataserver'
+      
+      if (query.webId !== undefined && query.webId !== '') {
+        query.type = 'pipoint'
+      }    
     }
 
     query.path = this.templateSrv.replace(query.path)
@@ -345,9 +349,13 @@ export class PiWebApiDatasource {
         .then(element => {
           return ds.getAttributes(element.WebId, {searchFullHierarchy: 'true', selectedFields: 'Items.WebId;Items.Name;Items.Path'})
             .then(ds.metricQueryTransform) })
-    } else if (query.type === 'dataserver'){
+    } else if (query.type === 'dataserver') {
       return ds.getDataServers()
-        .then(ds.metricQueryTransform)}
+        .then(ds.metricQueryTransform)
+      } else if (query.type === 'pipoint') {
+        return ds.piPointSearch(query.webId, query.pointName)
+          .then(ds.metricQueryTransform)
+      }
   }
 
   /**
