@@ -140,6 +140,7 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 hide: target.hide,
                 interpolate: target.interpolate || { enable: false },
                 recordedValues: target.recordedValues || { enable: false },
+                digitalStates: target.digitalStates || { enable: false },
                 webid: target.webid,
                 webids: target.webids || [],
                 regex: target.regex || { enable: false },
@@ -326,6 +327,10 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             }
             if (isPiPoint) {
               query.type = 'dataserver';
+
+              if (query.webId !== undefined && query.webId !== '') {
+                query.type = 'pipoint';
+              }
             }
 
             query.path = this.templateSrv.replace(query.path);
@@ -350,6 +355,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
               });
             } else if (query.type === 'dataserver') {
               return ds.getDataServers().then(ds.metricQueryTransform);
+            } else if (query.type === 'pipoint') {
+              return ds.piPointSearch(query.webId, query.pointName).then(ds.metricQueryTransform);
             }
           }
         }, {
@@ -420,12 +427,52 @@ System.register(['angular', 'lodash'], function (_export, _context) {
             var target = arguments[2];
 
             var num = !isSummary && _typeof(value.Value) === "object" ? Number(value.Value.Value) : Number(value.Value);
+            var text = value.Value;
+
+            if (target.digitalStates && target.digitalStates.enable) {
+              num = value.Value.Name;
+            }
+
+            if (!value.Good) {
+              num = value.Value.Name;
+            }
+
             if (isSummary) {
               num = Number(value.Value.Value);
-              if (target.summary.interval == "") {
-                return [!isNaN(num) ? num : 0, new Date(target.endTime).getTime()];
+              text = value.Value.Value;
+
+              if (target.digitalStates && target.digitalStates.enable) {
+                num = value.Value.Name;
               }
-              return [!isNaN(num) ? num : 0, new Date(value.Value.Timestamp).getTime()];
+
+              if (!value.Value.Good) {
+                num = value.Value.Name;
+              }
+
+              if (target.summary.interval == "") {
+                if (target.digitalStates && target.digitalStates.enable) {
+                  return [num, new Date(value.Timestamp).getTime()];
+                } else if (!value.Good) {
+                  return [num, new Date(value.Timestamp).getTime()];
+                } else {
+                  return [!isNaN(num) ? num : text, new Date(target.endTime).getTime()];
+                }
+              }
+
+              if (target.digitalStates && target.digitalStates.enable) {
+                return [num, new Date(value.Timestamp).getTime()];
+              } else if (!value.Good) {
+                return [num, new Date(value.Timestamp).getTime()];
+              } else {
+                return [!isNaN(num) ? num : text, new Date(value.Value.Timestamp).getTime()];
+              }
+            }
+            if (target.digitalStates && target.digitalStates.enable) {
+              return [num, new Date(value.Timestamp).getTime()];
+            } else if (!value.Good) {
+              return [num, new Date(value.Timestamp).getTime()];
+            } else {
+              return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
             }
             return [!isNaN(num) ? num : 0, new Date(value.Timestamp).getTime()];
           }
@@ -439,6 +486,8 @@ System.register(['angular', 'lodash'], function (_export, _context) {
                 drop = true;
               } else if (noDataReplacementMode === '0') {
                 grafanaDataPoint[0] = 0;
+              } else if (noDataReplacementMode === 'Keep') {
+                // Do nothing keep
               } else if (noDataReplacementMode === 'Null') {
                 grafanaDataPoint[0] = null;
               } else if (noDataReplacementMode === 'Previous' && previousValue !== null) {

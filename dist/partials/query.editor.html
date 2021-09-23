@@ -31,9 +31,9 @@
 					<span ng-if="ctrl.target.isPiPoint">Pi Points</span>
 				</label>
 				<div ng-repeat="segment in ctrl.attributes" role="menuitem">
-					<metric-segment segment="segment" get-options="ctrl.getAttributeSegments()" on-change="ctrl.attributeValueChanged(segment, $index)"></metric-segment>
+					<metric-segment segment="segment" get-options="ctrl.getAttributeSegments($query)" on-change="ctrl.attributeValueChanged(segment, $index)"></metric-segment>
 				</div>
-				<metric-segment segment="ctrl.attributeSegment" get-options="ctrl.getAttributeSegments()" on-change="ctrl.attributeAction(part, $index)"></metric-segment>
+				<metric-segment segment="ctrl.attributeSegment" get-options="ctrl.getAttributeSegments($query)" on-change="ctrl.attributeAction(part, $index)"></metric-segment>
 			</div>
 			<div class="gf-form gf-form--grow">
 				<div class="gf-form-label gf-form-label--grow"></div>
@@ -61,6 +61,11 @@
 		<div class="gf-form">
 			<gf-form-switch class="gf-form-inline" label="Recorded Values" label-class="query-keyword" checked="ctrl.target.recordedValues.enable"
 				on-change="ctrl.targetBlur()" ng-disabled="ctrl.target.interpolate.enable">
+			</gf-form-switch>
+		</div>
+		<div class="gf-form">
+			<gf-form-switch class="gf-form-inline" label="Digital States" label-class="query-keyword" checked="ctrl.target.digitalStates.enable"
+				on-change="ctrl.targetBlur()">
 			</gf-form-switch>
 		</div>
   </div>
