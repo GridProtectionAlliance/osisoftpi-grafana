@@ -558,6 +558,7 @@ export class PiWebApiDatasource {
       var groups = _.groupBy(content.Items, item => { return item.Type })
       _.forOwn(groups, (value, key) => {
         innerResults.push({
+          'refId': target.refId,
           'target': name + '[' + key + ']',
           'datapoints': api.parsePiPointValueList(value, target, isSummary)
         })
