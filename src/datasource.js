@@ -566,6 +566,7 @@ export class PiWebApiDatasource {
       return innerResults
     }
     return [{
+      'refId': target.refId,
       'target': name,
       'datapoints': api.parsePiPointValueList(content.Items, target, isSummary)
     }]
