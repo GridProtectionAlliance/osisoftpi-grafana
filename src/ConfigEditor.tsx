@@ -17,7 +17,7 @@ const coerceOptions = (
       url: options.url,
     },
   };
-}
+};
 
 interface State {}
 
@@ -27,9 +27,9 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     const jsonData = {
       ...options.jsonData,
       piserver: event.target.value,
-    }
+    };
     onOptionsChange({ ...options, jsonData });
-  }
+  };
 
   onAFServerChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
@@ -38,7 +38,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
       afserver: event.target.value,
     }
     onOptionsChange({ ...options, jsonData });
-  }
+  };
 
   onAFDatabaseChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
@@ -47,12 +47,12 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
       afdatabase: event.target.value,
     }
     onOptionsChange({ ...options, jsonData });
-  }
+  };
 
   onMyOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
     const { onOptionsChange } = this.props;
     onOptionsChange(coerceOptions(options));
-  }
+  };
 
   render() {
     const { options: originalOptions } = this.props;
@@ -68,7 +68,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
         />
 
         <h3 className="page-heading">PI/AF Connection Details</h3>
-  
+
         <div className="gf-form-group">
           <div className="gf-form">
             <FormField
