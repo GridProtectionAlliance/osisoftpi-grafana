@@ -14,6 +14,7 @@ export class AnnotationsQueryCtrl {
     this.getDatabases();
   }
   templateChanged() {
+    // do nothing
   }
   databaseChanged() {
     this.getEventFrames();

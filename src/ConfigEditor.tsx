@@ -36,7 +36,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     const jsonData = {
       ...options.jsonData,
       afserver: event.target.value,
-    }
+    };
     onOptionsChange({ ...options, jsonData });
   };
 
@@ -45,7 +45,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     const jsonData = {
       ...options.jsonData,
       afdatabase: event.target.value,
-    }
+    };
     onOptionsChange({ ...options, jsonData });
   };
 
