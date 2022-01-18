@@ -38,7 +38,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   interpolate: { enable: false },
   recordedValues: { enable: false },
   digitalStates: { enable: false },
-  isPiPoint: false
+  isPiPoint: false,
 };
 
 /**
@@ -48,8 +48,8 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   url?: string;
   access?: string;
   piserver?: string;
-  afserver?:string;
-  afdatabase?:string;
+  afserver?: string;
+  afdatabase?: string;
 }
 
 /**

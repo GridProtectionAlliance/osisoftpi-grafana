@@ -747,7 +747,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
                 this.onChange({
                   ...metricsQuery,
-                  recordedValues: { ...recordedValues, maxNumber: parseInt(event.target.value, 10) }
+                  recordedValues: { ...recordedValues, maxNumber: parseInt(event.target.value, 10) },
                 })
               }
               type="number"
@@ -763,7 +763,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               onChange={() => {
                 this.onChange({
                   ...metricsQuery,
-                  recordedValues: { ...recordedValues, enable: !recordedValues.enable }
+                  recordedValues: { ...recordedValues, enable: !recordedValues.enable },
                 });
               }}
             />
@@ -775,7 +775,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               labelClass="query-keyword"
               checked={digitalStates.enable}
               onChange={() => {
-                this.onChange({ ...metricsQuery, digitalStates: {...digitalStates, enable: !digitalStates.enable } });
+                this.onChange({ ...metricsQuery, digitalStates: { ...digitalStates, enable: !digitalStates.enable } });
               }}
             />
           </div>
@@ -821,11 +821,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               />
             </label>
             <Segment
-              Component={
-                <CustomLabelComponent
-                  value={{ value: summary.nodata }} label={summary.nodata} 
-                />
-              }
+              Component={<CustomLabelComponent value={{ value: summary.nodata }} label={summary.nodata} />}
               onChange={this.calcNoDataValueChanged}
               options={this.getNoDataSegments()}
               allowCustomValue
@@ -879,11 +875,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               return (
                 <Segment
                   key={'summaries-' + index}
-                  Component={
-                    <CustomLabelComponent
-                      value={s.value} label={s.label}
-                    />
-                  }
+                  Component={<CustomLabelComponent value={s.value} label={s.label} />}
                   onChange={(item) => this.onSummaryValueChanged(item, index)}
                   options={this.getSummarySegments()}
                   allowCustomValue
@@ -892,9 +884,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             })}
             <Segment
               Component={
-                <CustomLabelComponent
-                  value={this.state.summarySegment.value} label={this.state.summarySegment.label}
-                />
+                <CustomLabelComponent value={this.state.summarySegment.value} label={this.state.summarySegment.label} />
               }
               onChange={this.onSummaryAction}
               options={this.getSummarySegments()}
