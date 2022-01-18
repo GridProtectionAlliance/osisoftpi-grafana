@@ -347,8 +347,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
       type: 'attributes',
     };
-    return
-      datasource.metricFindQuery(findQuery, false)
+    return datasource
+      .metricFindQuery(findQuery, false)
       .then((attributesResponse: any) => {
         var validAttributes: any = {};
 
@@ -386,8 +386,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       pointName: datasource.templateSrv.replace(attribute.label),
       type: 'pipoint',
     };
-    return
-      datasource.metricFindQuery(findQuery, true)
+    return datasource
+      .metricFindQuery(findQuery, true)
       .then(() => {
         this.attributeChangeValue(attributes);
       })
@@ -405,7 +405,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       ? { type: 'dataserver'}
       : { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) };
 
-    return datasource.metricFindQuery(findQuery, query.isPiPoint)
+    return datasource
+      .metricFindQuery(findQuery, query.isPiPoint)
       .then((items: any[]) => {
         var altSegments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
@@ -485,7 +486,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       type: 'pipoint',
     };
 
-    return datasource.metricFindQuery(findQuery, query.isPiPoint)
+    return datasource
+      .metricFindQuery(findQuery, query.isPiPoint)
       .then((items: any[]) => {
         segments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
@@ -585,7 +587,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
     query.target = query.elementPath +
       ';' +
-      join(query.attributes.map(s => s.value?.value), ';');
+      join(
+        query.attributes.map(s => s.value?.value),
+        ';'
+      );
 
     onChange(query);
 
@@ -643,26 +648,29 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           }
         </QueryInlineField>
 
-        <QueryInlineField label={isPiPoint ? "Pi Points" : "Attributes"}>
-          {this.state.attributes.map((attribute: SelectableValue<PIWebAPISelectableValue>, index: number) => 
-            {
-              if (isPiPoint) {
-                return <SegmentAsync
-                    Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
-                    disabled={this.piServer.length === 0}
-                    onChange={(item) => this.onPiPointChange(item, index)}
-                    loadOptions={this.getAttributeSegmentsPI}
-                    reloadOptionsOnChange
-                    allowCustomValue
-                  />
-              }
-              return <Segment
+        <QueryInlineField label={isPiPoint ? 'Pi Points' : 'Attributes'}>
+          {this.state.attributes.map((attribute: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+            if (isPiPoint) {
+              return (
+                <SegmentAsync
                   Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
-                  disabled={this.state.segments.length <= 2}
-                  onChange={(item) => this.onAttributeChange(item, index)}
-                  options={this.getAttributeSegmentsAF()}
+                  disabled={this.piServer.length === 0}
+                  onChange={(item) => this.onPiPointChange(item, index)}
+                  loadOptions={this.getAttributeSegmentsPI}
+                  reloadOptionsOnChange
                   allowCustomValue
                 />
+              );
+            }
+            return (
+              <Segment
+                Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
+                disabled={this.state.segments.length <= 2}
+                onChange={(item) => this.onAttributeChange(item, index)}
+                options={this.getAttributeSegmentsAF()}
+                allowCustomValue
+              />
+            );
             })
           }
 
