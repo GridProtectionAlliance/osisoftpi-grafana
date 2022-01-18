@@ -636,7 +636,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <QueryInlineField label={isPiPoint ? 'Element' : 'Data Server'}>
           {this.state.segments.map((segment: SelectableValue<PIWebAPISelectableValue>, index: number) => {
             return (
-              <SegmentAsync
+              <SegmentAsync key={'element-' + index}
                 Component={<CustomLabelComponent value={segment.value} label={segment.label} />}
                 onChange={(item) => this.onSegmentChange(item, index)}
                 loadOptions={(query?: string | undefined) => {
@@ -653,7 +653,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           {this.state.attributes.map((attribute: SelectableValue<PIWebAPISelectableValue>, index: number) => {
             if (isPiPoint) {
               return (
-                <SegmentAsync
+                <SegmentAsync key={'attributes-' + index}
                   Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
                   disabled={this.piServer.length === 0}
                   onChange={(item) => this.onPiPointChange(item, index)}
@@ -664,7 +664,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               );
             }
             return (
-              <Segment
+              <Segment key={'attributes-' + index}
                 Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
                 disabled={this.state.segments.length <= 2}
                 onChange={(item) => this.onAttributeChange(item, index)}
@@ -677,7 +677,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
           {isPiPoint && (
             <SegmentAsync
-              Component={<CustomLabelComponent value={this.state.attributeSegment.value} label={this.state.attributeSegment.label} />}
+              Component={
+                <CustomLabelComponent 
+                  value={this.state.attributeSegment.value}
+                  label={this.state.attributeSegment.label} 
+                />
+              }
               disabled={this.piServer.length === 0}
               onChange={this.onAttributeAction}
               loadOptions={this.getAttributeSegmentsPI}
@@ -687,7 +692,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           )}
           {!isPiPoint && (
             <Segment
-              Component={<CustomLabelComponent value={this.state.attributeSegment.value} label={this.state.attributeSegment.label} />}
+              Component={
+                <CustomLabelComponent
+                  value={this.state.attributeSegment.value}
+                  label={this.state.attributeSegment.label}
+                />
+              }
               disabled={this.state.segments.length <= 2}
               onChange={this.onAttributeAction}
               options={this.getAttributeSegmentsAF()}
@@ -699,7 +709,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <div className="gf-form-inline">
           <div className="gf-form">
             <label className="gf-form-label query-keyword width-11">Calculation
-              <i className="fa fa-question-circle" bs-tooltip="'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'" data-placement="top"></i>
+              <i
+                className="fa fa-question-circle" 
+                bs-tooltip="'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'"
+                data-placement="top">
+              </i>
             </label>
             <Input
                 className="gf-form-input"
@@ -716,7 +730,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <div className="gf-form-inline">
           <div className="gf-form">
             <label className="gf-form-label query-keyword width-11">Max Recorded Values
-              <i className="fa fa-question-circle" bs-tooltip="'Maximum number of recorded value to retrive from the data archive, without using interpolation.'" data-placement="top"></i>
+              <i 
+                className="fa fa-question-circle"
+                bs-tooltip="'Maximum number of recorded value to retrive from the data archive, without using interpolation.'"
+                data-placement="top">
+              </i>
             </label>
             <Input
               className="gf-form-input width-6"
@@ -756,7 +774,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <div className="gf-form-inline">
           <div className="gf-form">
             <label className="gf-form-label query-keyword width-11">Interpolate Period
-              <i className="fa fa-question-circle" bs-tooltip="'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'" data-placement="top"></i>
+              <i
+                className="fa fa-question-circle"
+                bs-tooltip="'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'"
+                data-placement="top">
+              </i>
             </label>
             <Input
               className="gf-form-input width-5"
@@ -784,7 +806,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           <div className="gf-form">
               <label className="gf-form-label query-keyword  width-8">
                 <span>Replace Bad Data</span>
-                <i className="fa fa-question-circle" bs-tooltip="'Replacement for bad quality values.'" data-placement="top"></i>
+                <i
+                  className="fa fa-question-circle"
+                  bs-tooltip="'Replacement for bad quality values.'"
+                  data-placement="top">
+                </i>
               </label>
               <Segment
                 Component={<CustomLabelComponent value={ { value: summary.nodata }} label={summary.nodata} />}
@@ -798,7 +824,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <div className="gf-form-inline">
           <div className="gf-form">
             <label className="gf-form-label query-keyword width-11">Summary Period
-              <i className="fa fa-question-circle" bs-tooltip="'Override time between sampling, e.g. \'30s\'.'" data-placement="top"></i>
+              <i
+                className="fa fa-question-circle"
+                bs-tooltip="'Override time between sampling, e.g. \'30s\'.'"
+                data-placement="top">
+              </i>
             </label>
             <Input
               className="gf-form-input width-5"
@@ -814,7 +844,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           <div className="gf-form">
               <label className="gf-form-label query-keyword  width-8">
                 <span>Basis</span>
-                <i className="fa fa-question-circle" bs-tooltip="'Defines the possible calculation options when performing summary calculations over time-series data.'" data-placement="top"></i>
+                <i
+                  className="fa fa-question-circle"
+                  bs-tooltip="'Defines the possible calculation options when performing summary calculations over time-series data.'"
+                  data-placement="top">
+                </i>
               </label>
               <Segment
                 Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
@@ -828,17 +862,18 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             <label className="gf-form-label query-keyword  width-8">
               <span>Summaries</span>
             </label>
-            {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => 
-              {
-                return <Segment
-                    Component={<CustomLabelComponent value={s.value} label={s.label} />}
-                    onChange={(item) => {
-                      this.onSummaryValueChanged(item, index);
-                    }}
-                    options={this.getSummarySegments()}
-                    allowCustomValue
-                  />
-              })
+            {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+              return (
+                <Segment key={'summaries-' + index}
+                  Component={<CustomLabelComponent value={s.value} label={s.label} />}
+                  onChange={(item) => {
+                    this.onSummaryValueChanged(item, index);
+                  }}
+                  options={this.getSummarySegments()}
+                  allowCustomValue
+                />
+              );
+            })
             }
             <Segment
                 Component={<CustomLabelComponent value={this.state.summarySegment.value} lable={this.state.summarySegment.label} />}
@@ -855,14 +890,18 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           <div className="gf-form">
             <div className="gf-form max-width-30">
               <label className="gf-form-label query-keyword width-11">Display Name 
-                <i className="fa fa-question-circle" bs-tooltip="'If single attribute, modify display name. Otherwise use regex to modify display name.'" data-placement="top"></i>
+                <i
+                  className="fa fa-question-circle"
+                  bs-tooltip="'If single attribute, modify display name. Otherwise use regex to modify display name.'"
+                  data-placement="top">
+                </i>
               </label>
               <Input
                 className="gf-form-input width-5"
                 onBlur={onRunQuery}
                 value={display}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  this.onChange({...metricsQuery, display: event.target.value})
+                  this.onChange({ ...metricsQuery, display: event.target.value })
                 }
                 placeholder="Display"
               />
