@@ -6,8 +6,8 @@ import { PiWebAPIDatasource } from './datasource';
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData } from './types';
 
 export const plugin = new DataSourcePlugin<PiWebAPIDatasource, PIWebAPIQuery, PIWebAPIDataSourceJsonData>(
-    PiWebAPIDatasource
-  )
+  PiWebAPIDatasource
+)
   .setConfigEditor(PIWebAPIConfigEditor)
   .setQueryEditor(PIWebAPIQueryEditor)
   .setAnnotationQueryCtrl(AnnotationsQueryCtrl);
