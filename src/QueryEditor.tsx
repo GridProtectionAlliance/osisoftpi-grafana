@@ -402,7 +402,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const { datasource, query } = this.props;
     var ctrl = this;
     var findQuery = query.isPiPoint
-      ? { type: 'dataserver'}
+      ? { type: 'dataserver' }
       : { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) };
 
     return datasource
@@ -472,7 +472,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     });
     return this.piServer.length > 0 ? this.piServer[0].webId : webID;
   }
-  
+
   // get the list of attributes for the user interface - PI
   getAttributeSegmentsPI = (attributeText?: string): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
     const { datasource, query } = this.props;
@@ -588,7 +588,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     query.target = query.elementPath +
       ';' +
       join(
-        query.attributes.map(s => s.value?.value),
+        query.attributes.map((s) => s.value?.value),
         ';'
       );
 
@@ -606,7 +606,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   onIsPiPointChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
     const { query: queryChange } = this.props;
-    this.setState({ segments: [{ label: ''}], attributes: [] }, () => {
+    this.setState({ segments: [{ label: '' }], attributes: [] }, () => {
       this.onChange({
         ...queryChange,
         attributes: this.state.attributes,
@@ -634,17 +634,18 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </div>
 
         <QueryInlineField label={isPiPoint ? 'Element' : 'Data Server'}>
-          {this.state.segments.map((segment: SelectableValue<PIWebAPISelectableValue>, index: number) => 
-            {
-              return <SegmentAsync
-                  Component={<CustomLabelComponent value={segment.value} label={segment.label} />}
-                  onChange={(item) => this.onSegmentChange(item, index)}
-                  loadOptions={(query?: string | undefined) => {
-                    return this.getElementSegments(index);
-                  }}
-                  allowCustomValue
-                />
-            })
+          {this.state.segments.map((segment: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+            return (
+              <SegmentAsync
+                Component={<CustomLabelComponent value={segment.value} label={segment.label} />}
+                onChange={(item) => this.onSegmentChange(item, index)}
+                loadOptions={(query?: string | undefined) => {
+                  return this.getElementSegments(index);
+                }}
+                allowCustomValue
+              />
+            );
+          })
           }
         </QueryInlineField>
 
@@ -671,7 +672,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 allowCustomValue
               />
             );
-            })
+          })
           }
 
           {isPiPoint && (
