@@ -71,8 +71,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         this.getDatabase(this.afserver.name + '\\' + this.afdatabase.name).then((result: IPIWebAPIRsp) => { this.afdatabase.webid = result.WebId })
       ]
     )
-
-    console.log(instanceSettings.jsonData)
   }
 
   /**

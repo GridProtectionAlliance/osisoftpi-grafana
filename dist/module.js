@@ -654,7 +654,11 @@ function (_super) {
 
         _this.checkAttributeSegments([], segments);
 
-        if (segments.length > 0 && !!((_a = segments[segments.length - 1].value) === null || _a === void 0 ? void 0 : _a.expandable)) {
+        if (segments.length === 0) {
+          segments.push({
+            label: ''
+          });
+        } else if (!!((_a = segments[segments.length - 1].value) === null || _a === void 0 ? void 0 : _a.expandable)) {
           segments.push({
             label: 'Select Element',
             value: {
@@ -892,7 +896,6 @@ function (_super) {
 
         return (_a = s.value) === null || _a === void 0 ? void 0 : _a.value;
       }), ';');
-      console.log(query);
       onChange(query);
 
       if (query.target && query.target.length > 0 && query.attributes.length > 0) {
@@ -904,6 +907,23 @@ function (_super) {
       var query = _this.props.query;
 
       _this.onChange(query);
+    };
+
+    _this.onIsPiPointChange = function (event) {
+      var queryChange = _this.props.query;
+
+      _this.setState({
+        segments: [{
+          label: ''
+        }],
+        attributes: []
+      }, function () {
+        _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, queryChange), {
+          attributes: _this.state.attributes,
+          segments: _this.state.segments,
+          isPiPoint: !queryChange.isPiPoint
+        }));
+      });
     };
 
     _this.onSegmentChange = _this.onSegmentChange.bind(_this);
@@ -1222,11 +1242,7 @@ function (_super) {
       label: "PI Point Search",
       labelClass: "query-keyword",
       checked: isPiPoint,
-      onChange: function onChange() {
-        return _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
-          isPiPoint: !isPiPoint
-        }));
-      }
+      onChange: this.onIsPiPointChange
     })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_components_Forms__WEBPACK_IMPORTED_MODULE_4__["QueryInlineField"], {
       label: isPiPoint ? "Element" : "Data Server"
     }, this.state.segments.map(function (segment, index) {
@@ -1252,6 +1268,7 @@ function (_super) {
             value: attribute.value,
             label: attribute.label
           }),
+          disabled: _this.piServer.length === 0,
           onChange: function onChange(item) {
             return _this.onPiPointChange(item, index);
           },
@@ -1266,6 +1283,7 @@ function (_super) {
           value: attribute.value,
           label: attribute.label
         }),
+        disabled: _this.state.segments.length <= 2,
         onChange: function onChange(item) {
           return _this.onAttributeChange(item, index);
         },
@@ -1277,6 +1295,7 @@ function (_super) {
         value: this.state.attributeSegment.value,
         label: this.state.attributeSegment.label
       }),
+      disabled: this.piServer.length === 0,
       onChange: this.onAttributeAction,
       loadOptions: this.getAttributeSegmentsPI,
       reloadOptionsOnChange: true,
@@ -1286,6 +1305,7 @@ function (_super) {
         value: this.state.attributeSegment.value,
         label: this.state.attributeSegment.label
       }),
+      disabled: this.state.segments.length <= 2,
       onChange: this.onAttributeAction,
       options: this.getAttributeSegmentsAF(),
       allowCustomValue: true
@@ -1676,7 +1696,6 @@ function (_super) {
     }), _this.getDatabase(_this.afserver.name + '\\' + _this.afdatabase.name).then(function (result) {
       _this.afdatabase.webid = result.WebId;
     })]);
-    console.log(instanceSettings.jsonData);
     return _this;
   }
   /**

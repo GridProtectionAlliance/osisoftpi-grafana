@@ -253,13 +253,17 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
   // segment change
   onSegmentChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
-    const { query } = this.props;
-    let segments = this.state.segments.slice(0);
+    const { query } = this.props
+    let segments = this.state.segments.slice(0)
     
     if (item.label === REMOVE_LABEL) {
       segments = slice(segments, 0, index);
       this.checkAttributeSegments([], segments);
-      if (segments.length > 0 && !!segments[segments.length - 1].value?.expandable) {
+      if (segments.length === 0) {
+        segments.push({
+          label: ''
+        });
+      } else if (!!segments[segments.length - 1].value?.expandable) {
         segments.push({
           label: 'Select Element',
           value: {
@@ -268,27 +272,27 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         });
       }
       if (query.isPiPoint) {
-        this.piServer = [];
+        this.piServer = []
       }
-      this.segmentChangeValue(segments);
-      return;
+      this.segmentChangeValue(segments)
+      return
     }
 
     // set current value
-    segments[index] = item;
+    segments[index] = item
 
     // Accept only one PI server
     if (query.isPiPoint) {
-      this.piServer.push(item);
-      this.segmentChangeValue(segments);
-      return;
+      this.piServer.push(item)
+      this.segmentChangeValue(segments)
+      return
     }
 
     // changed internal selection
     if (index < segments.length - 1) {
-      segments = slice(segments, 0, index + 1);
+      segments = slice(segments, 0, index + 1)
     }
-    this.checkAttributeSegments([], segments);
+    this.checkAttributeSegments([], segments)
     // add new options
     if (!!item.value?.expandable) {
       segments.push({
@@ -299,9 +303,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       });
     }
     if (query.isPiPoint) {
-      this.piServer.push(item);
+      this.piServer.push(item)
     }
-    this.segmentChangeValue(segments);
+    this.segmentChangeValue(segments)
   };
 
   /**
@@ -568,8 +572,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length)
     query.target = query.elementPath + ';' + join(query.attributes.map(s => s.value?.value), ';')
 
-    console.log(query)
-
     onChange(query)
     
     if (query.target && query.target.length > 0 && query.attributes.length > 0) {
@@ -580,6 +582,14 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   stateCallback = () => {
     const query = this.props.query as PIWebAPIQuery
     this.onChange(query)
+  }
+
+  onIsPiPointChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
+    const { query: queryChange } = this.props
+    this.setState({ segments: [{ label: ''}], attributes: [] }, () => {
+      this.onChange({...queryChange, attributes: this.state.attributes,
+        segments: this.state.segments, isPiPoint: !queryChange.isPiPoint})
+    })
   }
 
   render() {
@@ -595,9 +605,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             label="PI Point Search"
             labelClass="query-keyword"
             checked={isPiPoint}
-            onChange={() =>
-              this.onChange({...metricsQuery, isPiPoint: !isPiPoint})
-            }
+            onChange={this.onIsPiPointChange}
           />
         </div>
 
@@ -624,6 +632,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               if (isPiPoint) {
                 return <SegmentAsync
                     Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
+                    disabled={this.piServer.length === 0}
                     onChange={(item) => this.onPiPointChange(item, index)}
                     loadOptions={this.getAttributeSegmentsPI}
                     reloadOptionsOnChange
@@ -632,6 +641,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
               return <Segment
                   Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
+                  disabled={this.state.segments.length <= 2}
                   onChange={(item) => this.onAttributeChange(item, index)}
                   options={this.getAttributeSegmentsAF()}
                   allowCustomValue
@@ -642,6 +652,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           {isPiPoint && (
             <SegmentAsync
               Component={<CustomLabelComponent value={this.state.attributeSegment.value} label={this.state.attributeSegment.label} />}
+              disabled={this.piServer.length === 0}
               onChange={this.onAttributeAction}
               loadOptions={this.getAttributeSegmentsPI}
               reloadOptionsOnChange
@@ -651,6 +662,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           {!isPiPoint && (
             <Segment
               Component={<CustomLabelComponent value={this.state.attributeSegment.value} label={this.state.attributeSegment.label} />}
+              disabled={this.state.segments.length <= 2}
               onChange={this.onAttributeAction}
               options={this.getAttributeSegmentsAF()}
               allowCustomValue
