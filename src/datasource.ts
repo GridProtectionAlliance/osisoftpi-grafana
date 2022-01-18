@@ -1,4 +1,4 @@
-import { curry, each, filter, forOwn, groupBy, map } from 'lodash';
+import { curry, each, filter, flatten, forOwn, groupBy, keys, map, uniq } from 'lodash';
 
 import {
   DataQueryRequest,
@@ -45,25 +45,24 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   piserver: IPIDataServer;
   afserver: IPIDataServer;
   afdatabase: IPIDataServer;
+  webidCache: Map<String, String> = new Map();
 
   error: any;
 
   constructor(instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>, private backendSrv: any) {
-    super(instanceSettings);
-    this.basicAuth = instanceSettings.basicAuth;
-    this.withCredentials = instanceSettings.withCredentials;
-    this.url = instanceSettings.url!;
-    this.name = instanceSettings.name;
-    this.templateSrv = getTemplateSrv();
+    super(instanceSettings)
+    this.basicAuth = instanceSettings.basicAuth
+    this.withCredentials = instanceSettings.withCredentials
+    this.url = instanceSettings.url!
+    this.name = instanceSettings.name
+    this.templateSrv = getTemplateSrv()
 
-    console.log(instanceSettings);
+    this.piwebapiurl = instanceSettings.jsonData.url?.toString()
+    this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy'
 
-    this.piwebapiurl = instanceSettings.jsonData.url?.toString();
-    this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
-
-    this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: undefined };
-    this.afserver = { name: (instanceSettings.jsonData || {}).afserver, webid: undefined };
-    this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined };
+    this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: undefined }
+    this.afserver = { name: (instanceSettings.jsonData || {}).afserver, webid: undefined }
+    this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined }
     
     Promise.all(
       [
@@ -71,7 +70,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         this.getDataServer(this.piserver.name).then((result: IPIWebAPIRsp) => { this.piserver.webid = result.WebId }),
         this.getDatabase(this.afserver.name + '\\' + this.afdatabase.name).then((result: IPIWebAPIRsp) => { this.afdatabase.webid = result.WebId })
       ]
-    );
+    )
   }
 
   /**
@@ -119,15 +118,15 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   private buildQueryParameters (options: DataQueryRequest<PIWebAPIQuery>) {
     options.targets = filter(options.targets, target => {
       if (!target || !target.target) return false;
-      return (!target.target.startsWith('Select AF'));
+      return (!target.target.startsWith('Select AF'))
     })
 
     options.targets = map(options.targets, target => {
       var tar = {
         target: this.templateSrv.replace(target.elementPath, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        attributes: map(target.attributes, att => { return this.templateSrv.replace(att.value?.value) }),
-        segments: map(target.segments, att => { return this.templateSrv.replace(att.value?.value) }),
+        attributes: map(target.attributes, att => { return this.templateSrv.replace(att.value?.value, options.scopedVars) }),
+        segments: map(target.segments, att => { return this.templateSrv.replace(att.value?.value, options.scopedVars) }),
         display: target.display,
         refId: target.refId,
         hide: target.hide,
@@ -145,12 +144,24 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       }
       
       if (tar.expression) {
-        tar.expression = this.templateSrv.replace(tar.expression);
+        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars)
       }
 
       if (tar.summary.types !== undefined) {
         tar.summary.types = filter(tar.summary.types, item => { return item !== undefined && item !== null && item !== '' })
       }
+
+      const varsKeys = keys(options.scopedVars)
+      this.templateSrv.getVariables().forEach((v: any) => {
+        if (v.current && v.current.text === 'All' && varsKeys.indexOf(v.name) < 0) {
+          tar.attributes = tar.attributes.map((attr: string) => {
+            const variables = v.options.filter((o: any) => !o.selected)
+            const newAttr = variables.map((vv: any) => attr.replace('{' + v.query + '}', vv.text))
+            return newAttr
+          })
+          tar.attributes = uniq(flatten(tar.attributes))
+        }
+      })
 
       return tar
     })
@@ -224,8 +235,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       return Promise.resolve([])
     } 
 
-    var categoryName = options.annotation.query.categoryName ? this.templateSrv.replace(options.annotation.query.categoryName, {}, 'glob') : null
-    var nameFilter = options.annotation.query.nameFilter ? this.templateSrv.replace(options.annotation.query.nameFilter, {}, 'glob') : null
+    var categoryName = options.annotation.query.categoryName ? 
+      this.templateSrv.replace(options.annotation.query.categoryName, options.scopedVars, 'glob') : null
+    var nameFilter = options.annotation.query.nameFilter ? 
+      this.templateSrv.replace(options.annotation.query.nameFilter, options.scopedVars, 'glob') : null
     var templateName = options.annotation.template ? options.annotation.template.Name : null
     var annotationOptions = {
       name: options.annotation.name,
@@ -259,7 +272,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (annotationOptions.attribute && annotationOptions.attribute.enable) {
       var resourceUrl = this.piwebapiurl +'/streamsets/{0}/value?selectedFields=Items.WebId;Items.Value;Items.Name'
       if (!!annotationOptions.attribute.name) {
-        resourceUrl = this.piwebapiurl +'/streamsets/{0}/value?nameFilter=' + annotationOptions.attribute.name + '&selectedFields=Items.WebId;Items.Value;Items.Name'
+        resourceUrl = this.piwebapiurl +'/streamsets/{0}/value?nameFilter=' +
+          annotationOptions.attribute.name + '&selectedFields=Items.WebId;Items.Value;Items.Name'
       }
       var query: any = {}
       query['1'] = {
@@ -340,18 +354,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    */
   public metricFindQuery(query: any, isPiPoint: boolean): any {
     var ds = this
-    var querydepth = ['servers', 'databases', 'databaseElements', 'elements']
-    if (query.path === '') {
-      query.type = querydepth[0]
-    } else if (query.type !== 'attributes') {
-      query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))]
-    }
-    if (isPiPoint) {
-      query.type = 'dataserver'
-      
-      if (query.webId !== undefined && query.webId !== '') {
-        query.type = 'pipoint'
-      }    
+    var querydepth = ['servers', 'databases', 'databaseElements', 'elements']    
+    if (!isPiPoint) {
+      if (query.path === '') {
+        query.type = querydepth[0]
+      } else if (query.type !== 'attributes') {
+        query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))]
+      }
     }
 
     query.path = this.templateSrv.replace(query.path)
@@ -451,16 +460,16 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @returns - An array of Grafana value, timestamp pairs.
    * 
    */
-  public parsePiPointValueList(value: any, target: any, isSummary = false) {
-    var api = this;
-    var datapoints: any[] = [];
+  public parsePiPointValueList(value: any, target: any, isSummary: boolean) {
+    var api = this
+    var datapoints: any[] = []
     each(value, item => {
-      var grafanaDataPoint = api.parsePiPointValue(item, isSummary, target);
-      var drop = false;
-      if (isSummary){
+      var grafanaDataPoint = api.parsePiPointValue(item, target, isSummary)
+      var drop = false
+      if (isSummary) {
         // @ts-ignore
         var { grafanaDataPoint, previousValue, drop } = this.noDataReplace(item.Value, target.summary.nodata, grafanaDataPoint)
-      } else{
+      } else {
         // @ts-ignore
         var { grafanaDataPoint, previousValue, drop } = this.noDataReplace(item, target.summary.nodata, grafanaDataPoint)
       }
@@ -480,7 +489,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @returns - Grafana value pair.
    * 
    */
-  public parsePiPointValue (value: any, isSummary = false, target: any) {
+  public parsePiPointValue(value: any, target: any, isSummary: boolean) {
     var num = (!isSummary && typeof value.Value === "object") ? Number(value.Value.Value) : Number(value.Value)
     var text = value.Value
     
@@ -492,7 +501,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       num = value.Value.Name
     }
 
-    if (isSummary) {
+    if (!!isSummary) {
       num = Number(value.Value.Value)
       text = value.Value.Value
 
@@ -504,7 +513,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         num = value.Value.Name
       }
 
-      if (target.summary.interval == ""){
+      if (target.summary.interval == "") {
          if (target.digitalStates && target.digitalStates.enable) {
             return [num, new Date(value.Timestamp).getTime()]
           } else if (!value.Good) {
@@ -528,7 +537,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         return [num, new Date(value.Timestamp).getTime()]
       } else {
         return [(!isNaN(num) ? num : text), new Date(value.Timestamp).getTime()]
-    }    
+    }
     return [(!isNaN(num) ? num : 0), new Date(value.Timestamp).getTime()]
   }
 
@@ -547,22 +556,22 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     previousValue: any,
     drop: boolean
   } {
-    var previousValue = null;
-    var drop: boolean = false;
+    var previousValue = null
+    var drop: boolean = false
     if (item.Value === 'No Data' || (item.Value.Name && item.Value.Name === 'No Data') || !item.Good) {
       if (noDataReplacementMode === 'Drop') {
-        drop = true;
+        drop = true
       } else if (noDataReplacementMode === '0') {
-        grafanaDataPoint[0] = 0;
+        grafanaDataPoint[0] = 0
       } else if (noDataReplacementMode === 'Keep') {
         // Do nothing keep
       } else if (noDataReplacementMode === 'Null') {
-        grafanaDataPoint[0] = null;
+        grafanaDataPoint[0] = null
       } else if (noDataReplacementMode === 'Previous' && previousValue !== null) {
-        grafanaDataPoint[0] = previousValue;
+        grafanaDataPoint[0] = previousValue
       }
     } else {
-      previousValue = item.Value;
+      previousValue = item.Value
     }
     return { grafanaDataPoint, previousValue, drop }
   }
@@ -578,8 +587,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   public processResults(content: any, target: any, name: any) {
-    var api = this
-    var isSummary = target.summary && target.summary.types && target.summary.types.length > 0
+    const api = this
+    const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0
     if (target.regex && target.regex.enable) {
       name = name.replace(new RegExp(target.regex.search), target.regex.replace)
     }
@@ -600,7 +609,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       'refId': target.refId,
       'datapoints': api.parsePiPointValueList(content.Items, target, isSummary)
     }]
-    // }).catch(err => { api.error = err }))
   }
 
   /**
@@ -639,8 +647,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
               api.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint)
               .then((webidresponse: any) => {
                 return api.restPost(url + webidresponse.WebId)
-                .then((response: any) => { return api.processResults(response.data, target, target.display || attribute || targetName) })
-                .catch((err: any) => { api.error = err })
+                  .then((response: any) => { return api.processResults(response.data, target, target.display || attribute || targetName) })
+                  .catch((err: any) => { api.error = err })
               }))
           })
         } else {
@@ -648,11 +656,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             api.restGetWebId(target.elementPath, target.isPiPoint)
               .then((webidresponse: any) => {
                 return api.restPost(url + webidresponse.WebId)
-                .then((response: any) => { return api.processResults(response.data, target, target.display || targetName) })
-                .catch((err: any) => { api.error = err })
+                  .then((response: any) => { return api.processResults(response.data, target, target.display || targetName) })
+                  .catch((err: any) => { api.error = err })
               }))
         }
-
       } else {
         url += '/streamsets'
         if (isSummary) {
@@ -665,7 +672,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints
         }
 
-        results.push(Promise.all(map(target.attributes, attribute => { return api.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint) }))
+        results.push(Promise.all(map(target.attributes, attribute => {
+            return api.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint)
+          }))
           .then(webidresponse => {
             var query: any = {};
             each(webidresponse, function(webid, index) {
@@ -724,21 +733,21 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
    private restGetWebId(assetPath: string, isPiPoint: boolean) {
-    // var ds = this
+    var ds = this
 
     // check cache
-    // var cachedWebId = ds.webidCache.get(assetPath)
-    // if (cachedWebId) {
-    //   return ds.$q.when({Path: assetPath, WebId: cachedWebId})
-    // }
+    var cachedWebId = ds.webidCache.get(assetPath)
+    if (cachedWebId) {
+      return Promise.resolve({ Path: assetPath, WebId: cachedWebId })
+    }
 
     if (isPiPoint) {
-      var path = '/points?selectedFields=WebId;Name;Path&path=\\\\' + assetPath.replace('|', '\\');
+      var path = '/points?selectedFields=WebId;Name;Path&path=\\\\' + assetPath.replace('|', '\\')
     } else {
       // no cache hit, query server
       var path = ((assetPath.indexOf('|') >= 0)
         ? '/attributes?selectedFields=WebId;Name;Path&path=\\\\'
-        : '/elements?selectedFields=WebId;Name;Path&path=\\\\') + assetPath;
+        : '/elements?selectedFields=WebId;Name;Path&path=\\\\') + assetPath
     }
 
     return this.backendSrv.datasourceRequest({
@@ -746,7 +755,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     }).then((response: any) => {
-      // ds.webidCache.put(assetPath, response.data.WebId)
+      ds.webidCache.set(assetPath, response.data.WebId)
       return { Path: assetPath, WebId: response.data.WebId }
     });
   }
@@ -768,7 +777,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         'Content-Type': 'application/json',
         'X-Requested-With': 'message/http'
       }
-    });
+    })
   }
 
   /**
@@ -789,32 +798,31 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         'X-PIWEBAPI-HTTP-METHOD': 'GET',
         'X-PIWEBAPI-RESOURCE-ADDRESS': path
       }
-    });
+    })
   }
 
-  
   // Get a list of all data (PI) servers
   private getDataServers(): Promise<IPIWebAPIRsp[]> {
-    return this.restGet('/dataservers').then(response => { return response.data.Items ?? [] });
+    return this.restGet('/dataservers').then(response => { return response.data.Items ?? [] })
   }
   private getDataServer(name: string | undefined): Promise<IPIWebAPIRsp> {
     if (!name) return Promise.resolve({});
-    return this.restGet('/dataservers?name=' + name).then(response => { return response.data });
+    return this.restGet('/dataservers?name=' + name).then(response => { return response.data })
   }
   // Get a list of all asset (AF) servers
   private getAssetServers(): Promise<IPIWebAPIRsp[]> {
-    return this.restGet('/assetservers').then(response => { return response.data.Items ?? [] });
+    return this.restGet('/assetservers').then(response => { return response.data.Items ?? [] })
   }
   private getAssetServer(name: string | undefined): Promise<IPIWebAPIRsp> {
     if (!name) return Promise.resolve({});
-    return this.restGet('/assetservers?path=\\\\' + name).then(response => { return response.data });
+    return this.restGet('/assetservers?path=\\\\' + name).then(response => { return response.data })
   }
   private getDatabase(path: string | undefined): Promise<IPIWebAPIRsp> {
     if (!path) return Promise.resolve({});
-    return this.restGet('/assetdatabases?path=\\\\' + path).then(response => { return response.data });
+    return this.restGet('/assetdatabases?path=\\\\' + path).then(response => { return response.data })
   }
   public getDatabases(serverId: string, options?: any): Promise<IPIWebAPIRsp[]> {
-    return this.restGet('/assetservers/' + serverId + '/assetdatabases').then(response => { return response.data.Items ?? [] });
+    return this.restGet('/assetservers/' + serverId + '/assetdatabases').then(response => { return response.data.Items ?? [] })
   }
   public getElement(path: string): Promise<IPIWebAPIRsp> {
     return this.restGet('/elements?path=\\\\' + path).then(response => { return (response.data) })
@@ -825,7 +833,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         return filter(response.data.Items ?? [], item => {
           return item.InstanceType === 'EventFrame'
         })
-      });
+      })
   }
   public getElementTemplates(databaseId: string): Promise<IPIWebAPIRsp[]> {
     return this.restGet('/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType;Items.Name;Items.WebId')
@@ -833,7 +841,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         return filter(response.data.Items ?? [], item => {
           return item.InstanceType === 'Element'
         })
-      });
+      })
   }
   
   /**
@@ -933,7 +941,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {string} nameFilter - A query string for filtering by point name. The default is no filter. *, ?, [ab], [!ab]
    */
   private piPointSearch(serverId: string, nameFilter: string): Promise<IPIWebAPIRsp[]> {
-    return this.restGet('/dataservers/' + serverId + '/points?maxCount=100&nameFilter=' + nameFilter).then(results => {
+    return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + nameFilter).then(results => {
       return results.data.Items ?? []
     })
   }
@@ -951,35 +959,35 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     var isAf = target.target.indexOf('\\') >= 0;
     var isAttribute = target.target.indexOf('|') >= 0;
     if (!isAf && target.target.indexOf('.') === -1) {
-      return Promise.resolve([{ WebId: target.target, Name: target.display || target.target }]);
+      return Promise.resolve([{ WebId: target.target, Name: target.display || target.target }])
     }
 
     if (!isAf) {
       // pi point lookup
       return api.piPointSearch(this.piserver.webid!, target.target).then(results => {
         if (results === undefined || results.length === 0) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
+          return [{ WebId: target.target, Name: target.display || target.target }]
         }
-        return results;
+        return results
       });
     } else if (isAf && isAttribute) {
       // af attribute lookup
       return api.restGet('/attributes?path=\\\\' + target.target).then(results => {
         if (results.data === undefined || results.status !== 200) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
+          return [{ WebId: target.target, Name: target.display || target.target }]
         }
         // rewrite name if specified
         results.data.Name = target.display || results.data.Name
-        return [results.data];
+        return [results.data]
       })
     } else {
       // af element lookup
       return api.restGet('/elements?path=\\\\' + target.target).then(results => {
         if (results.data === undefined || results.status !== 200) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
+          return [{ WebId: target.target, Name: target.display || target.target }]
         }
         // rewrite name if specified
-        results.data.Name = target.display || results.data.Name;
+        results.data.Name = target.display || results.data.Name
         return [results.data]
       })
     }

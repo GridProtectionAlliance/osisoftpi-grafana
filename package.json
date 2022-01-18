@@ -1,6 +1,6 @@
 {
   "name": "grid-protection-alliance-osisoftpi-grafana",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "OSISoft PI Grafana Plugin",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
@@ -13,14 +13,13 @@
   "author": "GridProtectionAlliance",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@grafana/data": "latest",
-    "@grafana/runtime": "latest",
-    "@grafana/toolkit": "latest",
-    "@grafana/ui": "latest",
+    "@grafana/data": "~8.3.2",
+    "@grafana/runtime": "~8.3.2",
+    "@grafana/toolkit": "~8.2.7",
+    "@grafana/ui": "~8.3.2",
     "@testing-library/jest-dom": "5.4.0",
     "@testing-library/react": "^10.0.2",
-    "@types/lodash": "latest",
-    "grafana-sdk-mocks": "grafana/grafana-sdk-mocks"
+    "@types/lodash": "latest"
   },
   "engines": {
     "node": ">=14"

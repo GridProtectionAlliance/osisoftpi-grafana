@@ -1,4 +1,3 @@
-
 export class AnnotationsQueryCtrl  {
     static templateUrl = 'partials/annotations.editor.html';
     
@@ -18,21 +17,20 @@ export class AnnotationsQueryCtrl  {
 
     }
     databaseChanged() {
-      this.getEventFrames();
+      this.getEventFrames()
     }
     getDatabases() {
-      var ctrl = this;
+      var ctrl = this
       // @ts-ignore
       return ctrl.datasource.getDatabases(ctrl.datasource.afserver.webid!).then((dbs: any) => {
-        ctrl.annotation.databases = dbs;
-      });
+        ctrl.annotation.databases = dbs
+      })
     }
     getEventFrames() {
       var ctrl = this;
       // @ts-ignore
       return ctrl.datasource.getEventFrameTemplates(this.annotation.database.WebId).then((templates: any) => {
-        console.log(templates);
-        ctrl.annotation.templates = templates;
-      });
+        ctrl.annotation.templates = templates
+      })
     }
   }

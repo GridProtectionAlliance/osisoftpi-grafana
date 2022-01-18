@@ -1,6 +1,7 @@
 import { DataQuery, DataSourceJsonData } from '@grafana/data';
 
 export interface PIWebAPISelectableValue {
+  webId?: string;
   value?: string;
   type?: string;
   expandable?: boolean;

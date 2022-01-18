@@ -1,4 +1,4 @@
-import { each, filter, forOwn, join, reduce, map, slice, defaults } from 'lodash';
+import { each, filter, forOwn, join, reduce, map, slice, remove, defaults } from 'lodash';
 
 import React, { PureComponent, ChangeEvent } from 'react';
 import { Icon, LegacyForms, SegmentAsync, Segment } from '@grafana/ui';
@@ -25,9 +25,9 @@ interface State {
   noDataReplacementSegment: SelectableValue<PIWebAPISelectableValue>;
 }
 
-type Props = QueryEditorProps<PiWebAPIDatasource, PIWebAPIQuery, PIWebAPIDataSourceJsonData>;
+type Props = QueryEditorProps<PiWebAPIDatasource, PIWebAPIQuery, PIWebAPIDataSourceJsonData>
 
-const REMOVE_LABEL = '-REMOVE-';
+const REMOVE_LABEL = '-REMOVE-'
 
 const CustomLabelComponent = (props: any) => {
   if (props.value) {
@@ -98,11 +98,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
 
   // is selected segment empty
-  isValueEmpty(value: any) {
-    return value === undefined || value === null || value === '' || value === REMOVE_LABEL
+  isValueEmpty(value: PIWebAPISelectableValue|undefined) {
+    return !value || !value.value || !value.value.length || value.value === REMOVE_LABEL;
   }
 
-  // get summary calculation basis
+  // summary calculation change event
   calcBasisValueChanged(segment?: any) {
     const metricsQuery = this.props.query as PIWebAPIQuery;
     const summary = metricsQuery.summary;
@@ -124,6 +124,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     return segments;
   }
 
+   // no data change event
   calcNoDataValueChanged(segment?: any) {
     const metricsQuery = this.props.query as PIWebAPIQuery;
     const summary = metricsQuery.summary;
@@ -168,7 +169,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     } 
     this.setState({ summarySegment: {}, summaries });
   }
-  // change a summary query
+  // summary query change event
   onSummaryValueChanged(item: SelectableValue<PIWebAPISelectableValue>, index: number) {
     const summaries = this.state.summaries.slice(0) as SelectableValue<PIWebAPISelectableValue>[];
     summaries[index].value = item.value;
@@ -213,6 +214,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
   // add an attribute to the query
   onAttributeAction(item: SelectableValue<PIWebAPISelectableValue>) {
+    const { query } = this.props;
     const attributes = this.state.attributes.slice(0);
     // if value is not empty, add new attribute segment
     if (!this.isValueEmpty(item.value)) {
@@ -220,12 +222,25 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         label: item.label,
         value: {
           value: item.value?.value,
-          expandable: true
+          expandable: !query.isPiPoint
         }
       };
       attributes.push(selectableValue)
     }
     this.attributeChangeValue(attributes); 
+  }
+  // pi point change event
+  onPiPointChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+    let attributes = this.state.attributes.slice(0);
+    
+    if (item.label === REMOVE_LABEL) {
+      remove(attributes, (value, n) => n === index);
+    } else {
+      // set current value
+      attributes[index] = item;
+    }
+
+    this.checkPiPointSegments(item, attributes);
   }
   // attribute change event
   onAttributeChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
@@ -236,14 +251,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     
     this.checkAttributeSegments(attributes, this.state.segments);
   }
-
+  // segment change
   onSegmentChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+    const { query } = this.props;
     let segments = this.state.segments.slice(0);
     
     if (item.label === REMOVE_LABEL) {
       segments = slice(segments, 0, index);
       this.checkAttributeSegments([], segments);
-      if (!!segments[segments.length - 1].value?.expandable) {
+      if (segments.length > 0 && !!segments[segments.length - 1].value?.expandable) {
         segments.push({
           label: 'Select Element',
           value: {
@@ -251,12 +267,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           }
         });
       }
+      if (query.isPiPoint) {
+        this.piServer = [];
+      }
       this.segmentChangeValue(segments);
       return;
     }
 
     // set current value
     segments[index] = item;
+
+    // Accept only one PI server
+    if (query.isPiPoint) {
+      this.piServer.push(item);
+      this.segmentChangeValue(segments);
+      return;
+    }
 
     // changed internal selection
     if (index < segments.length - 1) {
@@ -271,6 +297,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           value: '-Select Element-'
         }
       });
+    }
+    if (query.isPiPoint) {
+      this.piServer.push(item);
     }
     this.segmentChangeValue(segments);
   };
@@ -287,11 +316,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     var arr = segments.slice(0, index)
 
     return reduce(arr, (result: any, segment: any) => {
+      if (!segment.value) return '';
       if (!segment.value.value.startsWith('-Select')) {
-        return result ? (result + '\\' + segment.value.value) : segment.value.value
+        return result ? (result + '\\' + segment.value.value) : segment.value.value;
       }
-      return result
-    }, '')
+      return result;
+    }, '');
   }
 
   /**
@@ -302,13 +332,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PiWebApiDatasourceQueryCtrl
    */
   checkAttributeSegments(attributes: any[], segments: any[]) {
-    const { datasource, query } = this.props;
+    const { datasource } = this.props;
     var ctrl = this;
     var findQuery = {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
       type: 'attributes'
     };
-    return datasource.metricFindQuery(findQuery, query.isPiPoint)
+    return datasource.metricFindQuery(findQuery, false)
       .then((attributesResponse: any) => {
         var validAttributes: any = {};
 
@@ -321,10 +351,34 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           return validAttributes[changedValue] !== undefined;
         });
 
-        if (!query.isPiPoint) {
-          ctrl.availableAttributes = validAttributes;
-          this.attributeChangeValue(filteredAttributes);
-        }
+        ctrl.availableAttributes = validAttributes;
+        this.attributeChangeValue(filteredAttributes);
+      })
+      .catch((err: any) => {
+        ctrl.error = err.message || 'Failed to issue metric query';
+        this.attributeChangeValue([]);
+      });
+  }
+
+  /**
+   * Get PI points from server.
+   *
+   * @returns - Collection of attributes.
+   * 
+   * @memberOf PiWebApiDatasourceQueryCtrl
+   */
+  checkPiPointSegments(attribute: any, attributes: any[]) {
+    const { datasource } = this.props;
+    var ctrl = this;
+    var findQuery = {
+      path: attribute.path,
+      webId: ctrl.getSelectedPIServer(),
+      pointName: datasource.templateSrv.replace(attribute.label),
+      type: 'pipoint'
+    };
+    return datasource.metricFindQuery(findQuery, true)
+      .then(() => {
+        this.attributeChangeValue(attributes);
       })
       .catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query';
@@ -334,22 +388,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   // get a ui segment for the attributes
   getElementSegments = (index: number): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
-    const { datasource, query } = this.props;
+    const { datasource, query } = this.props
     var ctrl = this;
     var findQuery = { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) }
 
     return datasource.metricFindQuery(findQuery, query.isPiPoint)
       .then((items: any[]) => {
-        if (query.isPiPoint) this.piServer = items;
         var altSegments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
+            webId: item.WebId,
             label: item.text,
             value: {
               value: item.text,
-              expandable: item.expandable
+              expandable: !query.isPiPoint && item.expandable
             }
-          };
-          return selectableValue;
+          }
+          return selectableValue
         })
 
         if (altSegments.length === 0) { return altSegments }
@@ -358,14 +412,14 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         const variables = datasource.templateSrv.getVariables();
         each(variables, (variable: VariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
-            label: variable.name,
+            label: `[[${variable.name}]]`,
             value: {
               type: 'template',
-              value: '$' + variable.name,
-              expandable: true
+              value: `[[${variable.name}]]`,
+              expandable: !query.isPiPoint
             }
-          };
-          altSegments.unshift(selectableValue);
+          }
+          altSegments.unshift(selectableValue)
         })
         
         altSegments.unshift({
@@ -375,8 +429,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           }
         })
 
-        // add wildcard option
-        // altSegments.unshift(ctrl.uiSegmentSrv.newSegment('*'))
         return altSegments
       }).catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query'
@@ -394,46 +446,55 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
     this.piServer.forEach(s => {
       var parts = this.props.query.target.split(';')
-
       if (parts.length >= 2) {
         if (parts[0] === s.text) {
           webID = s.WebId
           return
         }
       }
-    })
-    
-    return webID
+    });
+    return this.piServer.length > 0 ? this.piServer[0].webId : webID
   }
   
-  // get the list of attributes for the user interface
+  // get the list of attributes for the user interface - PI
   getAttributeSegmentsPI = (attributeText?: string): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
-    const { datasource, query } = this.props;
+    const { datasource, query } = this.props
     var ctrl = this
     var segments: Array<SelectableValue<PIWebAPISelectableValue>> = []
 
-    var findQuery = { path: '', webId: ctrl.getSelectedPIServer(), pointName: '*' + attributeText + '*' }
+    var findQuery = {
+      path: '',
+      webId: ctrl.getSelectedPIServer(),
+      pointName: datasource.templateSrv.replace(attributeText) + '*',
+      type: 'dataserver'
+    }
 
     return datasource.metricFindQuery(findQuery, query.isPiPoint)
       .then((items: any[]) => {
-        forOwn(items, (item: any) => {
+        segments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
+            path: item.Path,
             label: item.text,
             value: {
               value: item.text,
-              expandable: true
+              expandable: false
             }
-          };
-          return selectableValue;
-        });
-
+          }
+          return selectableValue
+        })
+        segments.unshift({
+          label: attributeText,
+          value: {
+            value: attributeText,
+            expandable: false
+          }
+        })
         segments.unshift({
           label: REMOVE_LABEL,
           value: {
             value: REMOVE_LABEL
           }
         })
-
         return segments
       }).catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query'
@@ -441,6 +502,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       })
   }
 
+  // get the list of attributes for the user interface - AF
   getAttributeSegmentsAF = (attributeText?: string): Array<SelectableValue<PIWebAPISelectableValue>> => {
     var ctrl = this
     var segments: Array<SelectableValue<PIWebAPISelectableValue>> = []
@@ -463,57 +525,60 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       }
     })
 
-    return segments;
+    return segments
   }
 
   componentDidMount = () => {
-    const { query } = this.props;
-    const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery;
-    const { segments, attributes, summary } = metricsQuery;
+    const { query } = this.props
+    const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery
+    const { segments, attributes, summary } = metricsQuery
 
-    let segmentsArray: SelectableValue<PIWebAPISelectableValue>[] = segments?.slice(0) ?? [];
+    let segmentsArray: SelectableValue<PIWebAPISelectableValue>[] = segments?.slice(0) ?? []
     if (segmentsArray.length === 0) {
-      segmentsArray.push({});
+      segmentsArray.push({})
     }
-    let attributesArray: SelectableValue<PIWebAPISelectableValue>[] = attributes?.slice(0) ?? [];
-    let summariesArray = summary?.types ?? [];
-    this.setState({ segments: segmentsArray, attributes: attributesArray, summaries: summariesArray });
+    let attributesArray: SelectableValue<PIWebAPISelectableValue>[] = attributes?.slice(0) ?? []
+    let summariesArray = summary?.types ?? []
+    if (query.isPiPoint && segmentsArray.length > 0) {
+      this.piServer = segmentsArray; // pi server assignment
+    }
+    this.setState({ segments: segmentsArray, attributes: attributesArray, summaries: summariesArray })
   }
 
   segmentChangeValue = (segments: SelectableValue<PIWebAPISelectableValue>[]) => {
-    const query = this.props.query;
+    const query = this.props.query
     this.setState({
       segments
-    });
-    this.onChange({...query, segments});
+    })
+    this.onChange({...query, segments})
   }
 
   attributeChangeValue = (attributes: SelectableValue<PIWebAPISelectableValue>[]) => {
-    const query = this.props.query;
+    const query = this.props.query
     this.setState({
       attributes
-    });
-    this.onChange({...query, attributes});
+    })
+    this.onChange({...query, attributes})
   }
 
   onChange = (query: PIWebAPIQuery) => {
-    const { onChange, onRunQuery } = this.props;
+    const { onChange, onRunQuery } = this.props
 
     query.summary.types = this.state.summaries;
-    query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
-    query.target = query.elementPath + ';' + join(query.attributes.map(s => s.value?.value), ';');
+    query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length)
+    query.target = query.elementPath + ';' + join(query.attributes.map(s => s.value?.value), ';')
 
-    onChange(query);
+    onChange(query)
     
     if (query.target && query.target.length > 0 && query.attributes.length > 0) {
-      onRunQuery();
+      onRunQuery()
     }
   }
 
   render() {
-    const { query, onRunQuery } = this.props;
-    const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery;
-    const { interpolate, digitalStates, recordedValues, expression, isPiPoint, summary, display, regex } = metricsQuery;
+    const { query, onRunQuery } = this.props
+    const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery
+    const { interpolate, digitalStates, recordedValues, expression, isPiPoint, summary, display, regex } = metricsQuery
 
     return (
       <>
@@ -552,18 +617,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               if (isPiPoint) {
                 return <SegmentAsync
                     Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
-                    onChange={(item) => {
-                      this.onAttributeChange(item, index);
-                    }}
+                    onChange={(item) => this.onPiPointChange(item, index)}
                     loadOptions={this.getAttributeSegmentsPI}
+                    reloadOptionsOnChange
                     allowCustomValue
                   />
               }
               return <Segment
                   Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
-                  onChange={(item) => {
-                    this.onAttributeChange(item, index);
-                  }}
+                  onChange={(item) => this.onAttributeChange(item, index)}
                   options={this.getAttributeSegmentsAF()}
                   allowCustomValue
                 />
@@ -575,6 +637,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               Component={<CustomLabelComponent value={this.state.attributeSegment.value} label={this.state.attributeSegment.label} />}
               onChange={this.onAttributeAction}
               loadOptions={this.getAttributeSegmentsPI}
+              reloadOptionsOnChange
               allowCustomValue
             />
           )}
