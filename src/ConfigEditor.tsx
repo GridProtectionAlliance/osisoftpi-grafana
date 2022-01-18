@@ -14,49 +14,49 @@ const coerceOptions = (
     ...options,
     jsonData: {
       ...options.jsonData,
-      url: options.url
+      url: options.url,
     },
-  }
+  };
 }
 
 interface State {}
 
 export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   onPIServerChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props
+    const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
       piserver: event.target.value,
     }
-    onOptionsChange({ ...options, jsonData })
+    onOptionsChange({ ...options, jsonData });
   }
 
   onAFServerChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props
+    const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
       afserver: event.target.value,
     }
-    onOptionsChange({ ...options, jsonData })
+    onOptionsChange({ ...options, jsonData });
   }
 
   onAFDatabaseChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props
+    const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
       afdatabase: event.target.value,
     }
-    onOptionsChange({ ...options, jsonData })
+    onOptionsChange({ ...options, jsonData });
   }
 
   onMyOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
-    const { onOptionsChange } = this.props
-    onOptionsChange(coerceOptions(options))
+    const { onOptionsChange } = this.props;
+    onOptionsChange(coerceOptions(options));
   }
 
   render() {
-    const { options: originalOptions } = this.props
-    const options = coerceOptions(originalOptions)
+    const { options: originalOptions } = this.props;
+    const options = coerceOptions(originalOptions);
 
     return (
       <div>
