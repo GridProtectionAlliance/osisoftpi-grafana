@@ -155,7 +155,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
   // add a new summary to the query
   onSummaryAction(item: SelectableValue<PIWebAPISelectableValue>) {
-    const summaries = this.state.summaries.slice(0) as SelectableValue<PIWebAPISelectableValue>[];
+    const summaries = this.state.summaries.slice(0) as SelectableValue<PIWebAPISelectableValue>[]
     // if value is not empty, add new attribute segment
     if (!this.isValueEmpty(item.value)) {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
@@ -164,19 +164,19 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           value: item.value?.value,
           expandable: true
         }
-      };
-      summaries.push(selectableValue);
-    } 
-    this.setState({ summarySegment: {}, summaries });
+      }
+      summaries.push(selectableValue)
+    }
+    this.setState({ summarySegment: {}, summaries }, this.stateCallback)
   }
   // summary query change event
   onSummaryValueChanged(item: SelectableValue<PIWebAPISelectableValue>, index: number) {
-    const summaries = this.state.summaries.slice(0) as SelectableValue<PIWebAPISelectableValue>[];
-    summaries[index].value = item.value;
+    const summaries = this.state.summaries.slice(0) as SelectableValue<PIWebAPISelectableValue>[]
+    summaries[index].value = item.value
     if (this.isValueEmpty(item.value)) {
-      summaries.splice(index, 1);
+      summaries.splice(index, 1)
     }
-    this.setState({ summaries });
+    this.setState({ summaries }, this.stateCallback)
   }
   // get the list of summaries available
   getSummarySegments() {
@@ -390,7 +390,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   getElementSegments = (index: number): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
     const { datasource, query } = this.props
     var ctrl = this;
-    var findQuery = { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) }
+    var findQuery = query.isPiPoint ? { type: 'dataserver'} : { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) }
 
     return datasource.metricFindQuery(findQuery, query.isPiPoint)
       .then((items: any[]) => {
@@ -466,7 +466,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       path: '',
       webId: ctrl.getSelectedPIServer(),
       pointName: datasource.templateSrv.replace(attributeText) + '*',
-      type: 'dataserver'
+      type: 'pipoint'
     }
 
     return datasource.metricFindQuery(findQuery, query.isPiPoint)
@@ -568,11 +568,18 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length)
     query.target = query.elementPath + ';' + join(query.attributes.map(s => s.value?.value), ';')
 
+    console.log(query)
+
     onChange(query)
     
     if (query.target && query.target.length > 0 && query.attributes.length > 0) {
       onRunQuery()
     }
+  }
+  
+  stateCallback = () => {
+    const query = this.props.query as PIWebAPIQuery
+    this.onChange(query)
   }
 
   render() {
@@ -786,7 +793,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => 
               {
                 return <Segment
-                    Component={<CustomLabelComponent value={s.data} label={s.label} />}
+                    Component={<CustomLabelComponent value={s.value} label={s.label} />}
                     onChange={(item) => {
                       this.onSummaryValueChanged(item, index);
                     }}

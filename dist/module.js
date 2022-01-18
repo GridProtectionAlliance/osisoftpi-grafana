@@ -494,23 +494,21 @@ function (_super) {
       }));
     };
 
+    _this.onMyOptionsChange = function (options) {
+      var onOptionsChange = _this.props.onOptionsChange;
+      onOptionsChange(coerceOptions(options));
+    };
+
     return _this;
   }
 
-  PIWebAPIConfigEditor.prototype.componentDidUpdate = function () {
-    var options = this.props.options;
-    coerceOptions(options);
-  };
-
   PIWebAPIConfigEditor.prototype.render = function () {
-    var _a = this.props,
-        onOptionsChange = _a.onOptionsChange,
-        originalOptions = _a.options;
+    var originalOptions = this.props.options;
     var options = coerceOptions(originalOptions);
     return react__WEBPACK_IMPORTED_MODULE_1___default.a.createElement("div", null, react__WEBPACK_IMPORTED_MODULE_1___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_2__["DataSourceHttpSettings"], {
       defaultUrl: "https://server.name/webapi",
       dataSourceConfig: options,
-      onChange: onOptionsChange,
+      onChange: this.onMyOptionsChange,
       showAccessOptions: true
     }), react__WEBPACK_IMPORTED_MODULE_1___default.a.createElement("h3", {
       className: "page-heading"
@@ -715,7 +713,9 @@ function (_super) {
           datasource = _a.datasource,
           query = _a.query;
       var ctrl = _this;
-      var findQuery = {
+      var findQuery = query.isPiPoint ? {
+        type: 'dataserver'
+      } : {
         path: _this.getSegmentPathUpTo(_this.state.segments.slice(0), index)
       };
       return datasource.metricFindQuery(findQuery, query.isPiPoint).then(function (items) {
@@ -772,7 +772,7 @@ function (_super) {
         path: '',
         webId: ctrl.getSelectedPIServer(),
         pointName: datasource.templateSrv.replace(attributeText) + '*',
-        type: 'dataserver'
+        type: 'pipoint'
       };
       return datasource.metricFindQuery(findQuery, query.isPiPoint).then(function (items) {
         segments = Object(lodash__WEBPACK_IMPORTED_MODULE_1__["map"])(items, function (item) {
@@ -892,11 +892,18 @@ function (_super) {
 
         return (_a = s.value) === null || _a === void 0 ? void 0 : _a.value;
       }), ';');
+      console.log(query);
       onChange(query);
 
       if (query.target && query.target.length > 0 && query.attributes.length > 0) {
         onRunQuery();
       }
+    };
+
+    _this.stateCallback = function () {
+      var query = _this.props.query;
+
+      _this.onChange(query);
     };
 
     _this.onSegmentChange = _this.onSegmentChange.bind(_this);
@@ -1005,7 +1012,7 @@ function (_super) {
     this.setState({
       summarySegment: {},
       summaries: summaries
-    });
+    }, this.stateCallback);
   }; // summary query change event
 
 
@@ -1019,7 +1026,7 @@ function (_super) {
 
     this.setState({
       summaries: summaries
-    });
+    }, this.stateCallback);
   }; // get the list of summaries available
 
 
@@ -1454,7 +1461,7 @@ function (_super) {
     }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("span", null, "Summaries")), this.state.summaries.map(function (s, index) {
       return react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
         Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
-          value: s.data,
+          value: s.value,
           label: s.label
         }),
         onChange: function onChange(item) {
@@ -1669,6 +1676,7 @@ function (_super) {
     }), _this.getDatabase(_this.afserver.name + '\\' + _this.afdatabase.name).then(function (result) {
       _this.afdatabase.webid = result.WebId;
     })]);
+    console.log(instanceSettings.jsonData);
     return _this;
   }
   /**
@@ -2077,11 +2085,19 @@ function (_super) {
 
 
   PiWebAPIDatasource.prototype.getSummaryUrl = function (summary) {
-    if (summary.interval == "") {
-      return '&summaryType=' + summary.types.join('&summaryType=') + '&calculationBasis=' + summary.basis;
+    if (summary.interval.trim() === '') {
+      return '&summaryType=' + summary.types.map(function (s) {
+        var _a;
+
+        return (_a = s.value) === null || _a === void 0 ? void 0 : _a.value;
+      }).join('&summaryType=') + '&calculationBasis=' + summary.basis;
     }
 
-    return '&summaryType=' + summary.types.join('&summaryType=') + '&calculationBasis=' + summary.basis + '&summaryDuration=' + summary.interval;
+    return '&summaryType=' + summary.types.map(function (s) {
+      var _a;
+
+      return (_a = s.value) === null || _a === void 0 ? void 0 : _a.value;
+    }).join('&summaryType=') + '&calculationBasis=' + summary.basis + '&summaryDuration=' + summary.interval.trim();
   };
   /**
    * Resolve a Grafana query into a PI Web API webid. Uses client side cache when possible to reduce lookups.
@@ -2208,16 +2224,8 @@ function (_super) {
       } else if (!value.Good) {
         return [num, new Date(value.Timestamp).getTime()];
       } else {
-        return [!isNaN(num) ? num : text, new Date(value.Value.Timestamp).getTime()];
+        return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
       }
-    }
-
-    if (target.digitalStates && target.digitalStates.enable) {
-      return [num, new Date(value.Timestamp).getTime()];
-    } else if (!value.Good) {
-      return [num, new Date(value.Timestamp).getTime()];
-    } else {
-      return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
     }
 
     return [!isNaN(num) ? num : 0, new Date(value.Timestamp).getTime()];

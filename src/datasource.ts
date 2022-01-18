@@ -71,6 +71,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         this.getDatabase(this.afserver.name + '\\' + this.afdatabase.name).then((result: IPIWebAPIRsp) => { this.afdatabase.webid = result.WebId })
       ]
     )
+
+    console.log(instanceSettings.jsonData)
   }
 
   /**
@@ -402,13 +404,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   public getSummaryUrl(summary: any) {
-    if (summary.interval == "") {
-      return '&summaryType=' + summary.types.join('&summaryType=') +
+    if (summary.interval.trim() === '') {
+      return '&summaryType=' + summary.types.map((s: any) => s.value?.value).join('&summaryType=') +
             '&calculationBasis=' + summary.basis
     }
-    return '&summaryType=' + summary.types.join('&summaryType=') +
+    return '&summaryType=' + summary.types.map((s: any) => s.value?.value).join('&summaryType=') +
             '&calculationBasis=' + summary.basis +
-            '&summaryDuration=' + summary.interval
+            '&summaryDuration=' + summary.interval.trim()
   }
 
   /**
@@ -514,29 +516,22 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       }
 
       if (target.summary.interval == "") {
-         if (target.digitalStates && target.digitalStates.enable) {
-            return [num, new Date(value.Timestamp).getTime()]
-          } else if (!value.Good) {
-            return [num, new Date(value.Timestamp).getTime()]
-          } else {
-            return [(!isNaN(num) ? num : text), new Date(target.endTime).getTime()]
-          }
-        }
-
         if (target.digitalStates && target.digitalStates.enable) {
           return [num, new Date(value.Timestamp).getTime()]
-        }  else if (!value.Good) {
+        } else if (!value.Good) {
           return [num, new Date(value.Timestamp).getTime()]
         } else {
-          return [(!isNaN(num) ? num : text), new Date(value.Value.Timestamp).getTime()]
+          return [(!isNaN(num) ? num : text), new Date(target.endTime).getTime()]
         }
       }
+
       if (target.digitalStates && target.digitalStates.enable) {
         return [num, new Date(value.Timestamp).getTime()]
       } else if (!value.Good) {
         return [num, new Date(value.Timestamp).getTime()]
       } else {
         return [(!isNaN(num) ? num : text), new Date(value.Timestamp).getTime()]
+      }
     }
     return [(!isNaN(num) ? num : 0), new Date(value.Timestamp).getTime()]
   }

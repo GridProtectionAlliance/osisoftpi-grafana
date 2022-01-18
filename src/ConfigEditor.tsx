@@ -1,6 +1,6 @@
 import React, { ChangeEvent, PureComponent } from 'react';
 import { LegacyForms, DataSourceHttpSettings } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps, DataSourceSettings } from '@grafana/data';
+import { DataSourcePluginOptionsEditorProps, DataSourceJsonData, DataSourceSettings } from '@grafana/data';
 import { PIWebAPIDataSourceJsonData } from './types';
 
 const { FormField } = LegacyForms;
@@ -23,7 +23,7 @@ interface State {}
 
 export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   onPIServerChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+    const { onOptionsChange, options } = this.props
     const jsonData = {
       ...options.jsonData,
       piserver: event.target.value,
@@ -32,7 +32,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   }
 
   onAFServerChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+    const { onOptionsChange, options } = this.props
     const jsonData = {
       ...options.jsonData,
       afserver: event.target.value,
@@ -41,7 +41,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   }
 
   onAFDatabaseChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const { onOptionsChange, options } = this.props;
+    const { onOptionsChange, options } = this.props
     const jsonData = {
       ...options.jsonData,
       afdatabase: event.target.value,
@@ -49,21 +49,21 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData })
   }
 
-  componentDidUpdate() {
-    const { options } = this.props
-    coerceOptions(options)
+  onMyOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
+    const { onOptionsChange } = this.props
+    onOptionsChange(coerceOptions(options))
   }
 
   render() {
-    const { onOptionsChange, options: originalOptions } = this.props
+    const { options: originalOptions } = this.props
     const options = coerceOptions(originalOptions)
 
     return (
-      <div>  
+      <div>
         <DataSourceHttpSettings
           defaultUrl="https://server.name/webapi"
           dataSourceConfig={options}
-          onChange={onOptionsChange}
+          onChange={this.onMyOptionsChange}
           showAccessOptions
         />
 
