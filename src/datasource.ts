@@ -27,7 +27,7 @@ interface PiwebapiRsp {
   Path?: string;
 }
 
-interface IPIDataServer {
+interface PiDataServer {
   name: string | undefined;
   webid: string | undefined;
 }
@@ -42,9 +42,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   templateSrv: TemplateSrv;
 
   piwebapiurl?: string;
-  piserver: IPIDataServer;
-  afserver: IPIDataServer;
-  afdatabase: IPIDataServer;
+  piserver: PiDataServer;
+  afserver: PiDataServer;
+  afdatabase: PiDataServer;
   webidCache: Map<String, String> = new Map();
 
   error: any;
@@ -109,7 +109,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       annotation: annotationOptions,
       title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
       time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
-      text: 
+      text:
         eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime,
       //  tags: eventFrame.CategoryNames.join()
     };
@@ -207,7 +207,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           data: flattened
             .sort((a, b) => {
               return +(a.target > b.target) || +(a.target === b.target) - 1;
-            }).map((d) => toDataFrame(d)),
+            })
+            .map((d) => toDataFrame(d)),
         };
         return response;
       });
@@ -397,8 +398,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     query.path = this.templateSrv.replace(query.path);
 
     if (query.type === 'servers') {
-      return ds.getAssetServers()
-        .then(ds.metricQueryTransform);
+      return ds.getAssetServers().then(ds.metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
         .getAssetServer(query.path)
@@ -774,8 +774,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   private restGet(path: string): Promise<PiwebapiInternalRsp> {
-    return this.backendSrv.datasourceRequest(
-      {
+    return this.backendSrv
+      .datasourceRequest({
         url: this.url + path,
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
@@ -808,8 +808,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       path = '/points?selectedFields=WebId;Name;Path&path=\\\\' + assetPath.replace('|', '\\');
     } else {
       // no cache hit, query server
-      path = (
-        assetPath.indexOf('|') >= 0
+      path =
+        (assetPath.indexOf('|') >= 0
           ? '/attributes?selectedFields=WebId;Name;Path&path=\\\\'
           : '/elements?selectedFields=WebId;Name;Path&path=\\\\') + assetPath;
     }
