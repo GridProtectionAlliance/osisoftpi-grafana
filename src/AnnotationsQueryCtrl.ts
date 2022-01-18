@@ -1,6 +1,6 @@
-export class AnnotationsQueryCtrl  {
+export class AnnotationsQueryCtrl {
   static templateUrl = 'partials/annotations.editor.html';
-  
+
   annotation: any;
 
   /** @ngInject */
@@ -14,7 +14,6 @@ export class AnnotationsQueryCtrl  {
     this.getDatabases();
   }
   templateChanged () {
-
   }
   databaseChanged() {
     this.getEventFrames();
