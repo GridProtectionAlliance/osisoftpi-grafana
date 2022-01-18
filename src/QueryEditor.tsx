@@ -636,7 +636,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <QueryInlineField label={isPiPoint ? 'Element' : 'Data Server'}>
           {this.state.segments.map((segment: SelectableValue<PIWebAPISelectableValue>, index: number) => {
             return (
-              <SegmentAsync key={'element-' + index}
+              <SegmentAsync
+                key={'element-' + index}
                 Component={<CustomLabelComponent value={segment.value} label={segment.label} />}
                 onChange={(item) => this.onSegmentChange(item, index)}
                 loadOptions={(query?: string | undefined) => {
@@ -644,8 +645,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 }}
                 allowCustomValue
               />
-            );
-          })
+            ); })
           }
         </QueryInlineField>
 
@@ -653,7 +653,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           {this.state.attributes.map((attribute: SelectableValue<PIWebAPISelectableValue>, index: number) => {
             if (isPiPoint) {
               return (
-                <SegmentAsync key={'attributes-' + index}
+                <SegmentAsync
+                  key={'attributes-' + index}
                   Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
                   disabled={this.piServer.length === 0}
                   onChange={(item) => this.onPiPointChange(item, index)}
@@ -664,23 +665,23 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               );
             }
             return (
-              <Segment key={'attributes-' + index}
+              <Segment
+                key={'attributes-' + index}
                 Component={<CustomLabelComponent value={attribute.value} label={attribute.label} />}
                 disabled={this.state.segments.length <= 2}
                 onChange={(item) => this.onAttributeChange(item, index)}
                 options={this.getAttributeSegmentsAF()}
                 allowCustomValue
               />
-            );
-          })
+            ); })
           }
 
           {isPiPoint && (
             <SegmentAsync
               Component={
-                <CustomLabelComponent 
+                <CustomLabelComponent
                   value={this.state.attributeSegment.value}
-                  label={this.state.attributeSegment.label} 
+                  label={this.state.attributeSegment.label}
                 />
               }
               disabled={this.piServer.length === 0}
@@ -705,36 +706,38 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             />
           )}
         </QueryInlineField>
- 
+
         <div className="gf-form-inline">
           <div className="gf-form">
-            <label className="gf-form-label query-keyword width-11">Calculation
+            <label className="gf-form-label query-keyword width-11">
+              Calculation
               <i
                 className="fa fa-question-circle" 
                 bs-tooltip="'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'"
-                data-placement="top">
-              </i>
+                data-placement="top"
+              />
             </label>
             <Input
-                className="gf-form-input"
-                onBlur={onRunQuery}
-                value={expression}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  this.onChange({...metricsQuery, expression: event.target.value })
-                }
-                placeholder="'.'*2"
-              />
+              className="gf-form-input"
+              onBlur={onRunQuery}
+              value={expression}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                this.onChange({...metricsQuery, expression: event.target.value })
+              }
+              placeholder="'.'*2"
+            />
           </div>
         </div>
 
         <div className="gf-form-inline">
           <div className="gf-form">
-            <label className="gf-form-label query-keyword width-11">Max Recorded Values
+            <label className="gf-form-label query-keyword width-11">
+              Max Recorded Values
               <i 
                 className="fa fa-question-circle"
                 bs-tooltip="'Maximum number of recorded value to retrive from the data archive, without using interpolation.'"
-                data-placement="top">
-              </i>
+                data-placement="top"
+              />
             </label>
             <Input
               className="gf-form-input width-6"
@@ -754,7 +757,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               labelClass="query-keyword"
               checked={recordedValues.enable}
               onChange={() => {
-                this.onChange({...metricsQuery, recordedValues: {...recordedValues, enable: !recordedValues.enable}})
+                this.onChange({ ...metricsQuery, recordedValues: { ...recordedValues, enable: !recordedValues.enable } })
               }}
             />
           </div>
@@ -765,7 +768,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               labelClass="query-keyword"
               checked={digitalStates.enable}
               onChange={() => {
-                this.onChange({...metricsQuery, digitalStates: {...digitalStates, enable: !digitalStates.enable}})
+                this.onChange({ ...metricsQuery, digitalStates: { ...digitalStates, enable: !digitalStates.enable } })
               }}
             />
           </div>
@@ -773,19 +776,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         <div className="gf-form-inline">
           <div className="gf-form">
-            <label className="gf-form-label query-keyword width-11">Interpolate Period
+            <label className="gf-form-label query-keyword width-11">
+              Interpolate Period
               <i
                 className="fa fa-question-circle"
                 bs-tooltip="'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'"
-                data-placement="top">
-              </i>
+                data-placement="top"
+              />
             </label>
             <Input
               className="gf-form-input width-5"
               onBlur={onRunQuery}
               value={interpolate.interval}
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                this.onChange({...metricsQuery, interpolate: {...interpolate, interval: event.target.value}})
+                this.onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
               }
               placeholder="30s"
             />
@@ -798,64 +802,65 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               labelClass="query-keyword"
               checked={interpolate.enable}
               onChange={() => {
-                this.onChange({...metricsQuery, interpolate: {...interpolate, enable: !interpolate.enable}})
+                this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable } })
               }}
             />
           </div>
           
           <div className="gf-form">
-              <label className="gf-form-label query-keyword  width-8">
-                <span>Replace Bad Data</span>
-                <i
-                  className="fa fa-question-circle"
-                  bs-tooltip="'Replacement for bad quality values.'"
-                  data-placement="top">
-                </i>
-              </label>
-              <Segment
-                Component={<CustomLabelComponent value={ { value: summary.nodata }} label={summary.nodata} />}
-                onChange={this.calcNoDataValueChanged}
-                options={this.getNoDataSegments()}
-                allowCustomValue
+            <label className="gf-form-label query-keyword  width-8">
+              <span>Replace Bad Data</span>
+              <i
+                className="fa fa-question-circle"
+                bs-tooltip="'Replacement for bad quality values.'"
+                data-placement="top"
               />
+            </label>
+            <Segment
+              Component={<CustomLabelComponent value={ { value: summary.nodata }} label={summary.nodata} />}
+              onChange={this.calcNoDataValueChanged}
+              options={this.getNoDataSegments()}
+              allowCustomValue
+            />
           </div>
         </div>
 
         <div className="gf-form-inline">
           <div className="gf-form">
-            <label className="gf-form-label query-keyword width-11">Summary Period
+            <label className="gf-form-label query-keyword width-11">
+              Summary Period
               <i
                 className="fa fa-question-circle"
                 bs-tooltip="'Override time between sampling, e.g. \'30s\'.'"
-                data-placement="top">
-              </i>
+                data-placement="top"
+              />
             </label>
             <Input
               className="gf-form-input width-5"
               onBlur={onRunQuery}
               value={summary.interval}
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                this.onChange({...metricsQuery, summary: {...summary, interval: event.target.value} })
+                this.onChange({ ...metricsQuery, summary: { ...summary, interval: event.target.value } })
               }
               placeholder="30s"
             />
           </div>
 
           <div className="gf-form">
-              <label className="gf-form-label query-keyword  width-8">
-                <span>Basis</span>
-                <i
-                  className="fa fa-question-circle"
-                  bs-tooltip="'Defines the possible calculation options when performing summary calculations over time-series data.'"
-                  data-placement="top">
-                </i>
-              </label>
-              <Segment
-                Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
-                onChange={this.calcBasisValueChanged}
-                options={this.getCalcBasisSegments()}
-                allowCustomValue
+            <label className="gf-form-label query-keyword  width-8">
+              <span>Basis</span>
+              <i
+                className="fa fa-question-circle"
+                bs-tooltip="'Defines the possible calculation options when performing summary calculations over time-series data.'"
+                data-placement="top"
               />
+            </label>
+            <Segment
+              Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
+              onChange={this.calcBasisValueChanged}
+              options={this.getCalcBasisSegments()}
+              allowCustomValue
+            />
           </div>
 
           <div className="gf-form gf-form--grow">
@@ -864,7 +869,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             </label>
             {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
               return (
-                <Segment key={'summaries-' + index}
+                <Segment
+                  key={'summaries-' + index}
                   Component={<CustomLabelComponent value={s.value} label={s.label} />}
                   onChange={(item) => {
                     this.onSummaryValueChanged(item, index);
@@ -876,12 +882,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             })
             }
             <Segment
-                Component={<CustomLabelComponent value={this.state.summarySegment.value} lable={this.state.summarySegment.label} />}
-                onChange={this.onSummaryAction}
-                options={this.getSummarySegments()}
-                allowCustomValue
-              />
-
+              Component={<CustomLabelComponent value={this.state.summarySegment.value} lable={this.state.summarySegment.label} />}
+              onChange={this.onSummaryAction}
+              options={this.getSummarySegments()}
+              allowCustomValue
+            />
             <QueryRowTerminator />
           </div>
         </div>
@@ -889,12 +894,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <div className="gf-form-inline">
           <div className="gf-form">
             <div className="gf-form max-width-30">
-              <label className="gf-form-label query-keyword width-11">Display Name 
+              <label className="gf-form-label query-keyword width-11">
+                Display Name 
                 <i
                   className="fa fa-question-circle"
                   bs-tooltip="'If single attribute, modify display name. Otherwise use regex to modify display name.'"
-                  data-placement="top">
-                </i>
+                  data-placement="top"
+                />
               </label>
               <Input
                 className="gf-form-input width-5"
@@ -914,7 +920,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               labelClass="query-keyword"
               checked={regex.enable}
               onChange={() => {
-                this.onChange({...metricsQuery, regex: {...regex, enable: !regex.enable}})
+                this.onChange({ ...metricsQuery, regex: { ...regex, enable: !regex.enable } })
               }}
             />
           </div>
@@ -926,7 +932,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 onBlur={onRunQuery}
                 value={regex.search}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  this.onChange({...metricsQuery, regex: {...regex, search: event.target.value}})
+                  this.onChange({ ...metricsQuery, regex: { ...regex, search: event.target.value } })
                 }
                 placeholder="(.*)"
               />
@@ -935,13 +941,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           <div className="gf-form">
             <div className="gf-form max-width-30">
               <label className="gf-form-label query-keyword">Replace</label>
-              
               <Input
                 className="gf-form-input width-5"
                 onBlur={onRunQuery}
                 value={regex.replace}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  this.onChange({...metricsQuery, regex: {...regex, replace: event.target.value}})
+                  this.onChange({ ...metricsQuery, regex: { ...regex, replace: event.target.value } })
                 }
                 placeholder="$1"
               />
