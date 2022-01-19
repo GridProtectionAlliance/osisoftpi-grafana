@@ -8,7 +8,7 @@ import {
   AnnotationEvent,
   toDataFrame,
 } from '@grafana/data';
-import { getTemplateSrv, TemplateSrv } from '@grafana/runtime';
+import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData } from './types';
 
@@ -40,6 +40,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   isProxy = false;
 
   templateSrv: TemplateSrv;
+  backendSrv: BackendSrv;
 
   piwebapiurl?: string;
   piserver: PiDataServer;
@@ -49,13 +50,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
 
   error: any;
 
-  constructor(instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>, private backendSrv: any) {
+  constructor(instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>) {
     super(instanceSettings);
     this.basicAuth = instanceSettings.basicAuth;
     this.withCredentials = instanceSettings.withCredentials;
     this.url = instanceSettings.url!;
     this.name = instanceSettings.name;
     this.templateSrv = getTemplateSrv();
+    this.backendSrv = getBackendSrv();
 
     this.piwebapiurl = instanceSettings.jsonData.url?.toString();
     this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
@@ -644,8 +646,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       var groups = groupBy(content.Items, (item: any) => item.Type);
       forOwn(groups, (value, key) => {
         innerResults.push({
-          target: name + '[' + key + ']',
           refId: target.refId,
+          target: name + '[' + key + ']',
           datapoints: api.parsePiPointValueList(value, target, isSummary),
         });
       });
@@ -653,8 +655,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     }
     return [
       {
-        target: name,
         refId: target.refId,
+        target: name,
         datapoints: api.parsePiPointValueList(content.Items, target, isSummary),
       },
     ];
