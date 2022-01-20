@@ -6,6 +6,7 @@ export interface Props extends InputHTMLAttributes<HTMLInputElement> {
   tooltip?: string;
   labelWidth?: number;
   children?: React.ReactNode;
+  queryEditor?: JSX.Element;
 }
 
 export const QueryField: FunctionComponent<Partial<Props>> = ({ label, labelWidth = 8, tooltip, children }) => (
@@ -33,11 +34,27 @@ export const QueryInlineField = ({ ...props }) => {
   );
 };
 
-export const QueryEditorRow = (props: any) => {
+export const QueryEditorRow = (props: Partial<Props>) => {
   return (
     <div className="gf-form-inline">
       {props.children}
       <QueryRowTerminator />
     </div>
+  );
+};
+
+export const QueryRawInlineField = ({ ...props }) => {
+  return (
+    <QueryRawEditorRow>
+      <QueryField {...props} />
+    </QueryRawEditorRow>
+  );
+};
+
+export const QueryRawEditorRow = (props: Partial<Props>) => {
+  return (
+    <>
+      {props.children}
+    </>
   );
 };

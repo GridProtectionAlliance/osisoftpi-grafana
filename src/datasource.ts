@@ -33,6 +33,10 @@ interface PiDataServer {
 }
 
 export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
+  public piserver: PiDataServer;
+  public afserver: PiDataServer;
+  public afdatabase: PiDataServer;
+
   basicAuth?: string;
   withCredentials?: boolean;
   url: string;
@@ -43,9 +47,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   backendSrv: BackendSrv;
 
   piwebapiurl?: string;
-  piserver: PiDataServer;
-  afserver: PiDataServer;
-  afdatabase: PiDataServer;
   webidCache: Map<String, String> = new Map();
 
   error: any;
@@ -386,7 +387,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  metricFindQuery(query: any, isPiPoint: boolean): any {
+  metricFindQuery(query: any, isPiPoint: boolean): Promise<any> {
     var ds = this;
     var querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
     if (!isPiPoint) {
@@ -400,7 +401,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     query.path = this.templateSrv.replace(query.path);
 
     if (query.type === 'servers') {
-      return ds.getAssetServers().then(ds.metricQueryTransform);
+      return ds.afserver?.webid
+        ? ds.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => [result])
+        : ds.getAssetServers().then(ds.metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
         .getAssetServer(query.path)
@@ -439,6 +442,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     } else if (query.type === 'pipoint') {
       return ds.piPointSearch(query.webId, query.pointName).then(ds.metricQueryTransform);
     }
+    return Promise.reject('Bad type');
   }
 
   /**
@@ -515,7 +519,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @returns - An array of Grafana value, timestamp pairs.
    *
    */
-  parsePiPointValueList(value: any, target: any, isSummary: boolean) {
+  parsePiPointValueList(value: any[], target: any, isSummary: boolean) {
     var api = this;
     var datapoints: any[] = [];
     each(value, (item) => {
@@ -523,7 +527,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       var { grafanaDataPoint, previousValue, drop } = this.noDataReplace(
         isSummary ? item.Value : item,
         target.summary.nodata,
-        api.parsePiPointValue(item, target, isSummary)
+        api.parsePiPointValue(isSummary ? item.Value : item, target, isSummary)
       );
       if (!drop) {
         datapoints.push(grafanaDataPoint);
@@ -545,45 +549,20 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     var num = !isSummary && typeof value.Value === 'object' ? Number(value.Value.Value) : Number(value.Value);
     var text = value.Value;
 
-    if (target.digitalStates && target.digitalStates.enable) {
-      num = value.Value.Name;
+    if (!value.Good || (target.digitalStates && target.digitalStates.enable)) {
+      num = !isSummary && typeof value.Value === 'object' ? value.Value.Name : value.Name;
     }
 
-    if (!value.Good) {
-      num = value.Value.Name;
-    }
-
-    if (!!isSummary) {
-      num = Number(value.Value.Value);
-      text = value.Value.Value;
-
-      if (target.digitalStates && target.digitalStates.enable) {
-        num = value.Value.Name;
-      }
-
-      if (!value.Value.Good) {
-        num = value.Value.Name;
-      }
-
-      if (target.summary.interval === '') {
-        if (target.digitalStates && target.digitalStates.enable) {
-          return [num, new Date(value.Timestamp).getTime()];
-        } else if (!value.Good) {
-          return [num, new Date(value.Timestamp).getTime()];
-        } else {
-          return [!isNaN(num) ? num : text, new Date(target.endTime).getTime()];
-        }
-      }
-
+    if (!!isSummary && target.summary.interval === '') {
       if (target.digitalStates && target.digitalStates.enable) {
         return [num, new Date(value.Timestamp).getTime()];
       } else if (!value.Good) {
         return [num, new Date(value.Timestamp).getTime()];
       } else {
-        return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
+        return [!isNaN(num) ? num : 0, new Date(target.endTime).getTime()];
       }
     }
-    return [!isNaN(num) ? num : 0, new Date(value.Timestamp).getTime()];
+    return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
   }
 
   /**
@@ -607,7 +586,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   } {
     var previousValue = null;
     var drop = false;
-    if (item.Value === 'No Data' || (item.Value.Name && item.Value.Name === 'No Data') || !item.Good) {
+    if (!item.Good || item.Value === 'No Data' || (item.Value?.Name && item.Value?.Name === 'No Data')) {
       if (noDataReplacementMode === 'Drop') {
         drop = true;
       } else if (noDataReplacementMode === '0') {

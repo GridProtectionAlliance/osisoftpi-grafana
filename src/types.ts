@@ -26,6 +26,8 @@ export interface PIWebAPIQuery extends DataQuery {
   summary: any;
   expression: string;
   isPiPoint: boolean;
+  rawQuery?: boolean;
+  query?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {
