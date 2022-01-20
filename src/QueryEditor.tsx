@@ -804,8 +804,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 }
                 placeholder=""
               />
-              <QueryEditorModeSwitcher isRaw={true} onChange={(value: boolean) => this.textEditorChanged()}
-              />
+              <QueryEditorModeSwitcher isRaw={true} onChange={(value: boolean) => this.textEditorChanged()} />
             </div>
           </div>
         )}
