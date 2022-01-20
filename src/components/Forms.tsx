@@ -52,9 +52,5 @@ export const QueryRawInlineField = ({ ...props }) => {
 };
 
 export const QueryRawEditorRow = (props: Partial<Props>) => {
-  return (
-    <>
-      {props.children}
-    </>
-  );
+  return <>{props.children}</>;
 };

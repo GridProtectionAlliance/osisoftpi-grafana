@@ -343,8 +343,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    */
   checkAttributeSegments(
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>,
-    segments: Array<SelectableValue<PIWebAPISelectableValue>>): Promise<any>
-  {
+    segments: Array<SelectableValue<PIWebAPISelectableValue>>
+  ): Promise<any> {
     const { datasource } = this.props;
     var ctrl = this;
     var findQuery = {
@@ -383,8 +383,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    */
   checkPiPointSegments(
     attribute: SelectableValue<PIWebAPISelectableValue>,
-    attributes: Array<SelectableValue<PIWebAPISelectableValue>>)
-  {
+    attributes: Array<SelectableValue<PIWebAPISelectableValue>>
+  ) {
     const { datasource } = this.props;
     var ctrl = this;
     var findQuery = {
@@ -421,7 +421,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             value: datasource.afserver.name,
             expandable: true,
           },
-        }
+        },
       ]);
     }
     if (datasource.afserver?.webid && datasource.afdatabase?.webid && index === 1) {
@@ -433,7 +433,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             value: datasource.afdatabase.name,
             expandable: true,
           },
-        }
+        },
       ]);
     }
 
@@ -510,7 +510,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    *
    * @memberOf PIWebAPIQueryEditor
    */
-  textEditorChanged () {
+  textEditorChanged() {
     const { query, onChange } = this.props;
     var splitAttributes = query.target.split(';');
     var splitElements = splitAttributes.length > 0 ? splitAttributes[0].split('\\') : [];
@@ -527,7 +527,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           label: item,
           value: {
             value: item,
-            expandable: true
+            expandable: true,
           },
         });
       });
@@ -547,7 +547,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           label: item,
           value: {
             value: item,
-            expandable: false
+            expandable: false,
           },
         });
       });
@@ -717,7 +717,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               label: item,
               value: {
                 value: item,
-                expandable: index < splitElements.length - 1
+                expandable: false,
               },
             });
           });
@@ -759,9 +759,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   };
 
   render() {
-    const { query: queryProps, onChange, onRunQuery  } = this.props;
+    const { query: queryProps, onChange, onRunQuery } = this.props;
     const metricsQuery = defaults(queryProps, defaultQuery) as PIWebAPIQuery;
-    const { interpolate, query, rawQuery, digitalStates, recordedValues, expression, isPiPoint, summary, display, regex } = metricsQuery;
+    const {
+      interpolate,
+      query,
+      rawQuery,
+      digitalStates,
+      recordedValues,
+      expression,
+      isPiPoint,
+      summary,
+      display,
+      regex,
+    } = metricsQuery;
 
     return (
       <>
@@ -782,11 +793,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             <div className="gf-form gf-form--grow">
               <label className="gf-form-label query-keyword width-11">
                 Raw Query
-                <i
-                  className="fa fa-question-circle"
-                  bs-tooltip="Raw query"
-                  data-placement="top"
-                />
+                <i className="fa fa-question-circle" bs-tooltip="Raw query" data-placement="top" />
               </label>
               <Input
                 className="gf-form-input gf-form-input--grow"
@@ -797,9 +804,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 }
                 placeholder=""
               />
-              <QueryEditorModeSwitcher
-                isRaw={true}
-                onChange={(value: boolean) => this.textEditorChanged()}
+              <QueryEditorModeSwitcher isRaw={true} onChange={(value: boolean) => this.textEditorChanged()}
               />
             </div>
           </div>

@@ -33,9 +33,9 @@ interface PiDataServer {
 }
 
 export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
-  public piserver: PiDataServer;
-  public afserver: PiDataServer;
-  public afdatabase: PiDataServer;
+  piserver: PiDataServer;
+  afserver: PiDataServer;
+  afdatabase: PiDataServer;
 
   basicAuth?: string;
   withCredentials?: boolean;
