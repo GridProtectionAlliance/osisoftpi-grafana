@@ -7,6 +7,7 @@ import {
   DataSourceInstanceSettings,
   AnnotationEvent,
   toDataFrame,
+  MetricFindValue,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
@@ -138,7 +139,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       var tar = {
         target: this.templateSrv.replace(target.elementPath, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        attributes: map(target.attributes, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
+        attributes: map(target.attributes, (att) => this.templateSrv.replace(att.value?.value || att, options.scopedVars)),
         segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
         display: target.display,
         refId: target.refId,
@@ -154,6 +155,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         startTime: options.range.from,
         endTime: options.range.to,
         isPiPoint: target.isPiPoint,
+        scopedVars: options.scopedVars,
       };
 
       if (tar.expression) {
@@ -365,7 +367,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  private metricQueryTransform(response: PiwebapiRsp[]) {
+  private metricQueryTransform(response: PiwebapiRsp[]): MetricFindValue[] {
     return map(response, (item) => {
       return {
         text: item.Name,
@@ -375,7 +377,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         Items: item.Items ?? [],
         Path: item.Path,
         WebId: item.WebId,
-      };
+      } as MetricFindValue;
     });
   }
 
@@ -387,22 +389,27 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  metricFindQuery(query: any, isPiPoint: boolean): Promise<any> {
+  metricFindQuery(query: any, queryOptions: any): Promise<MetricFindValue[]> {
     var ds = this;
     var querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
-    if (!isPiPoint) {
+    if (typeof query === 'string') {
+      query = JSON.parse(query as string);
+    }
+    if (queryOptions.isPiPoint) {
+      query.path = this.templateSrv.replace(query.path);
+    } else {
       if (query.path === '') {
         query.type = querydepth[0];
       } else if (query.type !== 'attributes') {
         query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))];
       }
+      query.path = this.templateSrv.replace(query.path);
+      query.path = query.path.replace(/\{([^\\])*\}/gm, (r: string) => r.substring(1, r.length - 2).split(',')[0]);
     }
-
-    query.path = this.templateSrv.replace(query.path);
 
     if (query.type === 'servers') {
       return ds.afserver?.webid
-        ? ds.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => [result])
+        ? ds.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => [result]).then(ds.metricQueryTransform)
         : ds.getAssetServers().then(ds.metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
@@ -664,6 +671,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       var intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
       var timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
       var targetName = target.expression || target.elementPath;
+      var displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
       if (target.expression) {
         url += '/calculation';
         if (isSummary) {
@@ -680,7 +688,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
                 return api
                   .restPost(url + webidresponse.WebId)
                   .then((response: any) =>
-                    api.processResults(response.data, target, target.display || attribute || targetName)
+                    api.processResults(response.data, target, displayName || attribute || targetName)
                   )
                   .catch((err: any) => (api.error = err));
               })
@@ -691,7 +699,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             api.restGetWebId(target.elementPath, target.isPiPoint).then((webidresponse: any) => {
               return api
                 .restPost(url + webidresponse.WebId)
-                .then((response: any) => api.processResults(response.data, target, target.display || targetName))
+                .then((response: any) => api.processResults(response.data, target, displayName || targetName))
                 .catch((err: any) => (api.error = err));
             })
           );
@@ -728,7 +736,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
                 var targetResults: any[] = [];
                 each(response.data, (value, key) => {
                   each(value.Content.Items, (item) => {
-                    each(api.processResults(item, target, target.display || item.Name || targetName), (targetResult) =>
+                    each(api.processResults(item, target, displayName || item.Name || targetName), (targetResult) =>
                       targetResults.push(targetResult)
                     );
                   });
