@@ -344,7 +344,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>,
     segments: Array<SelectableValue<PIWebAPISelectableValue>>
   ): Promise<any> {
-    const { datasource} = this.props;
+    const { datasource } = this.props;
     var ctrl = this;
     var findQuery = {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
@@ -709,9 +709,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               attributes: attributesArray,
               summaries: summariesArray,
               isPiPoint,
-            }, () => {
-              this.checkAttributeSegments(this.state.attributes, this.state.segments).then(() => console.log('done'));
-            });
+            }, () =>
+              this.checkAttributeSegments(this.state.attributes, this.state.segments).then(() => console.log('done'))
+            );
         });
         return;
       } else {
@@ -745,8 +745,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         segments: segmentsArray,
         attributes: attributesArray,
         summaries: summariesArray,
-        isPiPoint: isPiPoint
-      }, () => this.checkAttributeSegments(attributesArray, this.state.segments));
+        isPiPoint: isPiPoint,
+      }, () =>
+        this.checkAttributeSegments(attributesArray, this.state.segments)
+      );
   };
 
   segmentChangeValue = (segments: Array<SelectableValue<PIWebAPISelectableValue>>) => {

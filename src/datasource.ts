@@ -139,7 +139,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       var tar = {
         target: this.templateSrv.replace(target.elementPath, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        attributes: map(target.attributes, (att) => 
+        attributes: map(target.attributes, (att) =>
           this.templateSrv.replace(att.value?.value || att, options.scopedVars)
         ),
         segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
@@ -412,8 +412,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (query.type === 'servers') {
       return ds.afserver?.webid
         ? ds
-          .getAssetServer(this.afserver.name)
-          .then((result: PiwebapiRsp) => [result]).then(ds.metricQueryTransform)
+            .getAssetServer(this.afserver.name)
+            .then((result: PiwebapiRsp) => [result])
+            .then(ds.metricQueryTransform)
         : ds.getAssetServers().then(ds.metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds

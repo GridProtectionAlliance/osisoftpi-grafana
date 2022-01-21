@@ -938,7 +938,7 @@ function (_super) {
               summaries: summariesArray,
               isPiPoint: isPiPoint
             }, function () {
-              _this.checkAttributeSegments(_this.state.attributes, _this.state.segments).then(function () {
+              return _this.checkAttributeSegments(_this.state.attributes, _this.state.segments).then(function () {
                 return console.log('done');
               });
             });
