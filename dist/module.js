@@ -980,7 +980,7 @@ function (_super) {
         summaries: summariesArray,
         isPiPoint: isPiPoint
       }, function () {
-        _this.checkAttributeSegments(attributesArray, _this.state.segments);
+        return _this.checkAttributeSegments(attributesArray, _this.state.segments);
       });
     };
 
