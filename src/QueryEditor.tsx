@@ -681,7 +681,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             label: 'Select Element',
             value: {
               value: '-Select Element-',
-          },
+            },
           });
         }
         return segmentsArray;
@@ -709,9 +709,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               attributes: attributesArray,
               summaries: summariesArray,
               isPiPoint,
-            }, () =>
+            },
+            () =>
               this.checkAttributeSegments(this.state.attributes, this.state.segments).then(() => console.log('done'))
-            );
+          );
         });
         return;
       } else {
@@ -746,9 +747,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         attributes: attributesArray,
         summaries: summariesArray,
         isPiPoint: isPiPoint,
-      }, () =>
-        this.checkAttributeSegments(attributesArray, this.state.segments)
-      );
+      },
+      () => this.checkAttributeSegments(attributesArray, this.state.segments)
+    );
   };
 
   segmentChangeValue = (segments: Array<SelectableValue<PIWebAPISelectableValue>>) => {
