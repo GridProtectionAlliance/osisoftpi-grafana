@@ -316,7 +316,7 @@ export class PiWebApiDatasource {
     } else if (query.type !== 'attributes') {
       query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))]
     }
-    if (isPiPoint) {
+    if (isPiPoint === true) {
       query.type = 'dataserver'
       
       if (query.webId !== undefined && query.webId !== '') {
