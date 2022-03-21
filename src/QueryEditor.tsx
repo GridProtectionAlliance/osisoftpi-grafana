@@ -841,15 +841,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         segments: isPiPoint ? [{ label: '' }] : this.checkAfServer(datasource),
         attributes: [],
         isPiPoint,
-      }, () => 
-        {
-          this.onChange({
-            ...queryChange,
-            attributes: this.state.attributes,
-            segments: this.state.segments,
-            isPiPoint,
-          });
-        }
+      },
+      () => {
+        this.onChange({
+          ...queryChange,
+          attributes: this.state.attributes,
+          segments: this.state.segments,
+          isPiPoint,
+        });
+      }
     );
   };
 
@@ -872,9 +872,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     return (
       <>
         <InlineField label="Is Pi Point?" labelWidth={LABEL_WIDTH}>
-          <InlineSwitch
-            value={isPiPoint}
-            onChange={this.onIsPiPointChange}
+          <InlineSwitch value={isPiPoint} onChange={this.onIsPiPointChange}
           />
         </InlineField>
 
@@ -1033,7 +1031,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               onChange={() =>
                 this.onChange({
                   ...metricsQuery,
-                  recordedValues: { ...recordedValues, enable: !recordedValues.enable }
+                  recordedValues: { ...recordedValues, enable: !recordedValues.enable },
                 })
               }
             />
@@ -1042,7 +1040,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             <InlineSwitch
               value={digitalStates.enable}
               onChange={() =>
-                this.onChange({ ...metricsQuery,digitalStates: { ...digitalStates, enable: !digitalStates.enable } })
+                this.onChange({ ...metricsQuery, digitalStates: { ...digitalStates, enable: !digitalStates.enable } })
               }
             />
           </InlineField>
