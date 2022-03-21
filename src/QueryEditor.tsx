@@ -546,7 +546,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         }
       });
       each(splitAttributes, function (item, index) {
-        if (item != '') {
+        if (item !== '') {
           attributes.push({
             label: item,
             value: {
@@ -747,14 +747,14 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       });
     }
     return segmentsArray;
-  }
+  };
 
   updateArray = (
     segmentsArray: any[],
     attributesArray: any[],
     summariesArray: any[],
     isPiPoint: boolean,
-    cb?: (() => void) | undefined,
+    cb?: (() => void) | undefined
   ) => {
     this.setState(
       {
@@ -763,9 +763,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         summaries: summariesArray,
         isPiPoint,
       },
-      () => this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
-        if (cb) cb();
-      })
+      () =>
+        this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
+          if (cb) {
+            cb();
+          }
+        })
     );
   }
 
@@ -781,8 +784,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   onChange = (query: PIWebAPIQuery) => {
     const { onChange, onRunQuery } = this.props;
-
-    console.log('query change', query);
 
     query.summary.types = this.state.summaries;
     if (query.rawQuery) {
@@ -835,19 +836,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   onIsPiPointChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
     const { query: queryChange, datasource } = this.props;
     const isPiPoint = !queryChange.isPiPoint;
-    this.setState({
-      segments: isPiPoint
-        ? [{ label: '' }]
-        : this.checkAfServer(datasource),
-      attributes: [],
-      isPiPoint,
-    }, () => {
-      this.onChange({
-        ...queryChange,
-        attributes: this.state.attributes,
-        segments: this.state.segments,
+    this.setState(
+      {
+        segments: isPiPoint
+          ? [{ label: '' }]
+          : this.checkAfServer(datasource),
+        attributes: [],
         isPiPoint,
-      });
+      }, () => {
+          this.onChange({
+          ...queryChange,
+          attributes: this.state.attributes,
+          segments: this.state.segments,
+          isPiPoint,
+        });
     });
   };
 
@@ -866,8 +868,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       display,
       regex,
     } = metricsQuery;
-
-    console.log('rendering', interpolate);
 
     return (
       <>
@@ -897,7 +897,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         {!rawQuery && (
           <>
             <div className="gf-form-inline">
-              <QueryRawInlineField label={isPiPoint ? 'PI Server' : 'AF Elements'} tooltip={isPiPoint ? 'Select PI server.' : 'Select AF Element.'}>
+              <QueryRawInlineField
+                label={isPiPoint ? 'PI Server' : 'AF Elements'}
+                tooltip={isPiPoint ? 'Select PI server.' : 'Select AF Element.'}
+              >
                 {this.state.segments.map((segment: SelectableValue<PIWebAPISelectableValue>, index: number) => {
                   return (
                     <SegmentAsync
@@ -988,7 +991,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </>
         )}
 
-        <InlineField label="Calculation" labelWidth={LABEL_WIDTH} tooltip={'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'}>
+        <InlineField 
+          label="Calculation"
+          labelWidth={LABEL_WIDTH}
+          tooltip={'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'}
+        >
           <Input
             onBlur={onRunQuery}
             value={expression}
@@ -1000,7 +1007,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </InlineField>
 
         <InlineFieldRow>
-          <InlineField label="Max Recorded Values" labelWidth={LABEL_WIDTH} tooltip={'Maximum number of recorded value to retrive from the data archive, without using interpolation.'}>
+          <InlineField
+            label="Max Recorded Values"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Maximum number of recorded value to retrive from the data archive, without using interpolation.'}
+          >
             <Input
               onBlur={onRunQuery}
               value={recordedValues.maxNumber}
@@ -1033,7 +1044,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField label="Interpolate Period" labelWidth={LABEL_WIDTH} tooltip={'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'}>
+          <InlineField
+            label="Interpolate Period"
+            labelWidth={LABEL_WIDTH} tooltip={'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'}
+          >
             <Input
               onBlur={onRunQuery}
               value={interpolate.interval}
@@ -1051,7 +1065,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
             />
           </InlineField>          
-          <InlineField label="Replace Bad Data" labelWidth={LABEL_WIDTH} tooltip={'Replacement for bad quality values.'}>            
+          <InlineField
+            label="Replace Bad Data"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Replacement for bad quality values.'}
+          >            
             <Segment
               Component={<CustomLabelComponent value={{ value: summary.nodata }} label={summary.nodata} />}
               onChange={this.calcNoDataValueChanged}
@@ -1062,7 +1080,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField label="Summary Period" labelWidth={LABEL_WIDTH} tooltip={'Override time between sampling, e.g. \'30s\'.'}>
+          <InlineField 
+            label="Summary Period"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Override time between sampling, e.g. \'30s\'.'}
+          >
             <Input
               onBlur={onRunQuery}
               value={summary.interval}
@@ -1072,7 +1094,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               placeholder="30s"
             />
           </InlineField> 
-          <InlineField label="Basis" labelWidth={LABEL_WIDTH} tooltip={'Defines the possible calculation options when performing summary calculations over time-series data.'}>
+          <InlineField
+            label="Basis"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Defines the possible calculation options when performing summary calculations over time-series data.'}
+          >
             <Segment
               Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
               onChange={this.calcBasisValueChanged}
@@ -1080,7 +1106,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               allowCustomValue
             />
           </InlineField>
-          <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'Replacement for bad quality values.'}>
+          <InlineField
+            label="Summaries"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Replacement for bad quality values.'}
+          >
             <InlineFieldRow>
               {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
                 return (
@@ -1106,7 +1136,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField label="Display Name" labelWidth={LABEL_WIDTH} tooltip={'If single attribute, modify display name. Otherwise use regex to modify display name.'}>
+          <InlineField
+            label="Display Name"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'If single attribute, modify display name. Otherwise use regex to modify display name.'}
+          >
             <Input
               onBlur={onRunQuery}
               value={display}
