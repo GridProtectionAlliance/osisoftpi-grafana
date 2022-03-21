@@ -439,7 +439,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .then((element) =>
           ds.getElements(element.WebId ?? '', {
             selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
-            nameFilter: query.filter
+            nameFilter: query.filter,
           })
         )
         .then(ds.metricQueryTransform);
@@ -450,7 +450,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           ds.getAttributes(element.WebId ?? '', {
             searchFullHierarchy: 'true',
             selectedFields: 'Items.WebId;Items.Name;Items.Path',
-            nameFilter: query.filter
+            nameFilter: query.filter,
           })
         )
         .then(ds.metricQueryTransform);

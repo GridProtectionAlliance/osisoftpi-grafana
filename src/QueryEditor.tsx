@@ -770,7 +770,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           }
         })
     );
-  }
+  };
 
   segmentChangeValue = (segments: Array<SelectableValue<PIWebAPISelectableValue>>) => {
     const query = this.props.query;
@@ -838,19 +838,19 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const isPiPoint = !queryChange.isPiPoint;
     this.setState(
       {
-        segments: isPiPoint
-          ? [{ label: '' }]
-          : this.checkAfServer(datasource),
+        segments: isPiPoint ? [{ label: '' }] : this.checkAfServer(datasource),
         attributes: [],
         isPiPoint,
-      }, () => {
+      }, () => 
+        {
           this.onChange({
-          ...queryChange,
-          attributes: this.state.attributes,
-          segments: this.state.segments,
-          isPiPoint,
-        });
-    });
+            ...queryChange,
+            attributes: this.state.attributes,
+            segments: this.state.segments,
+            isPiPoint,
+          });
+        }
+    );
   };
 
   render() {
@@ -991,10 +991,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </>
         )}
 
-        <InlineField 
+        <InlineField
           label="Calculation"
           labelWidth={LABEL_WIDTH}
-          tooltip={'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'}
+          tooltip={
+            "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+          }
         >
           <Input
             onBlur={onRunQuery}
@@ -1029,7 +1031,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             <InlineSwitch
               value={recordedValues.enable}
               onChange={() =>
-                this.onChange({ ...metricsQuery, recordedValues: { ...recordedValues, enable: !recordedValues.enable } })
+                this.onChange({
+                  ...metricsQuery,
+                  recordedValues: { ...recordedValues, enable: !recordedValues.enable }
+                })
               }
             />
           </InlineField>
@@ -1046,7 +1051,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <InlineFieldRow>
           <InlineField
             label="Interpolate Period"
-            labelWidth={LABEL_WIDTH} tooltip={'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'}
+            labelWidth={LABEL_WIDTH}
+            tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
           >
             <Input
               onBlur={onRunQuery}
@@ -1064,12 +1070,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable } })
               }
             />
-          </InlineField>          
+          </InlineField>
           <InlineField
             label="Replace Bad Data"
             labelWidth={LABEL_WIDTH}
             tooltip={'Replacement for bad quality values.'}
-          >            
+          >
             <Segment
               Component={<CustomLabelComponent value={{ value: summary.nodata }} label={summary.nodata} />}
               onChange={this.calcNoDataValueChanged}
@@ -1080,10 +1086,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField 
+          <InlineField
             label="Summary Period"
             labelWidth={LABEL_WIDTH}
-            tooltip={'Override time between sampling, e.g. \'30s\'.'}
+            tooltip={"Override time between sampling, e.g. '30s'."}
           >
             <Input
               onBlur={onRunQuery}
@@ -1093,11 +1099,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
               placeholder="30s"
             />
-          </InlineField> 
+          </InlineField>
           <InlineField
             label="Basis"
             labelWidth={LABEL_WIDTH}
-            tooltip={'Defines the possible calculation options when performing summary calculations over time-series data.'}
+            tooltip={
+              'Defines the possible calculation options when performing summary calculations over time-series data.'
+            }
           >
             <Segment
               Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
@@ -1106,11 +1114,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               allowCustomValue
             />
           </InlineField>
-          <InlineField
-            label="Summaries"
-            labelWidth={LABEL_WIDTH}
-            tooltip={'Replacement for bad quality values.'}
-          >
+          <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'Replacement for bad quality values.'}>
             <InlineFieldRow>
               {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
                 return (
@@ -1125,7 +1129,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               })}
               <Segment
                 Component={
-                  <CustomLabelComponent value={this.state.summarySegment.value} label={this.state.summarySegment.label} />
+                  <CustomLabelComponent
+                    value={this.state.summarySegment.value}
+                    label={this.state.summarySegment.label}
+                  />
                 }
                 onChange={this.onSummaryAction}
                 options={this.getSummarySegments()}
@@ -1157,7 +1164,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 this.onChange({ ...metricsQuery, regex: { ...regex, enable: !regex.enable } });
               }}
             />
-          </InlineField> 
+          </InlineField>
           <InlineField label="Search" labelWidth={LABEL_WIDTH - 8}>
             <Input
               onBlur={onRunQuery}
@@ -1167,7 +1174,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
               placeholder="(.*)"
             />
-          </InlineField>         
+          </InlineField>
           <InlineField label="Replace" labelWidth={LABEL_WIDTH - 8}>
             <Input
               onBlur={onRunQuery}
@@ -1177,7 +1184,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
               placeholder="$1"
             />
-          </InlineField>  
+          </InlineField>
         </InlineFieldRow>
       </>
     );
