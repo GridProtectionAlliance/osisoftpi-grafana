@@ -9,9 +9,9 @@ export interface Props extends InputHTMLAttributes<HTMLInputElement> {
   queryEditor?: JSX.Element;
 }
 
-export const QueryField: FunctionComponent<Partial<Props>> = ({ label, labelWidth = 8, tooltip, children }) => (
+export const QueryField: FunctionComponent<Partial<Props>> = ({ label, labelWidth = 12, tooltip, children }) => (
   <>
-    <InlineFormLabel width={labelWidth} className="query-keyword" tooltip={tooltip}>
+    <InlineFormLabel width={labelWidth} tooltip={tooltip}>
       {label}
     </InlineFormLabel>
     {children}

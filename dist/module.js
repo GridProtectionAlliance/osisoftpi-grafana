@@ -579,8 +579,9 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-var Input = _grafana_ui__WEBPACK_IMPORTED_MODULE_3__["LegacyForms"].Input,
-    Switch = _grafana_ui__WEBPACK_IMPORTED_MODULE_3__["LegacyForms"].Switch;
+var LABEL_WIDTH = 24;
+var MIN_ELEM_INPUT_WIDTH = 200;
+var MIN_ATTR_INPUT_WIDTH = 250;
 var REMOVE_LABEL = '-REMOVE-';
 
 var CustomLabelComponent = function CustomLabelComponent(props) {
@@ -726,22 +727,20 @@ function (_super) {
       };
 
       if (!query.isPiPoint) {
-        if (((_a = datasource.afserver) === null || _a === void 0 ? void 0 : _a.webid) && index === 0) {
+        if (((_a = datasource.afserver) === null || _a === void 0 ? void 0 : _a.name) && index === 0) {
           return Promise.resolve([{
             label: datasource.afserver.name,
             value: {
-              webId: datasource.afserver.webid,
               value: datasource.afserver.name,
               expandable: true
             }
           }]);
         }
 
-        if (((_b = datasource.afserver) === null || _b === void 0 ? void 0 : _b.webid) && ((_c = datasource.afdatabase) === null || _c === void 0 ? void 0 : _c.webid) && index === 1) {
+        if (((_b = datasource.afserver) === null || _b === void 0 ? void 0 : _b.name) && ((_c = datasource.afdatabase) === null || _c === void 0 ? void 0 : _c.name) && index === 1) {
           return Promise.resolve([{
             label: datasource.afdatabase.name,
             value: {
-              webId: datasource.afdatabase.webid,
               value: datasource.afdatabase.name,
               expandable: true
             }
@@ -807,7 +806,7 @@ function (_super) {
       var findQuery = {
         path: '',
         webId: _this.getSelectedPIServer(),
-        pointName: datasource.templateSrv.replace(attributeText) + '*',
+        pointName: attributeText + '*',
         type: 'pipoint'
       };
       var segments = [];
@@ -913,11 +912,11 @@ function (_super) {
     };
 
     _this.componentDidMount = function () {
-      var _a, _b, _c, _d, _e;
+      var _a, _b, _c;
 
-      var _f = _this.props,
-          query = _f.query,
-          datasource = _f.datasource;
+      var _d = _this.props,
+          query = _d.query,
+          datasource = _d.datasource;
       var metricsQuery = Object(lodash__WEBPACK_IMPORTED_MODULE_1__["defaults"])(query, _types__WEBPACK_IMPORTED_MODULE_5__["defaultQuery"]);
       var segments = metricsQuery.segments,
           attributes = metricsQuery.attributes,
@@ -927,60 +926,72 @@ function (_super) {
       var attributesArray = (_b = attributes === null || attributes === void 0 ? void 0 : attributes.slice(0)) !== null && _b !== void 0 ? _b : [];
       var summariesArray = (_c = summary === null || summary === void 0 ? void 0 : summary.types) !== null && _c !== void 0 ? _c : [];
 
-      if (segmentsArray.length === 0 && !isPiPoint) {
+      if (!isPiPoint && segmentsArray.length === 0) {
         if (query.target && query.target.length > 0 && query.target !== ';') {
-          attributesArray = [];
+          attributesArray = []; // Build query from target
 
-          _this.buildFromTarget(query, segmentsArray, attributesArray).then(function () {
-            _this.setState({
-              segments: segmentsArray,
-              attributes: attributesArray,
-              summaries: summariesArray,
-              isPiPoint: isPiPoint
-            }, function () {
-              return _this.checkAttributeSegments(_this.state.attributes, _this.state.segments).then(function () {
-                return console.log('done');
-              });
-            });
+          _this.buildFromTarget(query, segmentsArray, attributesArray).then(function (_segmentsArray) {
+            _this.updateArray(_segmentsArray, attributesArray, summariesArray, isPiPoint);
           });
 
           return;
         } else {
-          if ((_d = datasource.afserver) === null || _d === void 0 ? void 0 : _d.webid) {
-            segmentsArray.push({
-              label: datasource.afserver.name,
-              value: {
-                webId: datasource.afserver.webid,
-                value: datasource.afserver.name,
-                expandable: true
-              }
-            });
-
-            if ((_e = datasource.afdatabase) === null || _e === void 0 ? void 0 : _e.webid) {
-              segmentsArray.push({
-                label: datasource.afdatabase.name,
-                value: {
-                  webId: datasource.afdatabase.webid,
-                  value: datasource.afdatabase.name,
-                  expandable: true
-                }
-              });
-            }
-          }
+          segmentsArray = _this.checkAfServer(datasource);
         }
-      }
-
-      if (segmentsArray.length > 0 && isPiPoint) {
+      } else if (isPiPoint && segmentsArray.length > 0) {
         _this.piServer = segmentsArray;
       }
 
+      _this.updateArray(segmentsArray, attributesArray, summariesArray, isPiPoint, function () {
+        _this.onChange(query);
+      });
+    };
+
+    _this.checkAfServer = function (datasource) {
+      var _a, _b;
+
+      var segmentsArray = [];
+
+      if ((_a = datasource.afserver) === null || _a === void 0 ? void 0 : _a.name) {
+        segmentsArray.push({
+          label: datasource.afserver.name,
+          value: {
+            value: datasource.afserver.name,
+            expandable: true
+          }
+        });
+
+        if ((_b = datasource.afdatabase) === null || _b === void 0 ? void 0 : _b.name) {
+          segmentsArray.push({
+            label: datasource.afdatabase.name,
+            value: {
+              value: datasource.afdatabase.name,
+              expandable: true
+            }
+          });
+        }
+
+        segmentsArray.push({
+          label: 'Select Element',
+          value: {
+            value: '-Select Element-'
+          }
+        });
+      }
+
+      return segmentsArray;
+    };
+
+    _this.updateArray = function (segmentsArray, attributesArray, summariesArray, isPiPoint, cb) {
       _this.setState({
         segments: segmentsArray,
         attributes: attributesArray,
         summaries: summariesArray,
         isPiPoint: isPiPoint
       }, function () {
-        return _this.checkAttributeSegments(attributesArray, _this.state.segments);
+        return _this.checkAttributeSegments(attributesArray, _this.state.segments).then(function () {
+          if (cb) cb();
+        });
       });
     };
 
@@ -1014,6 +1025,7 @@ function (_super) {
       var _b = _this.props,
           onChange = _b.onChange,
           onRunQuery = _b.onRunQuery;
+      console.log('query change', query);
       query.summary.types = _this.state.summaries;
 
       if (query.rawQuery) {
@@ -1062,13 +1074,15 @@ function (_super) {
     };
 
     _this.onIsPiPointChange = function (event) {
-      var queryChange = _this.props.query;
+      var _a = _this.props,
+          queryChange = _a.query,
+          datasource = _a.datasource;
       var isPiPoint = !queryChange.isPiPoint;
 
       _this.setState({
-        segments: [{
+        segments: isPiPoint ? [{
           label: ''
-        }],
+        }] : _this.checkAfServer(datasource),
         attributes: [],
         isPiPoint: isPiPoint
       }, function () {
@@ -1343,7 +1357,7 @@ function (_super) {
     var findQuery = {
       path: attribute.path,
       webId: ctrl.getSelectedPIServer(),
-      pointName: datasource.templateSrv.replace(attribute.label),
+      pointName: attribute.label,
       type: 'pipoint'
     };
     return datasource.metricFindQuery(findQuery, {
@@ -1392,7 +1406,8 @@ function (_super) {
 
     var _a = this.props,
         query = _a.query,
-        onChange = _a.onChange;
+        onChange = _a.onChange,
+        datasource = _a.datasource;
     var splitAttributes = query.target.split(';');
     var splitElements = splitAttributes.length > 0 ? splitAttributes[0].split('\\') : [];
     var segments = [];
@@ -1421,33 +1436,25 @@ function (_super) {
         }
       });
       Object(lodash__WEBPACK_IMPORTED_MODULE_1__["each"])(splitAttributes, function (item, index) {
-        // set current value
-        attributes.push({
-          label: item,
-          value: {
-            value: item,
-            expandable: false
-          }
-        });
+        if (item != '') {
+          attributes.push({
+            label: item,
+            value: {
+              value: item,
+              expandable: false
+            }
+          });
+        }
       });
-      onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, query), {
-        query: undefined,
-        rawQuery: false
-      }));
-      this.setState({
-        segments: segments,
-        attributes: attributes
-      }, function () {
-        return _this.checkAttributeSegments(attributes, _this.state.segments);
+      this.updateArray(segments, attributes, this.state.summaries, query.isPiPoint, function () {
+        onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, query), {
+          query: undefined,
+          rawQuery: false
+        }));
       });
     } else {
-      segments.push({
-        label: ''
-      });
-      this.setState({
-        segments: segments,
-        attributes: attributes
-      }, function () {
+      segments = this.checkAfServer(datasource);
+      this.updateArray(segments, this.state.attributes, this.state.summaries, query.isPiPoint, function () {
         _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, query), {
           query: undefined,
           rawQuery: false,
@@ -1476,26 +1483,18 @@ function (_super) {
         summary = metricsQuery.summary,
         display = metricsQuery.display,
         regex = metricsQuery.regex;
-    return react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_2___default.a.Fragment, null, !rawQuery && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Switch, {
-      className: "gf-form-inline",
-      label: "PI Point Search",
-      labelClass: "query-keyword",
-      checked: isPiPoint,
+    console.log('rendering', interpolate);
+    return react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_2___default.a.Fragment, null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Is Pi Point?",
+      labelWidth: LABEL_WIDTH
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineSwitch"], {
+      value: isPiPoint,
       onChange: this.onIsPiPointChange
-    })), !!rawQuery && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form gf-form--grow"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Raw Query", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "Raw query",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input gf-form-input--grow",
+    })), !!rawQuery && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Raw Query",
+      labelWidth: LABEL_WIDTH,
+      grow: true
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: this.stateCallback,
       value: query,
       onChange: function onChange(event) {
@@ -1503,16 +1502,17 @@ function (_super) {
           query: event.target.value
         }));
       },
-      placeholder: ""
-    }), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(components_QueryEditorModeSwitcher__WEBPACK_IMPORTED_MODULE_6__["QueryEditorModeSwitcher"], {
+      placeholder: "enter query"
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(components_QueryEditorModeSwitcher__WEBPACK_IMPORTED_MODULE_6__["QueryEditorModeSwitcher"], {
       isRaw: true,
       onChange: function onChange(value) {
         return _this.textEditorChanged();
       }
-    }))), !rawQuery && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_2___default.a.Fragment, null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
+    })), !rawQuery && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_2___default.a.Fragment, null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
       className: "gf-form-inline"
     }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_components_Forms__WEBPACK_IMPORTED_MODULE_4__["QueryRawInlineField"], {
-      label: isPiPoint ? 'PI Server' : 'AF Elements'
+      label: isPiPoint ? 'PI Server' : 'AF Elements',
+      tooltip: isPiPoint ? 'Select PI server.' : 'Select AF Element.'
     }, this.state.segments.map(function (segment, index) {
       return react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["SegmentAsync"], {
         key: 'element-' + index,
@@ -1526,7 +1526,8 @@ function (_super) {
         loadOptions: function loadOptions(query) {
           return _this.getElementSegments(index);
         },
-        allowCustomValue: true
+        allowCustomValue: true,
+        inputMinWidth: MIN_ELEM_INPUT_WIDTH
       });
     }), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_components_Forms__WEBPACK_IMPORTED_MODULE_4__["QueryRowTerminator"], null), !isPiPoint && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(components_QueryEditorModeSwitcher__WEBPACK_IMPORTED_MODULE_6__["QueryEditorModeSwitcher"], {
       isRaw: false,
@@ -1552,7 +1553,8 @@ function (_super) {
           },
           loadOptions: _this.getAttributeSegmentsPI,
           reloadOptionsOnChange: true,
-          allowCustomValue: true
+          allowCustomValue: true,
+          inputMinWidth: MIN_ATTR_INPUT_WIDTH
         });
       }
 
@@ -1567,7 +1569,8 @@ function (_super) {
           return _this.onAttributeChange(item, index);
         },
         options: _this.getAttributeSegmentsAF(),
-        allowCustomValue: true
+        allowCustomValue: true,
+        inputMinWidth: MIN_ATTR_INPUT_WIDTH
       });
     }), isPiPoint && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["SegmentAsync"], {
       Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
@@ -1578,7 +1581,8 @@ function (_super) {
       onChange: this.onAttributeAction,
       loadOptions: this.getAttributeSegmentsPI,
       reloadOptionsOnChange: true,
-      allowCustomValue: true
+      allowCustomValue: true,
+      inputMinWidth: MIN_ATTR_INPUT_WIDTH
     }), !isPiPoint && react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
       Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
         value: this.state.attributeSegment.value,
@@ -1587,19 +1591,13 @@ function (_super) {
       disabled: this.state.segments.length <= 2,
       onChange: this.onAttributeAction,
       options: this.getAttributeSegmentsAF(),
-      allowCustomValue: true
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form gf-form--grow"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Calculation", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Modify all attributes by an equation. Use \\'.\\' for current item. Leave Attributes empty if you wish to perform element based calculations.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input gf-form-input--grow",
+      allowCustomValue: true,
+      inputMinWidth: MIN_ATTR_INPUT_WIDTH
+    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Calculation",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Modify all attributes by an equation. Use \'.\' for current item. Leave Attributes empty if you wish to perform element based calculations.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: expression,
       onChange: function onChange(event) {
@@ -1608,18 +1606,11 @@ function (_super) {
         }));
       },
       placeholder: "'.'*2"
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Max Recorded Values", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Maximum number of recorded value to retrive from the data archive, without using interpolation.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-6",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Max Recorded Values",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: recordedValues.maxNumber,
       onChange: function onChange(event) {
@@ -1631,46 +1622,35 @@ function (_super) {
       },
       type: "number",
       placeholder: "150000"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Switch, {
-      className: "gf-form-inline",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
       label: "Recorded Values",
-      labelClass: "query-keyword",
-      checked: recordedValues.enable,
+      labelWidth: LABEL_WIDTH
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineSwitch"], {
+      value: recordedValues.enable,
       onChange: function onChange() {
-        _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
+        return _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
           recordedValues: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, recordedValues), {
             enable: !recordedValues.enable
           })
         }));
       }
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Switch, {
-      className: "gf-form-inline",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
       label: "Digital States",
-      labelClass: "query-keyword",
-      checked: digitalStates.enable,
+      labelWidth: LABEL_WIDTH
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineSwitch"], {
+      value: digitalStates.enable,
       onChange: function onChange() {
-        _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
+        return _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
           digitalStates: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, digitalStates), {
             enable: !digitalStates.enable
           })
         }));
       }
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Interpolate Period", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Override time between sampling, e.g. \\'30s\\'. Defaults to timespan/chart width.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-5",
+    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Interpolate Period",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Override time between sampling, e.g. \'30s\'. Defaults to timespan/chart width.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: interpolate.interval,
       onChange: function onChange(event) {
@@ -1681,29 +1661,23 @@ function (_super) {
         }));
       },
       placeholder: "30s"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Switch, {
-      className: "gf-form-inline",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
       label: "Interpolate",
-      labelClass: "query-keyword",
-      checked: interpolate.enable,
+      labelWidth: LABEL_WIDTH
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineSwitch"], {
+      value: interpolate.enable,
       onChange: function onChange() {
-        _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
+        return _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
           interpolate: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, interpolate), {
             enable: !interpolate.enable
           })
         }));
       }
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword  width-8"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("span", null, "Replace Bad Data"), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Replacement for bad quality values.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Replace Bad Data",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Replacement for bad quality values.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
       Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
         value: {
           value: summary.nodata
@@ -1713,18 +1687,11 @@ function (_super) {
       onChange: this.calcNoDataValueChanged,
       options: this.getNoDataSegments(),
       allowCustomValue: true
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Summary Period", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Override time between sampling, e.g. \\'30s\\'.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-5",
+    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Summary Period",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Override time between sampling, e.g. \'30s\'.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: summary.interval,
       onChange: function onChange(event) {
@@ -1735,15 +1702,11 @@ function (_super) {
         }));
       },
       placeholder: "30s"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword  width-8"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("span", null, "Basis"), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'Defines the possible calculation options when performing summary calculations over time-series data.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Basis",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Defines the possible calculation options when performing summary calculations over time-series data.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
       Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
         value: {
           value: summary.basis
@@ -1753,11 +1716,11 @@ function (_super) {
       onChange: this.calcBasisValueChanged,
       options: this.getCalcBasisSegments(),
       allowCustomValue: true
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form gf-form--grow"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword  width-8"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("span", null, "Summaries")), this.state.summaries.map(function (s, index) {
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Summaries",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'Replacement for bad quality values.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, this.state.summaries.map(function (s, index) {
       return react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Segment"], {
         key: 'summaries-' + index,
         Component: react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(CustomLabelComponent, {
@@ -1778,20 +1741,11 @@ function (_super) {
       onChange: this.onSummaryAction,
       options: this.getSummarySegments(),
       allowCustomValue: true
-    }), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_components_Forms__WEBPACK_IMPORTED_MODULE_4__["QueryRowTerminator"], null))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form-inline"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form max-width-30"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword width-11"
-    }, "Display Name", react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("i", {
-      className: "fa fa-question-circle",
-      "bs-tooltip": "'If single attribute, modify display name. Otherwise use regex to modify display name.'",
-      "data-placement": "top"
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-5",
+    })))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineFieldRow"], null, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Display Name",
+      labelWidth: LABEL_WIDTH,
+      tooltip: 'If single attribute, modify display name. Otherwise use regex to modify display name.'
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: display,
       onChange: function onChange(event) {
@@ -1800,13 +1754,11 @@ function (_super) {
         }));
       },
       placeholder: "Display"
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Switch, {
-      className: "gf-form",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
       label: "Enable Regex Replace",
-      labelClass: "query-keyword",
-      checked: regex.enable,
+      labelWidth: LABEL_WIDTH
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineSwitch"], {
+      value: regex.enable,
       onChange: function onChange() {
         _this.onChange(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, metricsQuery), {
           regex: Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])(Object(tslib__WEBPACK_IMPORTED_MODULE_0__["__assign"])({}, regex), {
@@ -1814,14 +1766,10 @@ function (_super) {
           })
         }));
       }
-    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form max-width-30"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword"
-    }, "Search"), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-5",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Search",
+      labelWidth: LABEL_WIDTH - 8
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: regex.search,
       onChange: function onChange(event) {
@@ -1832,14 +1780,10 @@ function (_super) {
         }));
       },
       placeholder: "(.*)"
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("div", {
-      className: "gf-form max-width-30"
-    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement("label", {
-      className: "gf-form-label query-keyword"
-    }, "Replace"), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(Input, {
-      className: "gf-form-input width-5",
+    })), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["InlineField"], {
+      label: "Replace",
+      labelWidth: LABEL_WIDTH - 8
+    }, react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_3__["Input"], {
       onBlur: onRunQuery,
       value: regex.replace,
       onChange: function onChange(event) {
@@ -1850,7 +1794,7 @@ function (_super) {
         }));
       },
       placeholder: "$1"
-    }))), react__WEBPACK_IMPORTED_MODULE_2___default.a.createElement(_components_Forms__WEBPACK_IMPORTED_MODULE_4__["QueryRowTerminator"], null)));
+    }))));
   };
 
   return PIWebAPIQueryEditor;
@@ -1886,12 +1830,11 @@ __webpack_require__.r(__webpack_exports__);
 var QueryField = function QueryField(_a) {
   var label = _a.label,
       _b = _a.labelWidth,
-      labelWidth = _b === void 0 ? 8 : _b,
+      labelWidth = _b === void 0 ? 12 : _b,
       tooltip = _a.tooltip,
       children = _a.children;
   return react__WEBPACK_IMPORTED_MODULE_1___default.a.createElement(react__WEBPACK_IMPORTED_MODULE_1___default.a.Fragment, null, react__WEBPACK_IMPORTED_MODULE_1___default.a.createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_2__["InlineFormLabel"], {
     width: labelWidth,
-    className: "query-keyword",
     tooltip: tooltip
   }, label), children);
 };
@@ -2405,7 +2348,7 @@ function (_super) {
 
 
   PiWebAPIDatasource.prototype.metricFindQuery = function (query, queryOptions) {
-    var _a;
+    var _a, _b;
 
     var ds = this;
     var querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
@@ -2416,6 +2359,7 @@ function (_super) {
 
     if (queryOptions.isPiPoint) {
       query.path = this.templateSrv.replace(query.path);
+      query.pointName = this.templateSrv.replace(query.pointName);
     } else {
       if (query.path === '') {
         query.type = querydepth[0];
@@ -2429,8 +2373,10 @@ function (_super) {
       });
     }
 
+    query.filter = (_a = query.filter) !== null && _a !== void 0 ? _a : '*';
+
     if (query.type === 'servers') {
-      return ((_a = ds.afserver) === null || _a === void 0 ? void 0 : _a.webid) ? ds.getAssetServer(this.afserver.name).then(function (result) {
+      return ((_b = ds.afserver) === null || _b === void 0 ? void 0 : _b.name) ? ds.getAssetServer(ds.afserver.name).then(function (result) {
         return [result];
       }).then(ds.metricQueryTransform) : ds.getAssetServers().then(ds.metricQueryTransform);
     } else if (query.type === 'databases') {
@@ -2452,7 +2398,8 @@ function (_super) {
         var _a;
 
         return ds.getElements((_a = element.WebId) !== null && _a !== void 0 ? _a : '', {
-          selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren'
+          selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
+          nameFilter: query.filter
         });
       }).then(ds.metricQueryTransform);
     } else if (query.type === 'attributes') {
@@ -2461,7 +2408,8 @@ function (_super) {
 
         return ds.getAttributes((_a = element.WebId) !== null && _a !== void 0 ? _a : '', {
           searchFullHierarchy: 'true',
-          selectedFields: 'Items.WebId;Items.Name;Items.Path'
+          selectedFields: 'Items.WebId;Items.Name;Items.Path',
+          nameFilter: query.filter
         });
       }).then(ds.metricQueryTransform);
     } else if (query.type === 'dataserver') {

@@ -399,6 +399,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     }
     if (queryOptions.isPiPoint) {
       query.path = this.templateSrv.replace(query.path);
+      query.pointName = this.templateSrv.replace(query.pointName);
     } else {
       if (query.path === '') {
         query.type = querydepth[0];
@@ -409,10 +410,12 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       query.path = query.path.replace(/\{([^\\])*\}/gm, (r: string) => r.substring(1, r.length - 2).split(',')[0]);
     }
 
+    query.filter = query.filter ?? '*';
+
     if (query.type === 'servers') {
-      return ds.afserver?.webid
+      return ds.afserver?.name
         ? ds
-            .getAssetServer(this.afserver.name)
+            .getAssetServer(ds.afserver.name)
             .then((result: PiwebapiRsp) => [result])
             .then(ds.metricQueryTransform)
         : ds.getAssetServers().then(ds.metricQueryTransform);
@@ -436,6 +439,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .then((element) =>
           ds.getElements(element.WebId ?? '', {
             selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
+            nameFilter: query.filter
           })
         )
         .then(ds.metricQueryTransform);
@@ -446,6 +450,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           ds.getAttributes(element.WebId ?? '', {
             searchFullHierarchy: 'true',
             selectedFields: 'Items.WebId;Items.Name;Items.Path',
+            nameFilter: query.filter
           })
         )
         .then(ds.metricQueryTransform);
