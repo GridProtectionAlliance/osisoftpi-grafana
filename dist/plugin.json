@@ -28,12 +28,12 @@
       },
       {
         "name": "PI System",
-        "url": "http://www.osisoft.com/corporate/connected-services/pisystem.html"
+        "url": "https://www.osisoft.com/pi-system"
       }
     ],
     "screenshots": [],
     "version": "2.0.0",
-    "updated": "2022-03-21"
+    "updated": "2022-04-01"
   },
   "dependencies": {
     "grafanaDependency": ">=7.2.0",
