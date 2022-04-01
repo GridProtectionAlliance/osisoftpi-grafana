@@ -175,7 +175,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       // explode All or Multi-selection
       const varsKeys = keys(options.scopedVars);
       this.templateSrv.getVariables().forEach((v: any) => {
-        if (ds.isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) { // All selection
+        if (ds.isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
+          // All selection
           const variables = v.options.filter((o: any) => !o.selected);
           // attributes
           tar.attributes = tar.attributes.map((attr: string) => {
@@ -183,11 +184,12 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           });
           tar.attributes = uniq(flatten(tar.attributes));
           // elementPath
-          tar.elementPathArray =  tar.elementPathArray.map((elem: string) => {
+          tar.elementPathArray = tar.elementPathArray.map((elem: string) => {
             return variables.map((vv: any) => elem.replace('{' + v.query + '}', vv.value));
           });
           tar.elementPathArray = uniq(flatten(tar.elementPathArray));
-        } else if (Array.isArray(v.current.text) && varsKeys.indexOf(v.name) < 0) { // Multi-selection
+        } else if (Array.isArray(v.current.text) && varsKeys.indexOf(v.name) < 0) {
+          // Multi-selection
           const variables = v.options.filter((o: any) => o.selected);
           // attributes
           const query = v.current.value.join(',');
@@ -722,27 +724,25 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {any} target - Grafana query target.
    * @param {string} url - The base URL for the query.
    * @returns - Metric data.
-   * 
+   *
    * @memberOf PiWebApiDatasource
    */
   private internalStream(query: any, target: any, url: string) {
     const ds = this;
     var targetName = target.expression || target.elementPath;
     var displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
-    
+
     const promises = map(target.attributes, (attribute) => {
-      if (target.elementPathArray.length == 1 && target.elementPath === target.elementPathArray[0]) {
+      if (target.elementPathArray.length === 1 && target.elementPath === target.elementPathArray[0]) {
         return ds.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint);
       } else {
-        return target.elementPathArray.map(
-          (elementPath: string) => ds.restGetWebId(elementPath + '|' + attribute, target.isPiPoint)
+        return target.elementPathArray.map((elementPath: string) =>
+          ds.restGetWebId(elementPath + '|' + attribute, target.isPiPoint)
         );
       }
     });
 
-    return Promise.all(
-      flatten(promises)
-    ).then((webidresponse) => {
+    return Promise.all(flatten(promises)).then((webidresponse) => {
       const query: any = {};
       each(webidresponse, (webid, index) => {
         query[index + 1] = {
@@ -757,7 +757,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           const targetResults: any[] = [];
           each(response.data, (value, key) => {
             if (target.expression) {
-              const attribute = webidresponse[parseInt(key) - 1].Name;
+              const attribute = webidresponse[parseInt(key, 10) - 1].Name;
               each(ds.processResults(value.Content, target, displayName || attribute || targetName), (targetResult) =>
                 targetResults.push(targetResult)
               );
@@ -772,7 +772,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           return targetResults;
         })
         .catch((err: any) => (ds.error = err));
-    })
+    });
   }
 
   /**
@@ -1044,20 +1044,20 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       while ((m = regex.exec(filter1)) !== null) {
         // This is necessary to avoid infinite loops with zero-width matches
         if (m.index === regex.lastIndex) {
-            regex.lastIndex++;
+          regex.lastIndex++;
         }
-        
+
         // The result can be accessed through the `m`-variable.
         m.forEach((match, groupIndex) => {
           if (groupIndex === 0) {
-            filter1 = filter1.replace(match, match.replace('{', '(').replace('}', ')').replace(',','|'));
+            filter1 = filter1.replace(match, match.replace('{', '(').replace('}', ')').replace(',', '|'));
             filter2 = filter2.replace(match, '*');
           }
         });
       }
     }
-    return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + filter2).then(
-      (results) => (results.data.Items ?? []).filter(item => item.Name?.match(filter1))
+    return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + filter2).then((results) =>
+      (results.data.Items ?? []).filter(item => item.Name?.match(filter1))
     );
   }
 

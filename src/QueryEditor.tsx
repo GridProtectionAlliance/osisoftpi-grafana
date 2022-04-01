@@ -30,9 +30,11 @@ const REMOVE_LABEL = '-REMOVE-';
 
 const CustomLabelComponent = (props: any) => {
   if (props.value) {
-    return <div className={`gf-form-label ${props.value.type === 'template' ? 'query-keyword' : ''}`}>
-      {props.label ?? '--no label--'}
-    </div>;
+    return (
+      <div className={`gf-form-label ${props.value.type === 'template' ? 'query-keyword' : ''}`}>
+        {props.label ?? '--no label--'}
+      </div>
+    );
   }
   return (
     <a className="gf-form-label query-part">
@@ -744,11 +746,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       });
     } else {
       segmentsArray.push({
-        label: ''
+        label: '',
       });
     }
     return segmentsArray;
-  }
+  };
 
   /**
    * Update the internal state of the datasource.
@@ -798,9 +800,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       if (query.target && query.target.length > 0 && query.target !== ';') {
         attributesArray = [];
         // Build query from target
-        this.buildFromTarget(query, segmentsArray, attributesArray).then((_segmentsArray) => {
-          this.updateArray(_segmentsArray, attributesArray, summariesArray, isPiPoint);
-        }).catch(e => console.error(e));
+        this.buildFromTarget(query, segmentsArray, attributesArray)
+          .then((_segmentsArray) => {
+            this.updateArray(_segmentsArray, attributesArray, summariesArray, isPiPoint);
+          })
+          .catch(e => console.error(e));
         return;
       } else {
         segmentsArray = this.checkAfServer();
