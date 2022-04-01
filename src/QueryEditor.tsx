@@ -804,7 +804,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           .then((_segmentsArray) => {
             this.updateArray(_segmentsArray, attributesArray, summariesArray, isPiPoint);
           })
-          .catch(e => console.error(e));
+          .catch((e) => console.error(e));
         return;
       } else {
         segmentsArray = this.checkAfServer();

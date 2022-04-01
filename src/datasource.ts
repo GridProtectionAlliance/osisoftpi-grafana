@@ -1057,7 +1057,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       }
     }
     return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + filter2).then((results) =>
-      (results.data.Items ?? []).filter(item => item.Name?.match(filter1))
+      (results.data.Items ?? []).filter((item) => item.Name?.match(filter1))
     );
   }
 
