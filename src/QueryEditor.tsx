@@ -420,9 +420,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       type: 'pipoint',
     };
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
+    console.log('Start getAttributeSegmentsPI');
     return datasource
       .metricFindQuery(findQuery, { isPiPoint: query.isPiPoint })
       .then((items: any[]) => {
+        console.log('Found', items);
         segments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             path: item.Path,
@@ -450,6 +452,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         return segments;
       })
       .catch((err: any) => {
+        console.log('err', err);
         ctrl.error = err.message || 'Failed to issue metric query';
         return segments;
       });
@@ -882,6 +885,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       () => {
         this.onChange({
           ...queryChange,
+          expression: '',
           attributes: this.state.attributes,
           segments: this.state.segments,
           isPiPoint,
@@ -1025,22 +1029,24 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </>
         )}
 
-        <InlineField
-          label="Calculation"
-          labelWidth={LABEL_WIDTH}
-          tooltip={
-            "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
-          }
-        >
-          <Input
-            onBlur={onRunQuery}
-            value={expression}
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              this.onChange({ ...metricsQuery, expression: event.target.value })
+        {!isPiPoint && (
+          <InlineField
+            label="Calculation"
+            labelWidth={LABEL_WIDTH}
+            tooltip={
+              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
             }
-            placeholder="'.'*2"
-          />
-        </InlineField>
+          >
+            <Input
+              onBlur={onRunQuery}
+              value={expression}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                this.onChange({ ...metricsQuery, expression: event.target.value })
+              }
+              placeholder="'.'*2"
+            />
+          </InlineField>
+        )}
 
         <InlineFieldRow>
           <InlineField

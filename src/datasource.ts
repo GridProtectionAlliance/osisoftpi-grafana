@@ -1038,6 +1038,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   private piPointSearch(serverId: string, nameFilter: string): Promise<PiwebapiRsp[]> {
     let filter1 = this.templateSrv.replace(nameFilter);
     let filter2 = `${filter1}`;
+    let doFilter = false;
     if (filter1 !== nameFilter) {
       const regex = /\{(\w|,)+\}/gs;
       let m;
@@ -1052,13 +1053,17 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           if (groupIndex === 0) {
             filter1 = filter1.replace(match, match.replace('{', '(').replace('}', ')').replace(',', '|'));
             filter2 = filter2.replace(match, '*');
+            doFilter = true;
           }
         });
       }
     }
-    return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + filter2).then((results) =>
-      (results.data.Items ?? []).filter((item) => item.Name?.match(filter1))
-    );
+    return this.restGet('/dataservers/' + serverId + '/points?maxCount=20&nameFilter=' + filter2).then((results) => {
+      if (!!results && !!results.data?.Items) {
+        return doFilter ? results.data.Items.filter((item) => item.Name?.match(filter1)) : results.data.Items;
+      }
+      return [];
+    });
   }
 
   /**
