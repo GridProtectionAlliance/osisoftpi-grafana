@@ -416,15 +416,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const findQuery = {
       path: '',
       webId: this.getSelectedPIServer(),
-      pointName: attributeText + '*',
+      pointName: (attributeText ?? '') + '*',
       type: 'pipoint',
     };
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
-    console.log('Start getAttributeSegmentsPI');
     return datasource
       .metricFindQuery(findQuery, { isPiPoint: query.isPiPoint })
       .then((items: any[]) => {
-        console.log('Found', items);
         segments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             path: item.Path,
@@ -452,7 +450,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         return segments;
       })
       .catch((err: any) => {
-        console.log('err', err);
         ctrl.error = err.message || 'Failed to issue metric query';
         return segments;
       });
