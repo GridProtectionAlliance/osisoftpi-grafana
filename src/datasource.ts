@@ -76,6 +76,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       ),
     ]);
 
+    // eslint-disable-next-line no-console
     console.debug(`Plugin version 2.0.1`);
   }
 
