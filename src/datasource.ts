@@ -75,9 +75,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         (result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)
       ),
     ]);
-
-    // eslint-disable-next-line no-console
-    console.debug(`Plugin version 2.0.1`);
   }
 
   /**
