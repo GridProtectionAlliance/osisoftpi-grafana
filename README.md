@@ -2,7 +2,7 @@
 
 This data source provides access to OSIsoft PI and PI-AF data through PI Web API.
 
-![display](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/system_overview.png)
+![display](dist/docs/img/system_overview.png)
 
 # Usage
 
@@ -18,7 +18,7 @@ server configuration and add credentials to the data source settings.
 NOTE: If you are using PI-Coresight, it is recommended to create a new
 instance of PI Web API for use with this plugin.
 
-See [PI Web API Documentation](https://livelibrary.osisoft.com/LiveLibrary/content/en/web-api-v6/) 
+See [PI Web API Documentation](https://docs.osisoft.com/bundle/pi-web-api)
 for more information on configuring PI Web API.
 
 
@@ -57,21 +57,21 @@ Currently, the query interface requires a json query.
 An example config is shown below.  
 `{"path": "PISERVER\\DatabaseName\\ElementNameWithChildren"}`
 
-![template_setup_1.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/template_setup_1.png)
+![template_setup_1.png](dist/docs/img/template_setup_1.png)
 
 
 # Event Frames and Annotations
 
 This datasource can use AF Event Frames as annotations.
 
-![event-frame](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame.png)
+![event-frame](dist/docs/img/event_frame.png)
 
 Creating an annotation query and use the Event Frame category as the query string.
 Color and regex replacement strings for the name are supported.
 
 For example:  
-![event-frame-setup-1](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame_setup_1.png)
-![event-frame-setup-2](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame_setup_2.png)  
+![event-frame-setup-1](dist/docs/img/event_frame_setup_1.png)
+![event-frame-setup-2](dist/docs/img/event_frame_setup_2.png)  
 
 
 # Installation

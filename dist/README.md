@@ -18,13 +18,13 @@ server configuration and add credentials to the data source settings.
 NOTE: If you are using PI-Coresight, it is recommended to create a new
 instance of PI Web API for use with this plugin.
 
-See [PI Web API Documentation](https://livelibrary.osisoft.com/LiveLibrary/content/en/web-api-v6/) 
+See [PI Web API Documentation](https://docs.osisoft.com/bundle/pi-web-api)
 for more information on configuring PI Web API.
 
 
 ## Querying via the PI Asset Framework
 
-![elements_and_attributes.png](dist/docs/img/elements_and_attributes.png)
+![elements_and_attributes.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/elements_and_attributes.png)
 
 1. Verify that the `PI Point Search` toggle is greyed off
 2. In `Element` click `Select AF Database` and choose desired database in list
@@ -40,7 +40,7 @@ for more information on configuring PI Web API.
 
 ## Querying via the PI Dataserver (PI Points)
 
-![pi_point_query.png](dist/docs/img/pi_point_query.png)
+![pi_point_query.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/pi_point_query.png)
 
 1. Toggle the `Pi Point Search` on
 2. Under `Data Server` click `Select Dataserver` and select desired PI Dataserver
