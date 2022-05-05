@@ -2,7 +2,7 @@
 
 This data source provides access to OSIsoft PI and PI-AF data through PI Web API.
 
-![display](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/system_overview.png)
+![display](dist/docs/img/system_overview.png)
 
 # Usage
 
@@ -24,7 +24,7 @@ for more information on configuring PI Web API.
 
 ## Querying via the PI Asset Framework
 
-![elements_and_attributes.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/elements_and_attributes.png)
+![elements_and_attributes.png](dist/docs/img/elements_and_attributes.png)
 
 1. Verify that the `PI Point Search` toggle is greyed off
 2. In `Element` click `Select AF Database` and choose desired database in list
@@ -40,7 +40,7 @@ for more information on configuring PI Web API.
 
 ## Querying via the PI Dataserver (PI Points)
 
-![pi_point_query.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/pi_point_query.png)
+![pi_point_query.png](dist/docs/img/pi_point_query.png)
 
 1. Toggle the `Pi Point Search` on
 2. Under `Data Server` click `Select Dataserver` and select desired PI Dataserver
@@ -57,21 +57,21 @@ Currently, the query interface requires a json query.
 An example config is shown below.  
 `{"path": "PISERVER\\DatabaseName\\ElementNameWithChildren"}`
 
-![template_setup_1.png](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/template_setup_1.png)
+![template_setup_1.png](dist/docs/img/template_setup_1.png)
 
 
 # Event Frames and Annotations
 
 This datasource can use AF Event Frames as annotations.
 
-![event-frame](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame.png)
+![event-frame](dist/docs/img/event_frame.png)
 
 Creating an annotation query and use the Event Frame category as the query string.
 Color and regex replacement strings for the name are supported.
 
 For example:  
-![event-frame-setup-1](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame_setup_1.png)
-![event-frame-setup-2](https://raw.githubusercontent.com/GridProtectionAlliance/osisoftpi-grafana/master/docs/img/event_frame_setup_2.png)  
+![event-frame-setup-1](dist/docs/img/event_frame_setup_1.png)
+![event-frame-setup-2](dist/docs/img/event_frame_setup_2.png)  
 
 
 # Installation
