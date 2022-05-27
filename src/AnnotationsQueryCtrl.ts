@@ -1,36 +1,47 @@
 export class AnnotationsQueryCtrl {
   static templateUrl = 'partials/annotations.editor.html';
 
+  $scope: any;
   annotation: any;
+  datasource: any;
 
   /** @ngInject */
-  constructor() {
+  constructor($scope: any) {
+    this.$scope = $scope;
+    this.annotation = $scope.ctrl.annotation;
+    this.datasource = $scope.ctrl.datasource;
+
+    // load defaults
     this.annotation.query = this.annotation.query || {};
     this.annotation.databases = this.annotation.databases || [];
     this.annotation.templates = this.annotation.templates || [];
     this.annotation.regex = this.annotation.regex || {};
     this.annotation.attribute = this.annotation.attribute || {};
     this.annotation.showEndTime = this.annotation.showEndTime || false;
-    this.getDatabases();
+
+    this.datasource.getAssetServer(this.datasource.afserver.name).then((result: any) => {
+      return this.getDatabases(result.WebId);
+    });
   }
   templateChanged() {
     // do nothing
   }
   databaseChanged() {
+    this.annotation.templates = [];
     this.getEventFrames();
   }
-  getDatabases() {
+  getDatabases(webid: string) {
     var ctrl = this;
-    // @ts-ignore
-    return ctrl.datasource.getDatabases(ctrl.datasource.afserver.webid!).then((dbs: any) => {
+    ctrl.datasource.getDatabases(webid).then((dbs: any) => {
       ctrl.annotation.databases = dbs;
+      this.$scope.$apply();
     });
   }
   getEventFrames() {
     var ctrl = this;
-    // @ts-ignore
-    return ctrl.datasource.getEventFrameTemplates(this.annotation.database.WebId).then((templates: any) => {
+    ctrl.datasource.getEventFrameTemplates(this.annotation.database.WebId).then((templates: any) => {
       ctrl.annotation.templates = templates;
+      this.$scope.$apply();
     });
   }
 }

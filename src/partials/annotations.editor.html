@@ -1,16 +1,36 @@
-<h5 class="section-heading">Search Options 123</h5>
+<h5 class="section-heading">Search Options</h5>
 <div class="gf-form-inline">
   <div class="gf-form">
     <div class="gf-form max-width-30">
       <label class="gf-form-label query-keyword width-8">AF Database</label>
-      <select ng-options='opt as opt.Name for opt in ctrl.annotation.databases track by opt.WebId' ng-model='ctrl.annotation.database' ng-change='ctrl.databaseChanged()'></select>
+      <select
+        ng-options='opt as opt.Name for opt in ctrl.annotation.databases track by opt.WebId'
+        ng-model='ctrl.annotation.database'
+        ng-change='ctrl.databaseChanged()'
+        ng-disabled='ctrl.annotation.databases.length == 0'>
+        <option value="" disabled selected ng-if="ctrl.annotation.databases.length == 0">
+          Loading...
+        </option>
+      </select>
     </div>
     <div class="gf-form max-width-30">
       <label class="gf-form-label query-keyword width-8">Template</label>
-      <select ng-options='opt as opt.Name for opt in ctrl.annotation.templates track by opt.WebId' ng-model='ctrl.annotation.template' ng-change='ctrl.templateChanged()'></select>
+      <select
+        ng-options='opt as opt.Name for opt in ctrl.annotation.templates track by opt.WebId'
+        ng-model='ctrl.annotation.template'
+        ng-change='ctrl.templateChanged()'
+        ng-disabled='ctrl.annotation.templates.length == 0'>
+        <option value="" disabled selected ng-if="ctrl.annotation.databases.length > 0 && ctrl.annotation.templates.length == 0">
+          Loading...
+        </option>
+      </select>
     </div>
     <div class="gf-form">
-      <gf-form-switch class="gf-form" label="Show Start and End Time" label-class="query-keyword" checked="ctrl.annotation.showEndTime"
+      <gf-form-switch 
+        class="gf-form"
+        label="Show Start and End Time"
+        label-class="query-keyword"
+        checked="ctrl.annotation.showEndTime"
         on-change="ctrl.targetBlur()">
       </gf-form-switch>
     </div>
