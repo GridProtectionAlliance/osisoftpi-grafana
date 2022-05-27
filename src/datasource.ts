@@ -71,7 +71,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     Promise.all([
       this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),
       this.getDataServer(this.piserver.name).then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId)),
-      this.getDatabase(this.afserver.name + '\\' + this.afdatabase.name).then(
+      this.getDatabase(this.afserver.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined).then(
         (result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)
       ),
     ]);
@@ -115,7 +115,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
       text:
         eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime,
-      //  tags: eventFrame.CategoryNames.join()
     };
   }
 
@@ -328,13 +327,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     filter.push('endTime=' + options.range.to.toJSON());
 
     if (annotationOptions.attribute && annotationOptions.attribute.enable) {
-      var resourceUrl = this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId;Items.Value;Items.Name';
+      var resourceUrl =
+        this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
       if (!!annotationOptions.attribute.name) {
         resourceUrl =
           this.piwebapiurl +
           '/streamsets/{0}/value?nameFilter=' +
           annotationOptions.attribute.name +
-          '&selectedFields=Items.WebId;Items.Value;Items.Name';
+          '&selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
       }
       var query: any = {};
       query['1'] = {
@@ -461,7 +461,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .getDatabase(query.path)
         .then((db) =>
           ds.getDatabaseElements(db.WebId ?? '', {
-            selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
+            selectedFields: 'Items.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
           })
         )
         .then(ds.metricQueryTransform);
@@ -470,7 +470,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .getElement(query.path)
         .then((element) =>
           ds.getElements(element.WebId ?? '', {
-            selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
+            selectedFields: 'Items.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
             nameFilter: query.filter,
           })
         )
@@ -481,7 +481,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         .then((element) =>
           ds.getAttributes(element.WebId ?? '', {
             searchFullHierarchy: 'true',
-            selectedFields: 'Items.WebId;Items.Name;Items.Path',
+            selectedFields: 'Items.WebId%3BItems.Name%3BItems.Path',
             nameFilter: query.filter,
           })
         )
@@ -815,13 +815,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
 
     let path = '';
     if (isPiPoint) {
-      path = '/points?selectedFields=WebId;Name;Path&path=\\\\' + assetPath.replace('|', '\\');
+      path = '/points?selectedFields=WebId%3BName%3BPath&path=\\\\' + assetPath.replace('|', '\\');
     } else {
       // no cache hit, query server
       path =
         (assetPath.indexOf('|') >= 0
-          ? '/attributes?selectedFields=WebId;Name;Path&path=\\\\'
-          : '/elements?selectedFields=WebId;Name;Path&path=\\\\') + assetPath;
+          ? '/attributes?selectedFields=WebId%3BName%3BPath&path=\\\\'
+          : '/elements?selectedFields=WebId%3BName%3BPath&path=\\\\') + assetPath;
     }
 
     return this.backendSrv
@@ -904,21 +904,33 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     return this.restGet('/assetdatabases?path=\\\\' + path).then((response) => response.data);
   }
   getDatabases(serverId: string, options?: any): Promise<PiwebapiRsp[]> {
+    if (!serverId) {
+      return Promise.resolve([]);
+    }
     return this.restGet('/assetservers/' + serverId + '/assetdatabases').then((response) => response.data.Items ?? []);
   }
   getElement(path: string): Promise<PiwebapiRsp> {
+    if (!path) {
+      return Promise.resolve({});
+    }
     return this.restGet('/elements?path=\\\\' + path).then((response) => response.data);
   }
   getEventFrameTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
+    if (!databaseId) {
+      return Promise.resolve([]);
+    }
     return this.restGet(
-      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType;Items.Name;Items.WebId'
+      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
     ).then((response) => {
       return filter(response.data.Items ?? [], (item) => item.InstanceType === 'EventFrame');
     });
   }
   getElementTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
+    if (!databaseId) {
+      return Promise.resolve([]);
+    }
     return this.restGet(
-      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType;Items.Name;Items.WebId'
+      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
     ).then((response) => {
       return filter(response.data.Items ?? [], (item) => item.InstanceType === 'Element');
     });

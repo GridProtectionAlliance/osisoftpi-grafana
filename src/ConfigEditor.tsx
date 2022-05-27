@@ -61,7 +61,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     return (
       <div>
         <DataSourceHttpSettings
-          defaultUrl="https://server.name/webapi"
+          defaultUrl="https://server.name/piwebapi"
           dataSourceConfig={options}
           onChange={this.onMyOptionsChange}
           showAccessOptions
