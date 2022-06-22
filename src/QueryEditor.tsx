@@ -663,7 +663,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       // remove element hierarchy from attribute collection
       splitAttributes.splice(0, 1);
 
-      each(splitElements, function (item, index) {
+      each(splitElements, (item, _) => {
         segments.push({
           label: item,
           value: {
