@@ -13,10 +13,10 @@
   "author": "GridProtectionAlliance",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@grafana/data": "latest",
-    "@grafana/runtime": "latest",
-    "@grafana/toolkit": "latest",
-    "@grafana/ui": "latest",
+    "@grafana/data": "^8.5.0",
+    "@grafana/runtime": "^8.5.0",
+    "@grafana/toolkit": "^8.5.0",
+    "@grafana/ui": "^8.5.0",
     "@testing-library/jest-dom": "5.4.0",
     "@testing-library/react": "^10.0.2",
     "@types/lodash": "latest"
