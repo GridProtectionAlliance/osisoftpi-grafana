@@ -1,6 +1,6 @@
 {
   "name": "grid-protection-alliance-osisoftpi-grafana",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "OSISoft PI Grafana Plugin",
   "scripts": {
     "build": "grafana-toolkit plugin:build",
