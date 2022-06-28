@@ -433,14 +433,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       query = JSON.parse(query as string);
     }
     if (queryOptions.isPiPoint) {
-      query.path = this.templateSrv.replace(query.path);
+      query.path = this.templateSrv.replace(query.path, queryOptions);
     } else {
       if (query.path === '') {
         query.type = querydepth[0];
       } else if (query.type !== 'attributes') {
         query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))];
       }
-      query.path = this.templateSrv.replace(query.path);
+      query.path = this.templateSrv.replace(query.path, queryOptions);
       query.path = query.path.replace(/\{([^\\])*\}/gi, (r: string) => r.substring(1, r.length - 2).split(',')[0]);
     }
 
