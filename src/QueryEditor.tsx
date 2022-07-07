@@ -795,7 +795,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     this.initialLoad(false);
   };
   componentDidUpdate = () => {
-    console.log(this.props.data);
     if (this.props.data?.state === 'Done' && !!this.props.data?.request?.scopedVars && !this.scopedVarsDone) {
       this.scopedVarsDone = true;
       this.initialLoad(true);
@@ -1075,7 +1074,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 })
               }
               type="number"
-              placeholder="150000"
+              placeholder="1000"
             />
           </InlineField>
           <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>

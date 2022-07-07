@@ -559,23 +559,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    */
   parsePiPointValue(value: any, target: any, isSummary: boolean) {
-    var num = !isSummary && typeof value.Value === 'object' ? Number(value.Value.Value) : Number(value.Value);
-    var text = value.Value;
+    let num = !isSummary && typeof value.Value === 'object' ? value.Value?.Value : value.Value;
 
-    if (!value.Good || (target.digitalStates && target.digitalStates.enable)) {
+    if (!value.Good || !!target.digitalStates?.enable) {
       num = !isSummary && typeof value.Value === 'object' ? value.Value.Name : value.Name;
+      return [num.trim(), new Date(value.Timestamp).getTime()];
     }
 
-    if (!!isSummary && target.summary.interval === '') {
-      if (target.digitalStates && target.digitalStates.enable) {
-        return [num, new Date(value.Timestamp).getTime()];
-      } else if (!value.Good) {
-        return [num, new Date(value.Timestamp).getTime()];
-      } else {
-        return [!isNaN(num) ? num : 0, new Date(target.endTime).getTime()];
-      }
-    }
-    return [!isNaN(num) ? num : text, new Date(value.Timestamp).getTime()];
+    return [this.checkNumber(num) ? Number(num) : num.trim(), new Date(value.Timestamp).getTime()];
   }
 
   /**
@@ -657,6 +648,12 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
 
   /** PRIVATE SECTION */
 
+  /**
+   * Check if all items are selected.
+   *
+   * @param {any} current the current variable selection
+   * @return {boolean} true if all value is selected, false otherwise
+   */
   private isAllSelected(current: any): boolean {
     if (!current) {
       return false;
@@ -665,6 +662,16 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       return current.text.indexOf('All') >= 0;
     }
     return current.text === 'All';
+  }
+
+  /**
+   * Check if the value is a number.
+   *
+   * @param {any} number the value to check
+   * @returns {boolean} true if the value is a number, false otherwise
+   */
+  private checkNumber(number: any): boolean {
+    return typeof number === 'number' && !Number.isNaN(number) && Number.isFinite(number);
   }
 
   /**
@@ -712,12 +719,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (splitPath.length === 0) {
       return '';
     }
-    splitPath = splitPath[0].split('\\');
-    const splitStr = splitPath.length === 0 ? '' : splitPath.pop() ?? '';
     if (elementPathArray.length === 0) {
       return '';
     }
-    return (elementPathArray.find((e) => path.indexOf(e.path) >= 0)?.variable ?? '') + '|' + splitStr;
+    splitPath = splitPath[0].split('\\');
+    const splitStr = splitPath.length === 0 ? '' : splitPath.pop() ?? '';
+    const foundElement = elementPathArray.find((e) => path.indexOf(e.path) >= 0)?.variable;
+    return foundElement ? foundElement + '|' + splitStr : splitStr;
   }
 
   /**
@@ -771,7 +779,11 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         } else if (target.interpolate && target.interpolate.enable) {
           url += '/interpolated' + timeRange + '&interval=' + intervalTime;
         } else if (target.recordedValues && target.recordedValues.enable) {
-          url += '/recorded' + timeRange + '&maxCount=' + target.recordedValues.maxNumber;
+          const maxNumber =
+            target.recordedValues.maxNumber && !isNaN(target.recordedValues.maxNumber)
+              ? target.recordedValues.maxNumber
+              : 1000;
+          url += '/recorded' + timeRange + '&maxCount=' + maxNumber;
         } else {
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints;
         }
