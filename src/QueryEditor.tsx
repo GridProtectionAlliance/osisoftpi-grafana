@@ -326,12 +326,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   };
 
   // get a ui segment for the attributes
-  getElementSegments = (index: number): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
-    const { datasource, query } = this.props;
+  getElementSegments = (
+    index: number,
+    currentSegment?: Array<SelectableValue<PIWebAPISelectableValue>>
+  ): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
+    const { datasource, query, data } = this.props;
     var ctrl = this;
     var findQuery = query.isPiPoint
       ? { type: 'dataserver' }
-      : { path: this.getSegmentPathUpTo(this.state.segments.slice(0), index) };
+      : { path: this.getSegmentPathUpTo(currentSegment ?? this.state.segments.slice(0), index) };
 
     if (!query.isPiPoint) {
       if (datasource.afserver?.name && index === 0) {
@@ -362,7 +365,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       // }
     }
     return datasource
-      .metricFindQuery(findQuery, { isPiPoint: query.isPiPoint })
+      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
       .then((items: any[]) => {
         var altSegments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
@@ -411,7 +414,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   // get the list of attributes for the user interface - PI
   getAttributeSegmentsPI = (attributeText?: string): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
-    const { datasource, query } = this.props;
+    const { datasource, query, data } = this.props;
     const ctrl = this;
     const findQuery = {
       path: '',
@@ -421,7 +424,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     };
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
     return datasource
-      .metricFindQuery(findQuery, { isPiPoint: query.isPiPoint })
+      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
       .then((items: any[]) => {
         segments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
@@ -494,7 +497,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       // remove element hierarchy from attribute collection
       splitAttributes.splice(0, 1);
 
-      each(splitElements, function (item, index) {
+      each(splitElements, (item, _) => {
         segmentsArray.push({
           label: item,
           value: {
@@ -503,7 +506,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           },
         });
       });
-      each(splitAttributes, function (item, index) {
+      each(splitAttributes, (item, _) => {
         if (item !== '') {
           // set current value
           attributesArray.push({
@@ -515,7 +518,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           });
         }
       });
-      return this.getElementSegments(segmentsArray.length + 1).then((elements) => {
+      return this.getElementSegments(splitElements.length + 1, segmentsArray).then((elements) => {
         if (elements.length > 0) {
           segmentsArray.push({
             label: 'Select Element',
@@ -567,14 +570,14 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>,
     segments: Array<SelectableValue<PIWebAPISelectableValue>>
   ): Promise<any> {
-    const { datasource } = this.props;
+    const { datasource, data } = this.props;
     var ctrl = this;
     var findQuery = {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
       type: 'attributes',
     };
     return datasource
-      .metricFindQuery(findQuery, { isPiPoint: false })
+      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: false }))
       .then((attributesResponse: any) => {
         var validAttributes: any = {};
 
@@ -607,7 +610,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     attribute: SelectableValue<PIWebAPISelectableValue>,
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>
   ) {
-    const { datasource } = this.props;
+    const { datasource, data } = this.props;
     var ctrl = this;
     var findQuery = {
       path: attribute.path,
@@ -616,7 +619,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       type: 'pipoint',
     };
     return datasource
-      .metricFindQuery(findQuery, { isPiPoint: true })
+      .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: true }))
       .then(() => {
         ctrl.attributeChangeValue(attributes);
       })
@@ -663,7 +666,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       // remove element hierarchy from attribute collection
       splitAttributes.splice(0, 1);
 
-      each(splitElements, function (item, index) {
+      each(splitElements, (item, _) => {
         segments.push({
           label: item,
           value: {
@@ -673,7 +676,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           },
         });
       });
-      this.getElementSegments(segments.length + 1).then((elements) => {
+      this.getElementSegments(splitElements.length + 1, segments).then((elements) => {
         if (elements.length > 0) {
           segments.push({
             label: 'Select Element',
@@ -764,9 +767,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PIWebAPIQueryEditor
    */
   updateArray = (
-    segmentsArray: any[],
-    attributesArray: any[],
-    summariesArray: any[],
+    segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>>,
+    attributesArray: Array<SelectableValue<PIWebAPISelectableValue>>,
+    summariesArray: Array<SelectableValue<PIWebAPISelectableValue>>,
     isPiPoint: boolean,
     cb?: (() => void) | undefined
   ) => {
@@ -786,14 +789,24 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     );
   };
 
-  // React action when component is mounted
+  // React action when component is initialized/updated
+  scopedVarsDone = false;
   componentDidMount = () => {
+    this.initialLoad(false);
+  };
+  componentDidUpdate = () => {
+    if (this.props.data?.state === 'Done' && !!this.props.data?.request?.scopedVars && !this.scopedVarsDone) {
+      this.scopedVarsDone = true;
+      this.initialLoad(true);
+    }
+  };
+  initialLoad = (force: boolean) => {
     const { query } = this.props;
     const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery;
     const { segments, attributes, summary, isPiPoint } = metricsQuery;
 
-    let segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>> = segments?.slice(0) ?? [];
-    let attributesArray: Array<SelectableValue<PIWebAPISelectableValue>> = attributes?.slice(0) ?? [];
+    let segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>> = force ? [] : segments?.slice(0) ?? [];
+    let attributesArray: Array<SelectableValue<PIWebAPISelectableValue>> = force ? [] : attributes?.slice(0) ?? [];
     let summariesArray = summary?.types ?? [];
 
     if (!isPiPoint && segmentsArray.length === 0) {
@@ -1061,7 +1074,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 })
               }
               type="number"
-              placeholder="150000"
+              placeholder="1000"
             />
           </InlineField>
           <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
