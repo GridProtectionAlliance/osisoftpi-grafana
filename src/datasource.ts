@@ -813,7 +813,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     let promises: Promise<PiwebapiRsp[]>;
 
     if (noTemplate) {
-      if (target.attributes.length > 1) {
+      if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = ds
           .restGetWebId(target.elementPath, target.isPiPoint)
           .then((datarsp) =>
@@ -837,7 +837,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         );
       }
     } else {
-      if (target.attributes.length > 1) {
+      if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = Promise.all(
           target.elementPathArray.map((elementPath: PiwebapiElementPath) => {
             return ds
