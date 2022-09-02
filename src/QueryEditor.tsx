@@ -794,12 +794,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   componentDidMount = () => {
     this.initialLoad(false);
   };
+
   componentDidUpdate = () => {
+    const { query } = this.props;
     if (this.props.data?.state === 'Done' && !!this.props.data?.request?.scopedVars && !this.scopedVarsDone) {
       this.scopedVarsDone = true;
-      this.initialLoad(true);
+      this.initialLoad(!query.isPiPoint);
     }
   };
+
   initialLoad = (force: boolean) => {
     const { query } = this.props;
     const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery;
@@ -860,6 +863,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           });
         }
       }
+
+      console.log(query.elementPath);
     } else {
       query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
       query.target =
@@ -869,6 +874,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           query.attributes.map((s) => s.value?.value),
           ';'
         );
+
+      console.log(query.elementPath);
     }
 
     onChange(query);
