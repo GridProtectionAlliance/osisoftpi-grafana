@@ -562,8 +562,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     let num = !isSummary && typeof value.Value === 'object' ? value.Value?.Value : value.Value;
 
     if (!value.Good || !!target.digitalStates?.enable) {
-      num = !isSummary && typeof value.Value === 'object' ? value.Value.Name : value.Name;
-      return [num.trim(), new Date(value.Timestamp).getTime()];
+      num = (!isSummary && typeof value.Value === 'object' ? value.Value?.Name : value.Name) ?? '';
+      return [this.checkNumber(num) ? Number(num) : num.trim(), new Date(value.Timestamp).getTime()];
     }
 
     return [this.checkNumber(num) ? Number(num) : num.trim(), new Date(value.Timestamp).getTime()];
@@ -813,7 +813,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     let promises: Promise<PiwebapiRsp[]>;
 
     if (noTemplate) {
-      if (target.attributes.length > 1) {
+      if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = ds
           .restGetWebId(target.elementPath, target.isPiPoint)
           .then((datarsp) =>
@@ -837,7 +837,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         );
       }
     } else {
-      if (target.attributes.length > 1) {
+      if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = Promise.all(
           target.elementPathArray.map((elementPath: PiwebapiElementPath) => {
             return ds
