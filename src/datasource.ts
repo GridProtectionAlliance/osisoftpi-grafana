@@ -48,6 +48,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   piserver: PiDataServer;
   afserver: PiDataServer;
   afdatabase: PiDataServer;
+  piPointConfig: boolean;
 
   basicAuth?: string;
   withCredentials?: boolean;
@@ -78,6 +79,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: undefined };
     this.afserver = { name: (instanceSettings.jsonData || {}).afserver, webid: undefined };
     this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined };
+    this.piPointConfig = instanceSettings.jsonData.pipoint || false;
 
     Promise.all([
       this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),

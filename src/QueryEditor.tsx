@@ -929,9 +929,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
     return (
       <>
-        <InlineField label="Is Pi Point?" labelWidth={LABEL_WIDTH}>
-          <InlineSwitch value={isPiPoint} onChange={this.onIsPiPointChange} />
-        </InlineField>
+        {this.props.datasource.piPointConfig && (
+          <InlineField label="Is Pi Point?" labelWidth={LABEL_WIDTH}>
+            <InlineSwitch value={isPiPoint} onChange={this.onIsPiPointChange} />
+          </InlineField>
+        )}
 
         {!!rawQuery && (
           <InlineFieldRow>

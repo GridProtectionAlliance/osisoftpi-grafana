@@ -52,6 +52,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   piserver?: string;
   afserver?: string;
   afdatabase?: string;
+  pipoint?: boolean;
 }
 
 /**
