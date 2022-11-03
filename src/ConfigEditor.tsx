@@ -14,7 +14,7 @@ const coerceOptions = (
     ...options,
     jsonData: {
       ...options.jsonData,
-      url: options.url
+      url: options.url,
     },
   };
 };
@@ -62,7 +62,6 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     };
     onOptionsChange({ ...options, jsonData });
   };
-  
 
   render() {
     const { options: originalOptions } = this.props;
@@ -77,7 +76,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
           showAccessOptions
         />
 
-        <h3 className="page-heading">PI Point</h3>        
+        <h3 className="page-heading">PI Point</h3>
 
         <div className="gf-form-group">
           <div className="gf-form-inline">
