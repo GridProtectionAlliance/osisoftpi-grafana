@@ -766,7 +766,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           results.push(ds.internalStream(query, target, url));
         } else {
           results.push(
-            ds.restGetWebId(target.elementPath, target.isPiPoint).then((webidresponse: any) => {
+            ds.restGetWebId(target.elementPath, this.piPointConfig && target.isPiPoint).then((webidresponse: any) => {
               return ds
                 .restPost(url + webidresponse.WebId)
                 .then((response: any) => ds.processResults(response.data, target, displayName || targetName, false))
@@ -817,7 +817,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (noTemplate) {
       if (target.attributes.length > 1 && !target.isPiPoint) {
         promises = ds
-          .restGetWebId(target.elementPath, target.isPiPoint)
+          .restGetWebId(target.elementPath, this.piPointConfig && target.isPiPoint)
           .then((datarsp) =>
             ds.getAttributes(datarsp.WebId!, {
               searchFullHierarchy: 'true',
@@ -834,7 +834,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       } else {
         promises = Promise.all(
           map(target.attributes, (attribute: string) =>
-            ds.restGetWebId(target.elementPath + '|' + attribute, target.isPiPoint)
+            ds.restGetWebId(target.elementPath + '|' + attribute, this.piPointConfig && target.isPiPoint)
           )
         );
       }
@@ -843,7 +843,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         promises = Promise.all(
           target.elementPathArray.map((elementPath: PiwebapiElementPath) => {
             return ds
-              .restGetWebId(elementPath.path, target.isPiPoint)
+              .restGetWebId(elementPath.path, this.piPointConfig && target.isPiPoint)
               .then((datarsp) =>
                 ds.getAttributes(datarsp.WebId!, {
                   searchFullHierarchy: 'true',
@@ -864,7 +864,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           flatten(
             map(target.attributes, (attribute: string) => {
               return target.elementPathArray.map((elementPath: PiwebapiElementPath) =>
-                ds.restGetWebId(elementPath.path + '|' + attribute, target.isPiPoint)
+                ds.restGetWebId(elementPath.path + '|' + attribute, this.piPointConfig && target.isPiPoint)
               );
             })
           )
