@@ -151,7 +151,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
   // get no data user interface segments
   getNoDataSegments() {
-    var segments = map(this.noDataReplacement, (item: string) => {
+    const segments = map(this.noDataReplacement, (item: string) => {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: item,
         value: {
@@ -179,7 +179,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const summaryTypes = filter(ctrl.summaryTypes, (type) => {
       return this.state.summaries.map((s) => s.value?.value).indexOf(type) === -1;
     });
-    var segments = map(summaryTypes, (item: string) => {
+    const segments = map(summaryTypes, (item: string) => {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: item,
         value: {
@@ -331,8 +331,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     currentSegment?: Array<SelectableValue<PIWebAPISelectableValue>>
   ): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
     const { datasource, query, data } = this.props;
-    var ctrl = this;
-    var findQuery = query.isPiPoint
+    const ctrl = this;
+    const findQuery = query.isPiPoint
       ? { type: 'dataserver' }
       : { path: this.getSegmentPathUpTo(currentSegment ?? this.state.segments.slice(0), index) };
 
@@ -367,7 +367,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
       .then((items: any[]) => {
-        var altSegments = map(items, (item: any) => {
+        const altSegments = map(items, (item: any) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: item.text,
             value: {
@@ -557,7 +557,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PIWebAPIQueryEditor
    */
   getSegmentPathUpTo(segments: Array<SelectableValue<PIWebAPISelectableValue>>, index: number): string {
-    var arr = segments.slice(0, index);
+    const arr = segments.slice(0, index);
 
     return reduce(
       arr,
@@ -586,21 +586,21 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     segments: Array<SelectableValue<PIWebAPISelectableValue>>
   ): Promise<any> {
     const { datasource, data } = this.props;
-    var ctrl = this;
-    var findQuery = {
+    const ctrl = this;
+    const findQuery = {
       path: this.getSegmentPathUpTo(segments.slice(0), segments.length),
       type: 'attributes',
     };
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: false }))
       .then((attributesResponse: any) => {
-        var validAttributes: any = {};
+        const validAttributes: any = {};
 
         each(attributesResponse, (attribute: any) => {
           validAttributes[attribute.Path.substring(attribute.Path.indexOf('|') + 1)] = attribute.WebId;
         });
 
-        var filteredAttributes = filter(attributes, (attrib: SelectableValue<PIWebAPISelectableValue>) => {
+        const filteredAttributes = filter(attributes, (attrib: SelectableValue<PIWebAPISelectableValue>) => {
           const changedValue = datasource.templateSrv.replace(attrib.value?.value);
           return validAttributes[changedValue] !== undefined;
         });
@@ -626,8 +626,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     attributes: Array<SelectableValue<PIWebAPISelectableValue>>
   ) {
     const { datasource, data } = this.props;
-    var ctrl = this;
-    var findQuery = {
+    const ctrl = this;
+    const findQuery = {
       path: attribute.path,
       webId: ctrl.getSelectedPIServer(),
       pointName: attribute.label,
@@ -650,10 +650,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PIWebAPIQueryEditor
    */
   getSelectedPIServer() {
-    var webID = '';
+    let webID = '';
 
     this.piServer.forEach((s) => {
-      var parts = this.props.query.target.split(';');
+      const parts = this.props.query.target.split(';');
       if (parts.length >= 2) {
         if (parts[0] === s.text) {
           webID = s.WebId;

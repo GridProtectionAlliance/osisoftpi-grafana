@@ -31,14 +31,14 @@ export class AnnotationsQueryCtrl {
     this.getEventFrames();
   }
   getDatabases(webid: string) {
-    var ctrl = this;
+    const ctrl = this;
     ctrl.datasource.getDatabases(webid).then((dbs: any) => {
       ctrl.annotation.databases = dbs;
       this.$scope.$apply();
     });
   }
   getEventFrames() {
-    var ctrl = this;
+    const ctrl = this;
     ctrl.datasource.getEventFrameTemplates(this.annotation.database.WebId).then((templates: any) => {
       ctrl.annotation.templates = templates;
       this.$scope.$apply();

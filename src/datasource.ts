@@ -113,7 +113,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       );
     }
 
-    var attributeText = '';
+    let attributeText = '';
     if (attributeDataItems) {
       each(attributeDataItems, (attributeData: any) => {
         const attributeValue = attributeData.Value.Value
@@ -149,7 +149,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
 
     options.targets = map(options.targets, (target) => {
       const ds = this;
-      var tar = {
+      const tar = {
         target: this.templateSrv.replace(target.elementPath, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         elementPathArray: [
@@ -294,14 +294,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       return Promise.resolve([]);
     }
 
-    var categoryName = options.annotation.query.categoryName
+    const categoryName = options.annotation.query.categoryName
       ? this.templateSrv.replace(options.annotation.query.categoryName, options.scopedVars, 'glob')
       : null;
-    var nameFilter = options.annotation.query.nameFilter
+    const nameFilter = options.annotation.query.nameFilter
       ? this.templateSrv.replace(options.annotation.query.nameFilter, options.scopedVars, 'glob')
       : null;
-    var templateName = options.annotation.template ? options.annotation.template.Name : null;
-    var annotationOptions = {
+    const templateName = options.annotation.template ? options.annotation.template.Name : null;
+    const annotationOptions = {
       name: options.annotation.name,
       datasource: options.annotation.datasource,
       enable: options.annotation.enable,
@@ -314,7 +314,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       nameFilter: nameFilter,
     };
 
-    var filter = [];
+    const filter = [];
     if (!!annotationOptions.categoryName) {
       filter.push('categoryName=' + annotationOptions.categoryName);
     }
@@ -331,7 +331,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     filter.push('endTime=' + options.range.to.toJSON());
 
     if (annotationOptions.attribute && annotationOptions.attribute.enable) {
-      var resourceUrl =
+      let resourceUrl =
         this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
       if (!!annotationOptions.attribute.name) {
         resourceUrl =
@@ -340,7 +340,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           annotationOptions.attribute.name +
           '&selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
       }
-      var query: any = {};
+      const query: any = {};
       query['1'] = {
         Method: 'GET',
         Resource: this.piwebapiurl + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&'),
@@ -357,7 +357,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         const data = result.data['1'].Content;
         const valueData = result.data['2'].Content;
 
-        var annotations = map(data.Items, (item: any, index: any) => {
+        const annotations = map(data.Items, (item: any, index: any) => {
           return curry(this.eventFrameToAnnotation)(
             annotationOptions,
             false,
@@ -367,7 +367,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         });
 
         if (options.annotation.showEndTime) {
-          var ends = map(data.Items, (item: any, index: number) => {
+          const ends = map(data.Items, (item: any, index: number) => {
             return curry(this.eventFrameToAnnotation)(
               annotationOptions,
               true,
@@ -385,9 +385,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     } else {
       return this.restGet('/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')).then(
         (result) => {
-          var annotations = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, false));
+          const annotations = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, false));
           if (options.annotation.showEndTime) {
-            var ends = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, true));
+            const ends = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, true));
             each(ends, (end) => {
               annotations.push(end);
             });
@@ -429,8 +429,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   metricFindQuery(query: any, queryOptions: any): Promise<MetricFindValue[]> {
-    var ds = this;
-    var querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
+    const ds = this;
+    const querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
     if (typeof query === 'string') {
       query = JSON.parse(query as string);
     }
@@ -535,11 +535,11 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    */
   parsePiPointValueList(value: any[], target: any, isSummary: boolean) {
-    var api = this;
-    var datapoints: any[] = [];
+    const api = this;
+    const datapoints: any[] = [];
     each(value, (item) => {
       // @ts-ignore
-      var { grafanaDataPoint, previousValue, drop } = this.noDataReplace(
+      const { grafanaDataPoint, previousValue, drop } = this.noDataReplace(
         isSummary ? item.Value : item,
         target.summary.nodata,
         api.parsePiPointValue(isSummary ? item.Value : item, target, isSummary)
@@ -590,8 +590,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     previousValue: any;
     drop: boolean;
   } {
-    var previousValue = null;
-    var drop = false;
+    let previousValue = null;
+    let drop = false;
     if (!item.Good || item.Value === 'No Data' || (item.Value?.Name && item.Value?.Name === 'No Data')) {
       if (noDataReplacementMode === 'Drop') {
         drop = true;
@@ -628,8 +628,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       name = name.replace(new RegExp(target.regex.search), target.regex.replace);
     }
     if (isSummary) {
-      var innerResults: any[] = [];
-      var groups = groupBy(content.Items, (item: any) => item.Type);
+      const innerResults: any[] = [];
+      const groups = groupBy(content.Items, (item: any) => item.Type);
       forOwn(groups, (value, key) => {
         innerResults.push({
           refId: target.refId,
@@ -740,7 +740,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    */
   private getStream(query: any): Array<Promise<PiwebapTargetRsp[]>> {
     const ds = this;
-    var results: Array<Promise<PiwebapTargetRsp[]>> = [];
+    const results: Array<Promise<PiwebapTargetRsp[]>> = [];
 
     each(query.targets, (target) => {
       // pi point config disabled
@@ -751,14 +751,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       target.attributes = filter(target.attributes || [], (attribute) => {
         return 1 && attribute;
       });
-      var url = '';
-      var isSummary = target.summary && target.summary.types && target.summary.types.length > 0;
-      var isInterpolated = target.interpolate && target.interpolate.enable;
+      let url = '';
+      const isSummary = target.summary && target.summary.types && target.summary.types.length > 0;
+      const isInterpolated = target.interpolate && target.interpolate.enable;
       // perhaps add a check to see if interpolate override time < query.interval
-      var intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
-      var timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
-      var targetName = target.expression || target.elementPath;
-      var displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
+      const intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
+      const timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
+      const targetName = target.expression || target.elementPath;
+      const displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
       if (target.expression) {
         url += '/calculation';
         if (isSummary) {
@@ -969,10 +969,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   private restGetWebId(assetPath: string, isPiPoint: boolean): Promise<PiwebapiRsp> {
-    var ds = this;
+    const ds = this;
 
     // check cache
-    var cachedWebId = ds.webidCache.get(assetPath);
+    const cachedWebId = ds.webidCache.get(assetPath);
     if (cachedWebId) {
       return Promise.resolve({ Path: assetPath, WebId: cachedWebId.WebId, Name: cachedWebId.Name });
     }
@@ -1120,7 +1120,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {string} options.selectedFields - List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getAttributes(elementId: string, options: any): Promise<PiwebapiRsp[]> {
-    var querystring =
+    let querystring =
       '?' +
       map(options, (value, key) => {
         return key + '=' + value;
@@ -1155,7 +1155,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {string} options.selectedFields -  List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getDatabaseElements(databaseId: string, options: any): Promise<PiwebapiRsp[]> {
-    var querystring =
+    let querystring =
       '?' +
       map(options, (value, key) => {
         return key + '=' + value;
@@ -1190,7 +1190,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {string} options.selectedFields -  List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getElements(elementId: string, options: any): Promise<PiwebapiRsp[]> {
-    var querystring =
+    let querystring =
       '?' +
       map(options, (value, key) => {
         return key + '=' + value;
@@ -1251,9 +1251,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   getWebId(target: any) {
-    var ds = this;
-    var isAf = target.target.indexOf('\\') >= 0;
-    var isAttribute = target.target.indexOf('|') >= 0;
+    const ds = this;
+    const isAf = target.target.indexOf('\\') >= 0;
+    const isAttribute = target.target.indexOf('|') >= 0;
     if (!isAf && target.target.indexOf('.') === -1) {
       return Promise.resolve([{ WebId: target.target, Name: target.display || target.target }]);
     }

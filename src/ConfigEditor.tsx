@@ -58,6 +58,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
+      piserver: event.target.checked ? options.jsonData.piserver : '',
       pipoint: event.target.checked,
     };
     onOptionsChange({ ...options, jsonData });
@@ -89,16 +90,18 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
         <h3 className="page-heading">PI/AF Connection Details</h3>
 
         <div className="gf-form-group">
-          <div className="gf-form">
-            <FormField
-              label="PI Server"
-              labelWidth={10}
-              inputWidth={25}
-              onChange={this.onPIServerChange}
-              value={options.jsonData.piserver || ''}
-              placeholder="Default PI Server to use for data requests"
-            />
-          </div>
+          {options.jsonData.pipoint && (
+            <div className="gf-form">
+              <FormField
+                label="PI Server"
+                labelWidth={10}
+                inputWidth={25}
+                onChange={this.onPIServerChange}
+                value={options.jsonData.piserver || ''}
+                placeholder="Default PI Server to use for data requests"
+              />
+            </div>
+          )}
           <div className="gf-form">
             <FormField
               label="AF Server"
