@@ -1,5 +1,5 @@
 import React, { ChangeEvent, PureComponent } from 'react';
-import { LegacyForms, DataSourceHttpSettings } from '@grafana/ui';
+import { LegacyForms, DataSourceHttpSettings, InlineField, InlineSwitch } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps, DataSourceJsonData, DataSourceSettings } from '@grafana/data';
 import { PIWebAPIDataSourceJsonData } from './types';
 
@@ -54,6 +54,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange(coerceOptions(options));
   };
 
+  onPiPointChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      pipoint: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -66,6 +75,16 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
           onChange={this.onMyOptionsChange}
           showAccessOptions
         />
+
+        <h3 className="page-heading">PI Point</h3>
+
+        <div className="gf-form-group">
+          <div className="gf-form-inline">
+            <InlineField label="Show PI Point in Query" labelWidth={24}>
+              <InlineSwitch value={options.jsonData.pipoint} onChange={this.onPiPointChange} />
+            </InlineField>
+          </div>
+        </div>
 
         <h3 className="page-heading">PI/AF Connection Details</h3>
 
