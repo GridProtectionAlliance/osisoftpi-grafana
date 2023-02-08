@@ -437,12 +437,27 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           };
           return selectableValue;
         });
-        segments.unshift({
-          label: attributeText,
-          value: {
-            value: attributeText,
-            expandable: false,
-          },
+        if (!!attributeText && attributeText.length > 0) {
+            segments.unshift({
+            label: attributeText,
+            value: {
+              value: attributeText,
+              expandable: false,
+            },
+          });
+        }
+        // add template variables
+        const variables = datasource.templateSrv.getVariables();
+        each(variables, (variable: VariableModel) => {
+          let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
+            label: '${' + variable.name + '}',
+            value: {
+              type: 'template',
+              value: '${' + variable.name + '}',
+              expandable: !query.isPiPoint,
+            },
+          };
+          segments.unshift(selectableValue);
         });
         segments.unshift({
           label: REMOVE_LABEL,
@@ -780,12 +795,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         summaries: summariesArray,
         isPiPoint,
       },
-      () =>
-        this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
-          if (cb) {
-            cb();
-          }
-        })
+      () => {
+        if (!isPiPoint) {
+          this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
+            if (cb) {
+              cb();
+            }
+          })
+        }
+      }
     );
   };
 
@@ -863,8 +881,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           });
         }
       }
-
-      console.log(query.elementPath);
     } else {
       query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
       query.target =
@@ -874,8 +890,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           query.attributes.map((s) => s.value?.value),
           ';'
         );
-
-      console.log(query.elementPath);
     }
 
     onChange(query);
@@ -1048,24 +1062,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </>
         )}
 
-        {!isPiPoint && (
-          <InlineField
-            label="Calculation"
-            labelWidth={LABEL_WIDTH}
-            tooltip={
-              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+        <InlineField
+          label="Calculation"
+          labelWidth={LABEL_WIDTH}
+          tooltip={
+            "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+          }
+        >
+          <Input
+            onBlur={onRunQuery}
+            value={expression}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              this.onChange({ ...metricsQuery, expression: event.target.value })
             }
-          >
-            <Input
-              onBlur={onRunQuery}
-              value={expression}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                this.onChange({ ...metricsQuery, expression: event.target.value })
-              }
-              placeholder="'.'*2"
-            />
-          </InlineField>
-        )}
+            placeholder="'.'*2"
+          />
+        </InlineField>
 
         <InlineFieldRow>
           <InlineField
