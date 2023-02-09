@@ -166,6 +166,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         refId: target.refId,
         hide: target.hide,
         interpolate: target.interpolate || { enable: false },
+        useLastValue: target.useLastValue || { enable: false },
         recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid,
@@ -525,42 +526,60 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     );
   }
 
+  /** PRIVATE SECTION */
+
   /**
    * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
    *
    * @param {any} value - A list of PIWebAPI values.
    * @param {any} target - The target Grafana metric.
-   * @param {any} isSummary - Boolean for tracking if data is of summary class.
+   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
    * @returns - An array of Grafana value, timestamp pairs.
    *
    */
-  parsePiPointValueList(value: any[], target: any, isSummary: boolean) {
-    const api = this;
+  private parsePiPointValueData(value: any, target: any, isSummary: boolean) {
     const datapoints: any[] = [];
-    each(value, (item) => {
-      // @ts-ignore
-      const { grafanaDataPoint, previousValue, drop } = this.noDataReplace(
-        isSummary ? item.Value : item,
-        target.summary.nodata,
-        api.parsePiPointValue(isSummary ? item.Value : item, target, isSummary)
-      );
-      if (!drop) {
-        datapoints.push(grafanaDataPoint);
-      }
-    });
+    if (Array.isArray(value)) {
+      each(value, (item) => {
+        this.piPointValue(isSummary ? item.Value : item, target, false, datapoints);
+      });
+    } else {
+      this.piPointValue(value, target, false, datapoints);
+    }
     return datapoints;
+  }
+
+  /**
+   * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
+   *
+   * @param {any} value - PI Point value.
+   * @param {any} target - The target grafana metric.
+   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
+   * @param {any[]} datapoints - Array with Grafana datapoints.
+   *
+   */
+  private piPointValue(value: any, target: any, isSummary: boolean, datapoints: any[]) {
+    // @ts-ignore
+    const { grafanaDataPoint, previousValue, drop } = this.noDataReplace(
+      value,
+      target.summary.nodata,
+      this.parsePiPointValue(value, target, isSummary)
+    );
+    if (!drop) {
+      datapoints.push(grafanaDataPoint);
+    }
   }
 
   /**
    * Convert a PI Point value to use Grafana value/timestamp.
    *
    * @param {any} value - PI Point value.
-   * @param {any} isSummary - Boolean for tracking if data is of summary class.
    * @param {any} target - The target grafana metric.
+   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
    * @returns - Grafana value pair.
    *
    */
-  parsePiPointValue(value: any, target: any, isSummary: boolean) {
+  private parsePiPointValue(value: any, target: any, isSummary: boolean) {
     let num = !isSummary && typeof value.Value === 'object' ? value.Value?.Value : value.Value;
 
     if (!value.Good || !!target.digitalStates?.enable) {
@@ -581,7 +600,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @returns perviousValue - {any} Grafana value (value only).
    *
    */
-  noDataReplace(
+  private noDataReplace(
     item: any,
     noDataReplacementMode: any,
     grafanaDataPoint: any[]
@@ -620,7 +639,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  processResults(content: any, target: any, name: any, noTemplate: boolean): PiwebapTargetRsp[] {
+  private processResults(content: any, target: any, name: any, noTemplate: boolean): PiwebapTargetRsp[] {
     const api = this;
     const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0;
     name = noTemplate ? name : this.getPath(target.elementPathArray, content.Path) + '|' + name;
@@ -634,7 +653,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         innerResults.push({
           refId: target.refId,
           target: name + '[' + key + ']',
-          datapoints: api.parsePiPointValueList(value, target, isSummary),
+          datapoints: api.parsePiPointValueData(value, target, isSummary),
         });
       });
       return innerResults;
@@ -643,12 +662,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       {
         refId: target.refId,
         target: name,
-        datapoints: api.parsePiPointValueList(content.Items, target, isSummary),
+        datapoints: api.parsePiPointValueData(content.Items || content.Value, target, isSummary),
       },
     ];
   }
-
-  /** PRIVATE SECTION */
 
   /**
    * Check if all items are selected.
@@ -788,6 +805,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         }
       } else {
         url += '/streamsets';
+        console.log(target);
         if (isSummary) {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary);
         } else if (target.interpolate && target.interpolate.enable) {
@@ -798,6 +816,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
               ? target.recordedValues.maxNumber
               : 10000;
           url += '/recorded' + timeRange + '&maxCount=' + maxNumber;
+        } else if (target.useLastValue?.enable) {
+          url += '/value?time=' + query.range.to.toJSON();
         } else {
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints;
         }
@@ -926,6 +946,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
               );
             } else {
               each(value.Content.Items, (item) => {
+                console.log(item);
                 each(
                   ds.processResults(item, target, displayName || item.Name || targetName, noTemplate),
                   (targetResult) => targetResults.push(targetResult)
