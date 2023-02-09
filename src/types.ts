@@ -20,6 +20,7 @@ export interface PIWebAPIQuery extends DataQuery {
   interpolate: any;
   recordedValues: any;
   digitalStates: any;
+  useLastValue: any,
   webid: string;
   webids: string[];
   regex: any;
@@ -38,6 +39,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   summary: { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' },
   expression: '',
   interpolate: { enable: false },
+  useLastValue: { enable: false },
   recordedValues: { enable: false },
   digitalStates: { enable: false },
   isPiPoint: false,
