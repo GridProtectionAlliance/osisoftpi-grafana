@@ -1,4 +1,4 @@
-import { DataQuery, DataSourceJsonData, Labels, QueryResultMeta } from '@grafana/data';
+import { DataQuery, DataSourceJsonData, Labels, QueryResultMeta, TimeSeriesPoints } from '@grafana/data';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -15,7 +15,7 @@ export interface PiwebapTargetRsp {
   refId: string;
   target: string;
   tags: Labels,
-  datapoints: any[];
+  datapoints: TimeSeriesPoints,
   path?: string;
   meta?: QueryResultMeta;
   unit?: string;
@@ -50,23 +50,30 @@ export interface PIWebAPIAnnotationsQuery extends DataQuery {
 }
 
 export interface PIWebAPIQuery extends DataQuery {
-  target: string;
-  elementPath: string;
-  attributes: any[];
-  segments: any[];
-  display: any;
-  interpolate: any;
-  recordedValues: any;
-  digitalStates: any;
-  useLastValue: any,
-  webid: string;
-  webids: string[];
-  regex: any;
-  summary: any;
-  expression: string;
-  isPiPoint: boolean;
+  target?: string;
+  elementPath?: string;
+  attributes?: any[];
+  segments?: any[];
+  isPiPoint?: boolean;
+  isAnnotation?: boolean;
+  webid?: string;
+  webids?: string[];
+  display?: any;
+  interpolate?: any;
+  recordedValues?: any;
+  digitalStates?: any;
+  useLastValue?: any,
+  regex?: any;
+  summary?: any;
+  expression?: string;
   rawQuery?: boolean;
   query?: string;
+  database?: PiwebapiRsp;
+  template?: PiwebapiRsp;
+  showEndTime?: boolean;
+  attribute?: any;
+  nameFilter?: string;
+  categoryName?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {

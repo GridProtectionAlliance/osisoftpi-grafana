@@ -520,7 +520,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>>,
     attributesArray: Array<SelectableValue<PIWebAPISelectableValue>>
   ) => {
-    const splitAttributes = query.target.split(';');
+    const splitAttributes = query.target!.split(';');
     const splitElements = splitAttributes.length > 0 ? splitAttributes[0].split('\\') : [];
 
     if (splitElements.length > 1 || (splitElements.length === 1 && splitElements[0] !== '')) {
@@ -669,7 +669,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     let webID = '';
 
     this.piServer.forEach((s) => {
-      const parts = this.props.query.target.split(';');
+      const parts = this.props.query.target!.split(';');
       if (parts.length >= 2) {
         if (parts[0] === s.text) {
           webID = s.WebId;
@@ -687,7 +687,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    */
   textEditorChanged() {
     const { query, onChange } = this.props;
-    const splitAttributes = query.target.split(';');
+    const splitAttributes = query.target!.split(';');
     const splitElements = splitAttributes.length > 0 ? splitAttributes[0].split('\\') : [];
 
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
@@ -730,13 +730,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           }
         })
         .then(() => {
-          this.updateArray(segments, attributes, this.state.summaries, query.isPiPoint, () => {
+          this.updateArray(segments, attributes, this.state.summaries, query.isPiPoint!, () => {
             onChange({ ...query, query: undefined, rawQuery: false });
           });
         });
     } else {
       segments = this.checkAfServer();
-      this.updateArray(segments, this.state.attributes, this.state.summaries, query.isPiPoint, () => {
+      this.updateArray(segments, this.state.attributes, this.state.summaries, query.isPiPoint!, () => {
         this.onChange({
           ...query,
           query: undefined,
@@ -855,7 +855,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         // Build query from target
         this.buildFromTarget(query, segmentsArray, attributesArray)
           .then((_segmentsArray) => {
-            this.updateArray(_segmentsArray, attributesArray, summariesArray, isPiPoint);
+            this.updateArray(_segmentsArray, attributesArray, summariesArray, false);
           })
           .catch((e) => console.error(e));
         return;
@@ -865,7 +865,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     } else if (isPiPoint && segmentsArray.length > 0) {
       this.piServer = segmentsArray;
     }
-    this.updateArray(segmentsArray, attributesArray, summariesArray, isPiPoint, () => {
+    this.updateArray(segmentsArray, attributesArray, summariesArray, true, () => {
       this.onChange(query);
     });
   };
@@ -882,7 +882,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         query.elementPath +
         ';' +
         join(
-          query.attributes.map((s) => s.value?.value),
+          query.attributes?.map((s) => s.value?.value),
           ';'
         );
     }

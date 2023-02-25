@@ -1,4 +1,5 @@
-import { curry, each, filter, flatten, forOwn, groupBy, keys, map, uniq, omitBy } from 'lodash';
+import { each, filter, flatten, forOwn, groupBy, keys, map, uniq, omitBy } from 'lodash';
+import { Observable, of } from 'rxjs';
 
 import {
   DataQueryRequest,
@@ -9,6 +10,9 @@ import {
   MetricFindValue,
   Labels,
   AnnotationQuery,
+  DataFrame,
+  TableData,
+  toDataFrame,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
@@ -72,10 +76,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     this.annotations = {
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
       prepareQuery(anno: AnnotationQuery<PIWebAPIQuery>): PIWebAPIQuery | undefined {
-        console.log(anno);
-        let target = anno.target;
-        return target;
+        if (anno.target) {
+          anno.target.isAnnotation = true;
+        }
+        return anno.target;
       },
+      processEvents: (anno: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): Observable<AnnotationEvent[] | undefined> => {
+        return of(this.eventFrameToAnnotation(anno, data));
+      }
     }
 
     console.info('OSISoft PI Plugin v4.0.0');
@@ -98,6 +106,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @memberOf PiWebApiDatasource
    */
   async query(options: DataQueryRequest<PIWebAPIQuery>): Promise<DataQueryResponse> {
+    if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
+      return this.processAnnotationQuery(options);
+    }
+  
     const ds = this;
     const query = this.buildQueryParameters(options);
 
@@ -146,146 +158,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         }
         throw new Error('Failed');
       });
-  }
-
-  /**
-   * Datasource Implementation.
-   * This queries PI Web API for Event Frames and converts them into annotations.
-   *
-   * @param {any} options - Annotation options, usually the Event Frame Category.
-   * @returns - A Grafana annotation.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  annotationQuery(options: any): Promise<any> {
-    console.log(options);
-
-    const annotationQuery = options.annotation.query;
-
-    const categoryName = annotationQuery.categoryName
-      ? this.templateSrv.replace(annotationQuery.categoryName, options.scopedVars, 'glob')
-      : null;
-    const nameFilter = annotationQuery.nameFilter
-      ? this.templateSrv.replace(annotationQuery.nameFilter, options.scopedVars, 'glob')
-      : null;
-    const templateName = options.annotation.template ? options.annotation.template.Name : null;
-    const annotationOptions = {
-      name: options.annotation.name,
-      datasource: options.annotation.datasource,
-      enable: options.annotation.enable,
-      iconColor: options.annotation.iconColor,
-      showEndTime: options.annotation.showEndTime,
-      regex: options.annotation.regex,
-      attribute: options.annotation.attribute,
-      categoryName: categoryName,
-      templateName: templateName,
-      nameFilter: nameFilter,
-    };
-
-    const filter = [];
-    if (!!annotationOptions.categoryName) {
-      filter.push('categoryName=' + annotationOptions.categoryName);
-    }
-    if (!!annotationOptions.nameFilter) {
-      filter.push('nameFilter=' + annotationOptions.nameFilter);
-    }
-    if (!!annotationOptions.templateName) {
-      filter.push('templateName=' + annotationOptions.templateName);
-    }
-    if (!filter.length) {
-      return Promise.resolve([]);
-    }
-    filter.push('startTime=' + options.range.from.toJSON());
-    filter.push('endTime=' + options.range.to.toJSON());
-
-    if (annotationOptions.attribute && annotationOptions.attribute.enable) {
-      let resourceUrl =
-        this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
-      if (!!annotationOptions.attribute.name) {
-        resourceUrl =
-          this.piwebapiurl +
-          '/streamsets/{0}/value?nameFilter=' +
-          annotationOptions.attribute.name +
-          '&selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
-      }
-      const query: any = {};
-      query['1'] = {
-        Method: 'GET',
-        Resource: this.piwebapiurl + '/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&'),
-      };
-      query['2'] = {
-        Method: 'GET',
-        RequestTemplate: {
-          Resource: resourceUrl,
-        },
-        Parameters: ['$.1.Content.Items[*].WebId'],
-        ParentIds: ['1'],
-      };
-      return this.restBatch(query).then((result: any) => {
-        const data = result.data['1'].Content;
-        const valueData = result.data['2'].Content;
-
-        const annotations = map(data.Items, (item: any, index: any) => {
-          return curry(this.eventFrameToAnnotation)(
-            annotationOptions,
-            false,
-            item,
-            valueData.Items[index].Content.Items
-          );
-        });
-
-        if (options.annotation.showEndTime) {
-          const ends = map(data.Items, (item: any, index: number) => {
-            return curry(this.eventFrameToAnnotation)(
-              annotationOptions,
-              true,
-              item,
-              valueData.Items[index].Content.Items
-            );
-          });
-          each(ends, (end) => {
-            annotations.push(end);
-          });
-        }
-
-        return annotations;
-      });
-    } else {
-      return this.restGet('/assetdatabases/' + this.afdatabase.webid + '/eventframes?' + filter.join('&')).then(
-        (result) => {
-          const annotations = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, false));
-          if (options.annotation.showEndTime) {
-            const ends = map(result.data.Items, curry(this.eventFrameToAnnotation)(annotationOptions, true));
-            each(ends, (end) => {
-              annotations.push(end);
-            });
-          }
-          return annotations;
-        }
-      );
-    }
-  }
-
-  /**
-   * Builds the Grafana metric segment for use on the query user interface.
-   *
-   * @param {any} response - response from PI Web API.
-   * @returns - Grafana metric segment.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private metricQueryTransform(response: PiwebapiRsp[]): MetricFindValue[] {
-    return map(response, (item) => {
-      return {
-        text: item.Name,
-        expandable:
-          item.HasChildren === undefined || item.HasChildren === true || (item.Path ?? '').split('\\').length <= 3,
-        HasChildren: item.HasChildren,
-        Items: item.Items ?? [],
-        Path: item.Path,
-        WebId: item.WebId,
-      } as MetricFindValue;
-    });
   }
 
   /**
@@ -399,44 +271,159 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   /** PRIVATE SECTION */
 
   /**
+   * Datasource Implementation.
+   * This queries PI Web API for Event Frames and converts them into annotations.
+   *
+   * @param {any} options - Annotation options, usually the Event Frame Category.
+   * @returns - A Grafana annotation.
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private processAnnotationQuery(options: DataQueryRequest<PIWebAPIQuery>): Promise<DataQueryResponse> {
+    const annotationQuery = options.targets[0];
+
+    const categoryName = annotationQuery.categoryName
+      ? this.templateSrv.replace(annotationQuery.categoryName, options.scopedVars, 'glob')
+      : null;
+    const nameFilter = annotationQuery.nameFilter
+      ? this.templateSrv.replace(annotationQuery.nameFilter, options.scopedVars, 'glob')
+      : null;
+    const templateName = annotationQuery.template ?annotationQuery.template.Name : null;
+    const annotationOptions = {
+      datasource: annotationQuery.datasource,
+      showEndTime: annotationQuery.showEndTime,
+      regex: annotationQuery.regex,
+      attribute: annotationQuery.attribute,
+      categoryName: categoryName,
+      templateName: templateName,
+      nameFilter: nameFilter,
+    };
+
+    const filter = [];
+    if (!!annotationOptions.categoryName) {
+      filter.push('categoryName=' + annotationOptions.categoryName);
+    }
+    if (!!annotationOptions.nameFilter) {
+      filter.push('nameFilter=' + annotationOptions.nameFilter);
+    }
+    if (!!annotationOptions.templateName) {
+      filter.push('templateName=' + annotationOptions.templateName);
+    }
+    if (!filter.length) {
+      return Promise.resolve({ data: [] });
+    }
+    filter.push('startTime=' + options.range.from.toISOString());
+    filter.push('endTime=' + options.range.to.toISOString());
+
+    if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+      let resourceUrl =
+        this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
+      if (!!annotationOptions.attribute.name) {
+        resourceUrl =
+          this.piwebapiurl +
+          '/streamsets/{0}/value?nameFilter=' +
+          annotationOptions.attribute.name +
+          '&selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
+      }
+      const query: any = {};
+      query['1'] = {
+        Method: 'GET',
+        Resource: this.piwebapiurl + '/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&'),
+      };
+      query['2'] = {
+        Method: 'GET',
+        RequestTemplate: {
+          Resource: resourceUrl,
+        },
+        Parameters: ['$.1.Content.Items[*].WebId'],
+        ParentIds: ['1'],
+      };
+      return this.restBatch(query).then((result) => {
+        const data = result.data['1'].Content;
+        const valueData = result.data['2'].Content;
+        const response: TableData[] = data.Items!.map((item: any, index: number) => {
+          const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
+          const rows = [item.StartTime, item.EndTime];
+          valueData.Items[index].Content.Items.forEach((it: any) => {
+            columns.push({ text: it.Name });
+            rows.push(String(it.Value.Value ? it.Value.Value.Name || it.Value.Value.Value || it.Value.Value : ''));
+          });
+          return {
+            name: item.Name,
+            columns,
+            rows: [
+              rows,
+            ],
+          };
+        });
+
+        return {
+          data: response.map((r) => toDataFrame(r)),
+        };
+      });
+    } else {
+      return this.restGet('/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&')).then(
+        (result) => {
+          const response: TableData[] = result.data.Items!.map((item: any) => (
+            {
+              name: item.Name,
+              columns: [{ text: 'StartTime' }, { text: 'EndTime' }],
+              rows: [
+                [item.StartTime, item.EndTime],
+              ],
+            }
+          ));
+
+          return {
+            data: response.map((r) => toDataFrame(r)),
+          };
+        }
+      );
+    }
+  }
+
+  /**
    * Converts a PIWebAPI Event Frame response to a Grafana Annotation
    *
-   * @param {any} annotationOptions - Options data from configuration panel.
-   * @param {any} endTime - End time of the Event Frame.
-   * @param {any} eventFrame - The Event Frame data.
+   * @param {any} annon - The annotation object.
+   * @param {any} data - The dataframe recrords. 
    * @returns - Grafana Annotation
    *
    * @memberOf PiWebApiDatasource
    */
-  private eventFrameToAnnotation(
-    annotationOptions: any,
-    endTime: any,
-    eventFrame: any,
-    attributeDataItems: any
-  ): AnnotationEvent {
-    if (annotationOptions.regex && annotationOptions.regex.enable) {
-      eventFrame.Name = eventFrame.Name.replace(
-        new RegExp(annotationOptions.regex.search),
-        annotationOptions.regex.replace
-      );
-    }
-
-    let attributeText = '';
-    if (attributeDataItems) {
-      each(attributeDataItems, (attributeData: any) => {
-        const attributeValue = attributeData.Value.Value
-          ? attributeData.Value.Value.Name || attributeData.Value.Value.Value || attributeData.Value.Value
-          : null;
-        attributeText += '<br />' + attributeData.Name + ': ' + attributeValue;
+  private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
+    const annotationOptions = annon.target!;
+    const events: AnnotationEvent[] = [];
+    data.forEach((d: DataFrame) => {
+      let attributeText = '';
+      const endTime = d.fields.find((f) => f.name === 'EndTime')?.values.get(0);
+      const startTime = d.fields.find((f) => f.name === 'StartTime')?.values.get(0);
+      const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0); 
+      if (attributeDataItems) {
+        each(attributeDataItems, (attributeData) => {
+          attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
+        });
+      }
+      let name = d.name!;
+      if (annotationOptions.regex && annotationOptions.regex.enable) {
+        name = name.replace(
+          new RegExp(annotationOptions.regex.search),
+          annotationOptions.regex.replace
+        );
+      }
+      events.push({
+        id: annotationOptions.database?.WebId,
+        annotation: annon,
+        title: `Name: ${annon.name}`,
+        time: new Date(startTime).getTime(),
+        timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
+        text: `Tag: ${name}` + attributeText + '<br />Start: ' +
+          new Date(startTime).toLocaleString('pt-BR')  + '<br />End: ' +
+          new Date(endTime).toLocaleString('pt-BR'),
+        tags: ['OSISoft PI'],
       });
-    }
-    return {
-      annotation: annotationOptions,
-      title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
-      time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
-      text:
-        eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime,
-    };
+    });
+    return events;
   }
 
   /**
@@ -474,6 +461,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         attributes: map(target.attributes, (att) =>
           this.templateSrv.replace(att.value?.value || att, options.scopedVars)
         ),
+        isAnnotation: !!target.isAnnotation,
         segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
         display: target.display,
         refId: target.refId,
@@ -482,14 +470,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         useLastValue: target.useLastValue || { enable: false },
         recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
-        webid: target.webid,
+        webid: target.webid ?? '',
         webids: target.webids || [],
         regex: target.regex || { enable: false },
         expression: target.expression || '',
         summary: target.summary || { types: [] },
         startTime: options.range.from,
         endTime: options.range.to,
-        isPiPoint: target.isPiPoint,
+        isPiPoint: !!target.isPiPoint,
         scopedVars: options.scopedVars,
       };
 
@@ -536,6 +524,28 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     });
 
     return options;
+  }
+
+  /**
+   * Builds the Grafana metric segment for use on the query user interface.
+   *
+   * @param {any} response - response from PI Web API.
+   * @returns - Grafana metric segment.
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private metricQueryTransform(response: PiwebapiRsp[]): MetricFindValue[] {
+    return map(response, (item) => {
+      return {
+        text: item.Name,
+        expandable:
+          item.HasChildren === undefined || item.HasChildren === true || (item.Path ?? '').split('\\').length <= 3,
+        HasChildren: item.HasChildren,
+        Items: item.Items ?? [],
+        Path: item.Path,
+        WebId: item.WebId,
+      } as MetricFindValue;
+    });
   }
 
   /**
@@ -656,6 +666,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           tags: this.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
           datapoints: api.parsePiPointValueData(value, target, isSummary),
           path: webid.Path,
+          unit: webid.DefaultUnitsName,
         });
       });
       return innerResults;
