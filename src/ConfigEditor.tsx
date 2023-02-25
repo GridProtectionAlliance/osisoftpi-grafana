@@ -49,7 +49,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onMyOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
+  onHttpOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
     const { onOptionsChange } = this.props;
     onOptionsChange(coerceOptions(options));
   };
@@ -64,6 +64,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onNewFormatChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      newFormat: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -73,16 +82,21 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
         <DataSourceHttpSettings
           defaultUrl="https://server.name/piwebapi"
           dataSourceConfig={options}
-          onChange={this.onMyOptionsChange}
+          onChange={this.onHttpOptionsChange}
           showAccessOptions
         />
 
-        <h3 className="page-heading">PI Point</h3>
+        <h3 className="page-heading">Custom Configuration</h3>
 
         <div className="gf-form-group">
           <div className="gf-form-inline">
-            <InlineField label="Show PI Point in Query" labelWidth={24}>
+            <InlineField label="Enable PI Points in Query" labelWidth={24}>
               <InlineSwitch value={options.jsonData.pipoint} onChange={this.onPiPointChange} />
+            </InlineField>
+          </div>
+          <div className="gf-form-inline">
+            <InlineField label="Enable New Data Format" labelWidth={24}>
+              <InlineSwitch value={options.jsonData.newFormat} onChange={this.onNewFormatChange} />
             </InlineField>
           </div>
         </div>

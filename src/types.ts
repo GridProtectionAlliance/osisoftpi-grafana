@@ -1,4 +1,42 @@
-import { DataQuery, DataSourceJsonData } from '@grafana/data';
+import { DataQuery, DataSourceJsonData, Labels, QueryResultMeta } from '@grafana/data';
+
+export interface PiwebapiElementPath {
+  path: string;
+  variable: string;
+}
+
+export interface PiwebapiInternalRsp {
+  data: PiwebapiRsp;
+  status: number;
+  url: string;
+}
+
+export interface PiwebapTargetRsp {
+  refId: string;
+  target: string;
+  tags: Labels,
+  datapoints: any[];
+  path?: string;
+  meta?: QueryResultMeta;
+  unit?: string;
+}
+
+export interface PiwebapiRsp {
+  Name?: string;
+  InstanceType?: string;
+  Items?: PiwebapiRsp[];
+  WebId?: string;
+  HasChildren?: boolean;
+  Type?: string;
+  DefaultUnitsName?: string;
+  Description?: string;
+  Path?: string;
+}
+
+export interface PiDataServer {
+  name: string | undefined;
+  webid: string | undefined;
+}
 
 export interface PIWebAPISelectableValue {
   webId?: string;
@@ -55,6 +93,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   afserver?: string;
   afdatabase?: string;
   pipoint?: boolean;
+  newFormat?: boolean;
 }
 
 /**
