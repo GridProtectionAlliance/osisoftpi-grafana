@@ -8,6 +8,7 @@ import {
   AnnotationEvent,
   MetricFindValue,
   Labels,
+  AnnotationQuery,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
@@ -31,6 +32,8 @@ import {
   parseRawQuery,
 } from 'helper';
 
+import { PiWebAPIAnnotationsQueryEditor } from 'AnnotationsQueryEditor';
+
 export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
   piserver: PiDataServer;
   afserver: PiDataServer;
@@ -38,28 +41,24 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   piPointConfig: boolean;
   newFormatConfig: boolean;
 
-  basicAuth?: string;
-  withCredentials?: boolean;
   url: string;
   name: string;
   isProxy = false;
-
-  templateSrv: TemplateSrv;
-  backendSrv: BackendSrv;
 
   piwebapiurl?: string;
   webidCache: Map<String, any> = new Map();
 
   error: any;
 
-  constructor(instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>) {
+  constructor(
+    instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>,
+    readonly templateSrv: TemplateSrv = getTemplateSrv(),
+    private readonly backendSrv: BackendSrv = getBackendSrv(),
+  ) {
     super(instanceSettings);
-    this.basicAuth = instanceSettings.basicAuth;
-    this.withCredentials = instanceSettings.withCredentials;
+  
     this.url = instanceSettings.url!;
     this.name = instanceSettings.name;
-    this.templateSrv = getTemplateSrv();
-    this.backendSrv = getBackendSrv();
 
     this.piwebapiurl = instanceSettings.jsonData.url?.toString();
     this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
@@ -70,154 +69,23 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
 
+    this.annotations = {
+      QueryEditor: PiWebAPIAnnotationsQueryEditor,
+      prepareQuery(anno: AnnotationQuery<PIWebAPIQuery>): PIWebAPIQuery | undefined {
+        console.log(anno);
+        let target = anno.target;
+        return target;
+      },
+    }
+
     console.info('OSISoft PI Plugin v4.0.0');
     Promise.all([
       this.getDataServer(this.piserver.name).then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId)),
       this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),
-      this.getDatabase(this.afserver.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined).then(
+      this.getDatabase(this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined).then(
         (result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)
       ),
     ]).then(() => console.info('Datasource configured'));
-  }
-
-  /**
-   * Converts a PIWebAPI Event Frame response to a Grafana Annotation
-   *
-   * @param {any} annotationOptions - Options data from configuration panel.
-   * @param {any} endTime - End time of the Event Frame.
-   * @param {any} eventFrame - The Event Frame data.
-   * @returns - Grafana Annotation
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private eventFrameToAnnotation(
-    annotationOptions: any,
-    endTime: any,
-    eventFrame: any,
-    attributeDataItems: any
-  ): AnnotationEvent {
-    if (annotationOptions.regex && annotationOptions.regex.enable) {
-      eventFrame.Name = eventFrame.Name.replace(
-        new RegExp(annotationOptions.regex.search),
-        annotationOptions.regex.replace
-      );
-    }
-
-    let attributeText = '';
-    if (attributeDataItems) {
-      each(attributeDataItems, (attributeData: any) => {
-        const attributeValue = attributeData.Value.Value
-          ? attributeData.Value.Value.Name || attributeData.Value.Value.Value || attributeData.Value.Value
-          : null;
-        attributeText += '<br />' + attributeData.Name + ': ' + attributeValue;
-      });
-    }
-    return {
-      annotation: annotationOptions,
-      title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
-      time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
-      text:
-        eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime,
-    };
-  }
-
-  /**
-   * Builds the PIWebAPI query parameters.
-   *
-   * @param {any} options - Grafana query and panel options.
-   * @returns - PIWebAPI query parameters.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private buildQueryParameters(options: DataQueryRequest<PIWebAPIQuery>) {
-    options.targets = filter(options.targets, (target) => {
-      if (!target || !target.target || !!target.hide) {
-        return false;
-      }
-      return !target.target.startsWith('Select AF');
-    });
-
-    options.targets = map(options.targets, (target) => {
-      if (!!target.rawQuery && !!target.target) {
-        const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
-        target.attributes = attributes;
-        target.elementPath = elementPath;
-      }
-      const ds = this;
-      const tar = {
-        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        elementPathArray: [
-          {
-            path: this.templateSrv.replace(target.elementPath, options.scopedVars),
-            variable: '',
-          } as PiwebapiElementPath,
-        ],
-        attributes: map(target.attributes, (att) =>
-          this.templateSrv.replace(att.value?.value || att, options.scopedVars)
-        ),
-        segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
-        display: target.display,
-        refId: target.refId,
-        hide: target.hide,
-        interpolate: target.interpolate || { enable: false },
-        useLastValue: target.useLastValue || { enable: false },
-        recordedValues: target.recordedValues || { enable: false },
-        digitalStates: target.digitalStates || { enable: false },
-        webid: target.webid,
-        webids: target.webids || [],
-        regex: target.regex || { enable: false },
-        expression: target.expression || '',
-        summary: target.summary || { types: [] },
-        startTime: options.range.from,
-        endTime: options.range.to,
-        isPiPoint: target.isPiPoint,
-        scopedVars: options.scopedVars,
-      };
-
-      if (tar.expression) {
-        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
-      }
-
-      if (tar.summary.types !== undefined) {
-        tar.summary.types = filter(tar.summary.types, (item) => {
-          return item !== undefined && item !== null && item !== '';
-        });
-      }
-
-      // explode All or Multi-selection
-      const varsKeys = keys(options.scopedVars);
-      this.templateSrv.getVariables().forEach((v: any) => {
-        if (ds.isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
-          // All selection
-          const variables = v.options.filter((o: any) => !o.selected);
-          // attributes
-          tar.attributes = tar.attributes.map((attr: string) =>
-            variables.map((vv: any) =>
-              !!v.allValue ? attr.replace(v.allValue, vv.value) : attr.replace(/{[a-zA-z0-9,-_]+}/gi, vv.value)
-            )
-          );
-          tar.attributes = uniq(flatten(tar.attributes));
-          // elementPath
-          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, v.allValue);
-        } else if (Array.isArray(v.current.text) && varsKeys.indexOf(v.name) < 0) {
-          // Multi-selection
-          const variables = v.options.filter((o: any) => o.selected);
-          // attributes
-          const query = v.current.value.join(',');
-          tar.attributes = tar.attributes.map((attr: string) =>
-            variables.map((vv: any) => attr.replace(`{${query}}`, vv.value))
-          );
-          tar.attributes = uniq(flatten(tar.attributes));
-          // elementPath
-          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, `{${query}}`);
-        }
-      });
-
-      return tar;
-    });
-
-    return options;
   }
 
   /**
@@ -289,16 +157,16 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  annotationQuery(options: any): Promise<AnnotationEvent[]> {
-    if (!this.afdatabase.webid) {
-      return Promise.resolve([]);
-    }
+  annotationQuery(options: any): Promise<any> {
+    console.log(options);
 
-    const categoryName = options.annotation.query.categoryName
-      ? this.templateSrv.replace(options.annotation.query.categoryName, options.scopedVars, 'glob')
+    const annotationQuery = options.annotation.query;
+
+    const categoryName = annotationQuery.categoryName
+      ? this.templateSrv.replace(annotationQuery.categoryName, options.scopedVars, 'glob')
       : null;
-    const nameFilter = options.annotation.query.nameFilter
-      ? this.templateSrv.replace(options.annotation.query.nameFilter, options.scopedVars, 'glob')
+    const nameFilter = annotationQuery.nameFilter
+      ? this.templateSrv.replace(annotationQuery.nameFilter, options.scopedVars, 'glob')
       : null;
     const templateName = options.annotation.template ? options.annotation.template.Name : null;
     const annotationOptions = {
@@ -529,6 +397,146 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   }
 
   /** PRIVATE SECTION */
+
+  /**
+   * Converts a PIWebAPI Event Frame response to a Grafana Annotation
+   *
+   * @param {any} annotationOptions - Options data from configuration panel.
+   * @param {any} endTime - End time of the Event Frame.
+   * @param {any} eventFrame - The Event Frame data.
+   * @returns - Grafana Annotation
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private eventFrameToAnnotation(
+    annotationOptions: any,
+    endTime: any,
+    eventFrame: any,
+    attributeDataItems: any
+  ): AnnotationEvent {
+    if (annotationOptions.regex && annotationOptions.regex.enable) {
+      eventFrame.Name = eventFrame.Name.replace(
+        new RegExp(annotationOptions.regex.search),
+        annotationOptions.regex.replace
+      );
+    }
+
+    let attributeText = '';
+    if (attributeDataItems) {
+      each(attributeDataItems, (attributeData: any) => {
+        const attributeValue = attributeData.Value.Value
+          ? attributeData.Value.Value.Name || attributeData.Value.Value.Value || attributeData.Value.Value
+          : null;
+        attributeText += '<br />' + attributeData.Name + ': ' + attributeValue;
+      });
+    }
+    return {
+      annotation: annotationOptions,
+      title: (endTime ? 'END ' : annotationOptions.showEndTime ? 'START ' : '') + annotationOptions.name,
+      time: new Date(endTime ? eventFrame.EndTime : eventFrame.StartTime).getTime(),
+      text:
+        eventFrame.Name + attributeText + '<br />Start: ' + eventFrame.StartTime + '<br />End: ' + eventFrame.EndTime,
+    };
+  }
+
+  /**
+   * Builds the PIWebAPI query parameters.
+   *
+   * @param {any} options - Grafana query and panel options.
+   * @returns - PIWebAPI query parameters.
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private buildQueryParameters(options: DataQueryRequest<PIWebAPIQuery>) {
+    options.targets = filter(options.targets, (target) => {
+      if (!target || !target.target || !!target.hide) {
+        return false;
+      }
+      return !target.target.startsWith('Select AF');
+    });
+
+    options.targets = map(options.targets, (target) => {
+      if (!!target.rawQuery && !!target.target) {
+        const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
+        target.attributes = attributes;
+        target.elementPath = elementPath;
+      }
+      const ds = this;
+      const tar = {
+        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        elementPathArray: [
+          {
+            path: this.templateSrv.replace(target.elementPath, options.scopedVars),
+            variable: '',
+          } as PiwebapiElementPath,
+        ],
+        attributes: map(target.attributes, (att) =>
+          this.templateSrv.replace(att.value?.value || att, options.scopedVars)
+        ),
+        segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
+        display: target.display,
+        refId: target.refId,
+        hide: target.hide,
+        interpolate: target.interpolate || { enable: false },
+        useLastValue: target.useLastValue || { enable: false },
+        recordedValues: target.recordedValues || { enable: false },
+        digitalStates: target.digitalStates || { enable: false },
+        webid: target.webid,
+        webids: target.webids || [],
+        regex: target.regex || { enable: false },
+        expression: target.expression || '',
+        summary: target.summary || { types: [] },
+        startTime: options.range.from,
+        endTime: options.range.to,
+        isPiPoint: target.isPiPoint,
+        scopedVars: options.scopedVars,
+      };
+
+      if (tar.expression) {
+        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
+      }
+
+      if (tar.summary.types !== undefined) {
+        tar.summary.types = filter(tar.summary.types, (item) => {
+          return item !== undefined && item !== null && item !== '';
+        });
+      }
+
+      // explode All or Multi-selection
+      const varsKeys = keys(options.scopedVars);
+      this.templateSrv.getVariables().forEach((v: any) => {
+        if (ds.isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
+          // All selection
+          const variables = v.options.filter((o: any) => !o.selected);
+          // attributes
+          tar.attributes = tar.attributes.map((attr: string) =>
+            variables.map((vv: any) =>
+              !!v.allValue ? attr.replace(v.allValue, vv.value) : attr.replace(/{[a-zA-z0-9,-_]+}/gi, vv.value)
+            )
+          );
+          tar.attributes = uniq(flatten(tar.attributes));
+          // elementPath
+          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, v.allValue);
+        } else if (Array.isArray(v.current.text) && varsKeys.indexOf(v.name) < 0) {
+          // Multi-selection
+          const variables = v.options.filter((o: any) => o.selected);
+          // attributes
+          const query = v.current.value.join(',');
+          tar.attributes = tar.attributes.map((attr: string) =>
+            variables.map((vv: any) => attr.replace(`{${query}}`, vv.value))
+          );
+          tar.attributes = uniq(flatten(tar.attributes));
+          // elementPath
+          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, `{${query}}`);
+        }
+      });
+
+      return tar;
+    });
+
+    return options;
+  }
 
   /**
    * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
@@ -1065,13 +1073,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   private getAssetServers(): Promise<PiwebapiRsp[]> {
     return this.restGet('/assetservers').then((response) => response.data.Items ?? []);
   }
-  private getAssetServer(name: string | undefined): Promise<PiwebapiRsp> {
+  getAssetServer(name: string | undefined): Promise<PiwebapiRsp> {
     if (!name) {
       return Promise.resolve({});
     }
     return this.restGet('/assetservers?path=\\\\' + name).then((response) => response.data);
   }
-  private getDatabase(path: string | undefined): Promise<PiwebapiRsp> {
+  getDatabase(path: string | undefined): Promise<PiwebapiRsp> {
     if (!path) {
       return Promise.resolve({});
     }
