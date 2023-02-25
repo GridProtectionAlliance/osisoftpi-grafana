@@ -19,14 +19,14 @@ type Props = PiWebAPIQueryEditorProps & {
 
 export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQueryEditor(props: Props) {
   const { query, datasource, annotation, onAnnotationChange, onChange, onRunQuery } = props;
+  
+  const [afWebId, setAfWebId] = useState<string>('');
+  const [database, setDatabase] = useState<PiwebapiRsp>(annotation?.target?.database ?? {});
 
   // this should never happen, but we want to keep typescript happy
   if (annotation === undefined || onAnnotationChange === undefined) {
     return null;
   }
-  
-  const [afWebId, setAfWebId] = useState<string>('');
-  const [database, setDatabase] = useState<PiwebapiRsp>(annotation.target?.database ?? {});
 
   const getEventFrames = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
     console.log('get event frames', database);
