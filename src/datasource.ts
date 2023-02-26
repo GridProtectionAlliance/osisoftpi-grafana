@@ -11,7 +11,6 @@ import {
   Labels,
   AnnotationQuery,
   DataFrame,
-  TableData,
   toDataFrame,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
@@ -28,10 +27,13 @@ import {
 import {
   checkNumber,
   convertTimeSeriesToDataFrame,
+  convertToTableData,
   getFinalUrl,
   getLastPath,
   getPath,
+  isAllSelected,
   lowerCaseFirstLetter,
+  metricQueryTransform,
   noDataReplace,
   parseRawQuery,
 } from 'helper';
@@ -57,10 +59,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   constructor(
     instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>,
     readonly templateSrv: TemplateSrv = getTemplateSrv(),
-    private readonly backendSrv: BackendSrv = getBackendSrv(),
+    private readonly backendSrv: BackendSrv = getBackendSrv()
   ) {
     super(instanceSettings);
-  
+
     this.url = instanceSettings.url!;
     this.name = instanceSettings.name;
 
@@ -81,18 +83,21 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         }
         return anno.target;
       },
-      processEvents: (anno: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): Observable<AnnotationEvent[] | undefined> => {
+      processEvents: (
+        anno: AnnotationQuery<PIWebAPIQuery>,
+        data: DataFrame[]
+      ): Observable<AnnotationEvent[] | undefined> => {
         return of(this.eventFrameToAnnotation(anno, data));
-      }
-    }
+      },
+    };
 
     console.info('OSISoft PI Plugin v4.0.0');
     Promise.all([
       this.getDataServer(this.piserver.name).then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId)),
       this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),
-      this.getDatabase(this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined).then(
-        (result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)
-      ),
+      this.getDatabase(
+        this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined
+      ).then((result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)),
     ]).then(() => console.info('Datasource configured'));
   }
 
@@ -109,14 +114,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
       return this.processAnnotationQuery(options);
     }
-  
-    const ds = this;
+
     const query = this.buildQueryParameters(options);
 
     if (query.targets.length <= 0) {
       return Promise.resolve({ data: [] });
     } else {
-      return Promise.all(ds.getStream(query)).then((targetResponses) => {
+      return Promise.all(this.getStream(query)).then((targetResponses) => {
         let flattened: PiwebapTargetRsp[] = [];
         each(targetResponses, (tr) => {
           each(tr, (item) => flattened.push(item));
@@ -153,7 +157,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         method: 'GET',
       })
       .then((response: any) => {
-        if (response.status === 200) {
+        if (response.status < 300) {
           return { status: 'success', message: 'Data source is working', title: 'Success' };
         }
         throw new Error('Failed');
@@ -196,13 +200,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         ? ds
             .getAssetServer(ds.afserver.name)
             .then((result: PiwebapiRsp) => [result])
-            .then(ds.metricQueryTransform)
-        : ds.getAssetServers().then(ds.metricQueryTransform);
+            .then(metricQueryTransform)
+        : ds.getAssetServers().then(metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
         .getAssetServer(query.path)
         .then((server) => ds.getDatabases(server.WebId ?? '', {}))
-        .then(ds.metricQueryTransform);
+        .then(metricQueryTransform);
     } else if (query.type === 'databaseElements') {
       return ds
         .getDatabase(query.path)
@@ -211,32 +215,34 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             selectedFields: 'Items.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
           })
         )
-        .then(ds.metricQueryTransform);
+        .then(metricQueryTransform);
     } else if (query.type === 'elements') {
       return ds
         .getElement(query.path)
         .then((element) =>
           ds.getElements(element.WebId ?? '', {
-            selectedFields: 'Items.Description%3BItems.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
+            selectedFields:
+              'Items.Description%3BItems.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
             nameFilter: query.filter,
           })
         )
-        .then(ds.metricQueryTransform);
+        .then(metricQueryTransform);
     } else if (query.type === 'attributes') {
       return ds
         .getElement(query.path)
         .then((element) =>
           ds.getAttributes(element.WebId ?? '', {
             searchFullHierarchy: 'true',
-            selectedFields: 'Items.Type%3BItems.DefaultUnitsName%3BItems.Description%3BItems.WebId%3BItems.Name%3BItems.Path',
+            selectedFields:
+              'Items.Type%3BItems.DefaultUnitsName%3BItems.Description%3BItems.WebId%3BItems.Name%3BItems.Path',
             nameFilter: query.filter,
           })
         )
-        .then(ds.metricQueryTransform);
+        .then(metricQueryTransform);
     } else if (query.type === 'dataserver') {
-      return ds.getDataServers().then(ds.metricQueryTransform);
+      return ds.getDataServers().then(metricQueryTransform);
     } else if (query.type === 'pipoint') {
-      return ds.piPointSearch(query.webId, query.pointName).then(ds.metricQueryTransform);
+      return ds.piPointSearch(query.webId, query.pointName).then(metricQueryTransform);
     }
     return Promise.reject('Bad type');
   }
@@ -288,7 +294,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     const nameFilter = annotationQuery.nameFilter
       ? this.templateSrv.replace(annotationQuery.nameFilter, options.scopedVars, 'glob')
       : null;
-    const templateName = annotationQuery.template ?annotationQuery.template.Name : null;
+    const templateName = annotationQuery.template ? annotationQuery.template.Name : null;
     const annotationOptions = {
       datasource: annotationQuery.datasource,
       showEndTime: annotationQuery.showEndTime,
@@ -318,67 +324,43 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (annotationOptions.attribute && annotationOptions.attribute.enable) {
       let resourceUrl =
         this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
-      if (!!annotationOptions.attribute.name) {
-        resourceUrl =
-          this.piwebapiurl +
-          '/streamsets/{0}/value?nameFilter=' +
-          annotationOptions.attribute.name +
-          '&selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
+      if (annotationOptions.attribute.name && annotationOptions.attribute.name.trim().length > 0) {
+        resourceUrl += '&nameFilter=' + annotationOptions.attribute.name.trim();
       }
-      const query: any = {};
-      query['1'] = {
-        Method: 'GET',
-        Resource: this.piwebapiurl + '/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&'),
-      };
-      query['2'] = {
-        Method: 'GET',
-        RequestTemplate: {
-          Resource: resourceUrl,
+      const query: any = {
+        '1': {
+          Method: 'GET',
+          Resource:
+            this.piwebapiurl +
+            '/assetdatabases/' +
+            annotationQuery.database?.WebId +
+            '/eventframes?' +
+            filter.join('&'),
         },
-        Parameters: ['$.1.Content.Items[*].WebId'],
-        ParentIds: ['1'],
+        '2': {
+          Method: 'GET',
+          RequestTemplate: {
+            Resource: resourceUrl,
+          },
+          Parameters: ['$.1.Content.Items[*].WebId'],
+          ParentIds: ['1'],
+        },
       };
       return this.restBatch(query).then((result) => {
         const data = result.data['1'].Content;
         const valueData = result.data['2'].Content;
-        const response: TableData[] = data.Items!.map((item: any, index: number) => {
-          const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
-          const rows = [item.StartTime, item.EndTime];
-          valueData.Items[index].Content.Items.forEach((it: any) => {
-            columns.push({ text: it.Name });
-            rows.push(String(it.Value.Value ? it.Value.Value.Name || it.Value.Value.Value || it.Value.Value : ''));
-          });
-          return {
-            name: item.Name,
-            columns,
-            rows: [
-              rows,
-            ],
-          };
-        });
-
         return {
-          data: response.map((r) => toDataFrame(r)),
+          data: convertToTableData(data.Items!, valueData.Items).map((r) => toDataFrame(r)),
         };
       });
     } else {
-      return this.restGet('/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&')).then(
-        (result) => {
-          const response: TableData[] = result.data.Items!.map((item: any) => (
-            {
-              name: item.Name,
-              columns: [{ text: 'StartTime' }, { text: 'EndTime' }],
-              rows: [
-                [item.StartTime, item.EndTime],
-              ],
-            }
-          ));
-
-          return {
-            data: response.map((r) => toDataFrame(r)),
-          };
-        }
-      );
+      return this.restGet(
+        '/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&')
+      ).then((result) => {
+        return {
+          data: convertToTableData(result.data.Items!).map((r) => toDataFrame(r)),
+        };
+      });
     }
   }
 
@@ -386,7 +368,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * Converts a PIWebAPI Event Frame response to a Grafana Annotation
    *
    * @param {any} annon - The annotation object.
-   * @param {any} data - The dataframe recrords. 
+   * @param {any} data - The dataframe recrords.
    * @returns - Grafana Annotation
    *
    * @memberOf PiWebApiDatasource
@@ -396,29 +378,33 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     const events: AnnotationEvent[] = [];
     data.forEach((d: DataFrame) => {
       let attributeText = '';
+      let name = d.name!;
       const endTime = d.fields.find((f) => f.name === 'EndTime')?.values.get(0);
       const startTime = d.fields.find((f) => f.name === 'StartTime')?.values.get(0);
-      const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0); 
+      // check if we have more attributes in the table data
+      const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0);
       if (attributeDataItems) {
         each(attributeDataItems, (attributeData) => {
           attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
         });
       }
-      let name = d.name!;
+      // replace Dataframe name using Regex
       if (annotationOptions.regex && annotationOptions.regex.enable) {
-        name = name.replace(
-          new RegExp(annotationOptions.regex.search),
-          annotationOptions.regex.replace
-        );
+        name = name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
       }
+      // create the event
       events.push({
         id: annotationOptions.database?.WebId,
         annotation: annon,
         title: `Name: ${annon.name}`,
         time: new Date(startTime).getTime(),
         timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
-        text: `Tag: ${name}` + attributeText + '<br />Start: ' +
-          new Date(startTime).toLocaleString('pt-BR')  + '<br />End: ' +
+        text:
+          `Tag: ${name}` +
+          attributeText +
+          '<br />Start: ' +
+          new Date(startTime).toLocaleString('pt-BR') +
+          '<br />End: ' +
           new Date(endTime).toLocaleString('pt-BR'),
         tags: ['OSISoft PI'],
       });
@@ -494,7 +480,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       // explode All or Multi-selection
       const varsKeys = keys(options.scopedVars);
       this.templateSrv.getVariables().forEach((v: any) => {
-        if (ds.isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
+        if (isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
           // All selection
           const variables = v.options.filter((o: any) => !o.selected);
           // attributes
@@ -524,28 +510,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     });
 
     return options;
-  }
-
-  /**
-   * Builds the Grafana metric segment for use on the query user interface.
-   *
-   * @param {any} response - response from PI Web API.
-   * @returns - Grafana metric segment.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private metricQueryTransform(response: PiwebapiRsp[]): MetricFindValue[] {
-    return map(response, (item) => {
-      return {
-        text: item.Name,
-        expandable:
-          item.HasChildren === undefined || item.HasChildren === true || (item.Path ?? '').split('\\').length <= 3,
-        HasChildren: item.HasChildren,
-        Items: item.Items ?? [],
-        Path: item.Path,
-        WebId: item.WebId,
-      } as MetricFindValue;
-    });
   }
 
   /**
@@ -639,7 +603,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    *
    * @memberOf PiWebApiDatasource
    */
-  private processResults(content: any, target: any, name: any, noTemplate: boolean, webid: PiwebapiRsp): PiwebapTargetRsp[] {
+  private processResults(
+    content: any,
+    target: any,
+    name: any,
+    noTemplate: boolean,
+    webid: PiwebapiRsp
+  ): PiwebapTargetRsp[] {
     const api = this;
     const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0;
     if (!target.isPiPoint && !target.display) {
@@ -661,7 +631,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           target: name + '[' + key + ']',
           meta: {
             path: webid.Path,
-            pathSeparator: '\\'
+            pathSeparator: '\\',
           },
           tags: this.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
           datapoints: api.parsePiPointValueData(value, target, isSummary),
@@ -677,7 +647,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         target: name,
         meta: {
           path: webid.Path,
-          pathSeparator: '\\'
+          pathSeparator: '\\',
         },
         tags: this.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
         datapoints: api.parsePiPointValueData(content.Items || content.Value, target, isSummary),
@@ -686,22 +656,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       },
     ];
     return results;
-  }
-
-  /**
-   * Check if all items are selected.
-   *
-   * @param {any} current the current variable selection
-   * @return {boolean} true if all value is selected, false otherwise
-   */
-  private isAllSelected(current: any): boolean {
-    if (!current) {
-      return false;
-    }
-    if (Array.isArray(current.text)) {
-      return current.text.indexOf('All') >= 0;
-    }
-    return current.text === 'All';
   }
 
   /**
@@ -784,7 +738,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             ds.restGetWebId(target.elementPath, false).then((webidresponse: PiwebapiRsp) => {
               return ds
                 .restPost(url + webidresponse.WebId)
-                .then((response: any) => ds.processResults(response.data, target, displayName || targetName, false, webidresponse))
+                .then((response: any) =>
+                  ds.processResults(response.data, target, displayName || targetName, false, webidresponse)
+                )
                 .catch((err: any) => (ds.error = err));
             })
           );
@@ -828,9 +784,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     const targetResults: PiwebapTargetRsp[] = [];
     for (const _ of target.attributes) {
       const dataKey = `Req${index + 1000}`;
-      const path = response.config.data[dataKey].Headers 
-        ? response.config.data[dataKey].Headers['Asset-Path']
-        : null;
+      const path = response.config.data[dataKey].Headers ? response.config.data[dataKey].Headers['Asset-Path'] : null;
       const data = response.data[dataKey];
       if (data.Status >= 400) {
         continue;
@@ -848,7 +802,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           Description: respData.Description || respData.Descriptor,
           WebId: respData.WebId,
           Name: respData.Name,
-        }
+        };
         this.webidCache.set(webid.Path!, webid);
       }
 
@@ -858,7 +812,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           (targetResult) => targetResults.push(targetResult)
         );
       } else {
-        each(data.Content.Items, (item) => {  
+        each(data.Content.Items, (item) => {
           each(
             this.processResults(item, target, displayName || item.Name || targetName, noTemplate, webid),
             (targetResult) => targetResults.push(targetResult)
@@ -879,7 +833,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
    * @param {any} query - the batch query to build.
    * @param {number} index - the current query index.
    * @param {boolean} replace - is pi point and calculation.
-   * @param {string} url - the base url to call. 
+   * @param {string} url - the base url to call.
    */
   private createQueryPair(
     isPiPoint: boolean,
@@ -888,7 +842,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     query: any,
     index: number,
     replace: boolean,
-    url: string,
+    url: string
   ) {
     let path = '';
     let assetPath = '';
@@ -904,11 +858,14 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     if (!!data) {
       query[`Req${index + 1000}`] = {
         Method: 'GET',
-        Resource: this.piwebapiurl + getFinalUrl(replace, { Name: attribute }, url) + '&webId=' +
-          (replace ? this.piserver.webid: data.WebId),
+        Resource:
+          this.piwebapiurl +
+          getFinalUrl(replace, { Name: attribute }, url) +
+          '&webId=' +
+          (replace ? this.piserver.webid : data.WebId),
         Headers: {
-          'Asset-Path': assetPath
-        }
+          'Asset-Path': assetPath,
+        },
       };
     } else {
       query[`Req${index}`] = {
@@ -917,14 +874,12 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       };
       query[`Req${index + 1000}`] = {
         Method: 'GET',
-        ParentIds: [ 
-          `Req${index}`
-        ],
-        Parameters: [
-          `$.Req${index}.Content.WebId`
-        ],
-        Resource: this.piwebapiurl + getFinalUrl(replace, { Name: attribute }, url) + 
-          (replace ? '&webId=' + this.piserver.webid: '&webId={0}'),
+        ParentIds: [`Req${index}`],
+        Parameters: [`$.Req${index}.Content.WebId`],
+        Resource:
+          this.piwebapiurl +
+          getFinalUrl(replace, { Name: attribute }, url) +
+          (replace ? '&webId=' + this.piserver.webid : '&webId={0}'),
       };
     }
   }
@@ -999,7 +954,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     // no cache hit, query server
     let path = '';
     if (isPiPoint) {
-      path = '/points?selectedFields=Descriptor%3BPointType%3BEngineeringUnits%3BWebId%3BName%3BPath&path=\\\\' + assetPath.replace('|', '\\');
+      path =
+        '/points?selectedFields=Descriptor%3BPointType%3BEngineeringUnits%3BWebId%3BName%3BPath&path=\\\\' +
+        assetPath.replace('|', '\\');
     } else {
       path =
         (assetPath.indexOf('|') >= 0
@@ -1021,7 +978,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           Description: response.data.Description || response.data.Descriptor,
           WebId: response.data.WebId,
           Name: response.data.Name,
-        }
+        };
         ds.webidCache.set(assetPath, data);
         return {
           ...data,
@@ -1269,52 +1226,5 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       }
       return [];
     });
-  }
-
-  /**
-   * Get the PI Web API webid or PI Point.
-   *
-   * @param {any} target - AF Path or Point name.
-   * @returns - webid.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  getWebId(target: any) {
-    const ds = this;
-    const isAf = target.target.indexOf('\\') >= 0;
-    const isAttribute = target.target.indexOf('|') >= 0;
-    if (!isAf && target.target.indexOf('.') === -1) {
-      return Promise.resolve([{ WebId: target.target, Name: target.display || target.target }]);
-    }
-
-    if (!isAf) {
-      // pi point lookup
-      return ds.piPointSearch(this.piserver.webid!, target.target).then((results) => {
-        if (results === undefined || results.length === 0) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
-        }
-        return results;
-      });
-    } else if (isAf && isAttribute) {
-      // af attribute lookup
-      return ds.restGet('/attributes?path=\\\\' + target.target).then((results) => {
-        if (results.data === undefined || results.status !== 200) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
-        }
-        // rewrite name if specified
-        results.data.Name = target.display || results.data.Name;
-        return [results.data];
-      });
-    } else {
-      // af element lookup
-      return ds.restGet('/elements?path=\\\\' + target.target).then((results) => {
-        if (results.data === undefined || results.status !== 200) {
-          return [{ WebId: target.target, Name: target.display || target.target }];
-        }
-        // rewrite name if specified
-        results.data.Name = target.display || results.data.Name;
-        return [results.data];
-      });
-    }
   }
 }

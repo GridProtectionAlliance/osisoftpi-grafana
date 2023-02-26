@@ -310,17 +310,17 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         });
         return;
       }
-  
+
       // set current value
       segments[index] = item;
-  
+
       // Accept only one PI server
       if (query.isPiPoint) {
         this.piServer.push(item);
         this.segmentChangeValue(segments);
         return;
       }
-  
+
       // changed internal selection
       if (index < segments.length - 1) {
         segments = slice(segments, 0, index + 1);
@@ -336,7 +336,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           });
         }
         this.segmentChangeValue(segments);
-      })
+      });
     });
   };
 
@@ -453,7 +453,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           return selectableValue;
         });
         if (!!attributeText && attributeText.length > 0) {
-            segments.unshift({
+          segments.unshift({
             label: attributeText,
             value: {
               value: attributeText,
@@ -820,7 +820,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             if (cb) {
               cb();
             }
-          })
+          });
         }
       }
     );
@@ -1095,7 +1095,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               <InlineField
                 label="Max Recorded Values"
                 labelWidth={LABEL_WIDTH}
-                tooltip={'Maximum number of recorded value to retrive from the data archive, without using interpolation.'}
+                tooltip={
+                  'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
+                }
               >
                 <Input
                   onBlur={onRunQuery}
@@ -1125,7 +1127,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 <InlineSwitch
                   value={digitalStates.enable}
                   onChange={() =>
-                    this.onChange({ ...metricsQuery, digitalStates: { ...digitalStates, enable: !digitalStates.enable } })
+                    this.onChange({
+                      ...metricsQuery,
+                      digitalStates: { ...digitalStates, enable: !digitalStates.enable },
+                    })
                   }
                 />
               </InlineField>

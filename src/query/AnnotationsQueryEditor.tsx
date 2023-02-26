@@ -1,4 +1,4 @@
-  import React, { memo, useState } from 'react';
+import React, { memo, useState } from 'react';
 
 import { AnnotationQuery, QueryEditorProps, SelectableValue } from '@grafana/data';
 import { AsyncSelect, InlineField, InlineFieldRow, InlineSwitch, Input } from '@grafana/ui';
@@ -19,7 +19,7 @@ type Props = PiWebAPIQueryEditorProps & {
 
 export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQueryEditor(props: Props) {
   const { query, datasource, annotation, onChange, onRunQuery } = props;
-  
+
   const [afWebId, setAfWebId] = useState<string>('');
   const [database, setDatabase] = useState<PiwebapiRsp>(annotation?.target?.database ?? {});
 
@@ -32,13 +32,13 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
     return datasource.getEventFrameTemplates(database?.WebId!).then((templ: PiwebapiRsp[]) => {
       return templ.map((d) => ({ label: d.Name, value: d }));
     });
-  }
+  };
 
   const getDatabases = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
     return datasource.getDatabases(afWebId).then((dbs: PiwebapiRsp[]) => {
       return dbs.map((d) => ({ label: d.Name, value: d }));
     });
-  }
+  };
 
   const getValue = (key: string) => {
     const query: any = annotation.target as any;
@@ -46,7 +46,7 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
       return;
     }
     return { label: query[key].Name, value: query[key] };
-  }
+  };
 
   datasource.getAssetServer(datasource.afserver.name).then((result) => {
     setAfWebId(result.WebId!);
@@ -93,7 +93,7 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               value={query.categoryName}
               onBlur={(e) => onRunQuery()}
               onChange={(e) => onChange({ ...query, categoryName: e.currentTarget.value })}
-              placeholder='Enter category name'
+              placeholder="Enter category name"
             />
           </InlineField>
           <InlineField label="Name Filter" labelWidth={LABEL_WIDTH} grow={true}>
@@ -102,7 +102,7 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               value={query.nameFilter}
               onBlur={(e) => onRunQuery()}
               onChange={(e) => onChange({ ...query, nameFilter: e.currentTarget.value })}
-              placeholder='Enter name filter'
+              placeholder="Enter name filter"
             />
           </InlineField>
         </InlineFieldRow>
@@ -110,10 +110,12 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
           <InlineField label="Enable Name Regex Replacement" labelWidth={LABEL_WIDTH} grow={false}>
             <InlineSwitch
               value={query.regex?.enable}
-              onChange={(e) => onChange({
-                ...query,
-                regex: { ...query.regex, enable: e.currentTarget.checked },
-              })}
+              onChange={(e) =>
+                onChange({
+                  ...query,
+                  regex: { ...query.regex, enable: e.currentTarget.checked },
+                })
+              }
             />
           </InlineField>
           <InlineField label="Name Filter" labelWidth={SMALL_LABEL_WIDTH} grow={false}>
@@ -121,11 +123,13 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               type="text"
               value={query.regex?.search}
               onBlur={(e) => onRunQuery()}
-              onChange={(e) => onChange({
-                ...query,
-                regex: { ...query.regex, search: e.currentTarget.value },
-              })}
-              placeholder='(.*)'
+              onChange={(e) =>
+                onChange({
+                  ...query,
+                  regex: { ...query.regex, search: e.currentTarget.value },
+                })
+              }
+              placeholder="(.*)"
               width={MIN_INPUT_WIDTH}
             />
           </InlineField>
@@ -134,11 +138,13 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               type="text"
               value={query?.regex?.replace}
               onBlur={(e) => onRunQuery()}
-              onChange={(e) => onChange({
-                ...query,
-                regex: { ...query.regex, replace: e.currentTarget.value },
-              })}
-              placeholder='$1'
+              onChange={(e) =>
+                onChange({
+                  ...query,
+                  regex: { ...query.regex, replace: e.currentTarget.value },
+                })
+              }
+              placeholder="$1"
             />
           </InlineField>
         </InlineFieldRow>
@@ -146,10 +152,12 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
           <InlineField label="Enable Attribute Usage" labelWidth={LABEL_WIDTH} grow={false}>
             <InlineSwitch
               value={query.attribute?.enable}
-              onChange={(e) => onChange({
-                ...query!,
-                attribute: { ...query.attribute, enable: e.currentTarget.checked },
-              })}
+              onChange={(e) =>
+                onChange({
+                  ...query!,
+                  attribute: { ...query.attribute, enable: e.currentTarget.checked },
+                })
+              }
             />
           </InlineField>
           <InlineField label="Attribute Name" labelWidth={LABEL_WIDTH} grow={true}>
@@ -157,11 +165,13 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               type="text"
               value={query.attribute?.name}
               onBlur={(e) => onRunQuery()}
-              onChange={(e) => onChange({
-                ...query!,
-                attribute: { ...query.attribute, name: e.currentTarget.value },
-              })}
-              placeholder='Enter name'
+              onChange={(e) =>
+                onChange({
+                  ...query!,
+                  attribute: { ...query.attribute, name: e.currentTarget.value },
+                })
+              }
+              placeholder="Enter name"
             />
           </InlineField>
         </InlineFieldRow>

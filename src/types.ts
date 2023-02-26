@@ -14,8 +14,8 @@ export interface PiwebapiInternalRsp {
 export interface PiwebapTargetRsp {
   refId: string;
   target: string;
-  tags: Labels,
-  datapoints: TimeSeriesPoints,
+  tags: Labels;
+  datapoints: TimeSeriesPoints;
   path?: string;
   meta?: QueryResultMeta;
   unit?: string;
@@ -62,7 +62,7 @@ export interface PIWebAPIQuery extends DataQuery {
   interpolate?: any;
   recordedValues?: any;
   digitalStates?: any;
-  useLastValue?: any,
+  useLastValue?: any;
   regex?: any;
   summary?: any;
   expression?: string;
