@@ -16,7 +16,8 @@
 
 ## 4.0.0
 
-- Added new label format. It can be enabled in the configuration page
-- Optimized query using PIWebAPI batch endpoint
+- Added a new label format. It can be disabled in the configuration page for backward compatibility
+- Optimized queries using PIWebAPI batch endpoint
 - Improved raw query processing
 - Added variable support in raw query
+- Fixed annotations support

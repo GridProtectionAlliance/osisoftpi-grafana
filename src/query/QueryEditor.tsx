@@ -175,10 +175,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   }
   // get the list of summaries available
   getSummarySegments() {
-    const ctrl = this;
-    const summaryTypes = filter(ctrl.summaryTypes, (type) => {
+    const summaryTypes = filter(this.summaryTypes, (type) => {
       return this.state.summaries.map((s) => s.value?.value).indexOf(type) === -1;
     });
+
     const segments = map(summaryTypes, (item: string) => {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: item,
@@ -438,6 +438,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       type: 'pipoint',
     };
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
+    segments.push({
+      label: REMOVE_LABEL,
+      value: {
+        value: REMOVE_LABEL,
+      },
+    });
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
       .then((items: any[]) => {
@@ -474,12 +480,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           };
           segments.unshift(selectableValue);
         });
-        segments.unshift({
-          label: REMOVE_LABEL,
-          value: {
-            value: REMOVE_LABEL,
-          },
-        });
         return segments;
       })
       .catch((err: any) => {
@@ -493,6 +493,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const ctrl = this;
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
 
+    segments.push({
+      label: REMOVE_LABEL,
+      value: {
+        value: REMOVE_LABEL,
+      },
+    });
+
     forOwn(ctrl.availableAttributes, (val: any, key: string) => {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: key,
@@ -502,13 +509,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         },
       };
       segments.push(selectableValue);
-    });
-
-    segments.unshift({
-      label: REMOVE_LABEL,
-      value: {
-        value: REMOVE_LABEL,
-      },
     });
 
     return segments;
@@ -1140,7 +1140,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               <InlineField
                 label="Interpolate Period"
                 labelWidth={LABEL_WIDTH}
-                tooltip={"Override time in seconds between sampling, e.g. '30'. Defaults to timespan/chart width."}
+                tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
               >
                 <Input
                   onBlur={onRunQuery}
@@ -1148,7 +1148,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   onChange={(event: ChangeEvent<HTMLInputElement>) =>
                     onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
                   }
-                  placeholder="30"
+                  placeholder="30s"
                 />
               </InlineField>
               <InlineField label="Interpolate" labelWidth={LABEL_WIDTH}>
@@ -1177,7 +1177,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               <InlineField
                 label="Summary Period"
                 labelWidth={LABEL_WIDTH}
-                tooltip={"Override time between sampling, e.g. '30s'."}
+                tooltip={"Define the summary period, e.g. '30s'."}
               >
                 <Input
                   onBlur={onRunQuery}
@@ -1202,7 +1202,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   allowCustomValue
                 />
               </InlineField>
-              <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'Replacement for bad quality values.'}>
+              <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'PI Web API summary options.'}>
                 <InlineFieldRow>
                   {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
                     return (

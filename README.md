@@ -62,7 +62,7 @@ An example config is shown below.
 
 # Event Frames and Annotations
 
-This datasource can use AF Event Frames as annotations.
+This datasource can use **AF Event Frames** as annotations.
 
 ![event-frame](https://github.com/GridProtectionAlliance/osisoftpi-grafana/raw/master/docs/img/event_frame.png)
 
@@ -90,4 +90,4 @@ All product names, logos, and brands are property of their respective owners.
 All company, product and service names used in this website are for identification purposes only.
 Use of these names, logos, and brands does not imply endorsement.
 
-OSIsoft, the OSIsoft logo and logotype, and PI Web API are all trademarks of OSIsoft, LLC.
+OSIsoft, the OSIsoft logo and logotype, and PI Web API are all trademarks of [AVEVA Group plc](https://www.aveva.com/en/legal/osisoft-terms-and-conditions/).
