@@ -68,6 +68,7 @@ export interface PIWebAPIQuery extends DataQuery {
   expression?: string;
   rawQuery?: boolean;
   query?: string;
+  // annotations items
   database?: PiwebapiRsp;
   template?: PiwebapiRsp;
   showEndTime?: boolean;

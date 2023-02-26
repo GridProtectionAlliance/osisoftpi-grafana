@@ -18,39 +18,27 @@ type Props = PiWebAPIQueryEditorProps & {
 };
 
 export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQueryEditor(props: Props) {
-  const { query, datasource, annotation, onAnnotationChange, onChange, onRunQuery } = props;
+  const { query, datasource, annotation, onChange, onRunQuery } = props;
   
   const [afWebId, setAfWebId] = useState<string>('');
   const [database, setDatabase] = useState<PiwebapiRsp>(annotation?.target?.database ?? {});
 
   // this should never happen, but we want to keep typescript happy
-  if (annotation === undefined || onAnnotationChange === undefined) {
+  if (annotation === undefined) {
     return null;
   }
 
   const getEventFrames = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
-    console.log('get event frames', database);
     return datasource.getEventFrameTemplates(database?.WebId!).then((templ: PiwebapiRsp[]) => {
-      const templatesMap: Array<SelectableValue<PiwebapiRsp>> = templ.map((d) => {
-        return { label: d.Name, value: d };
-      });
-      return templatesMap;
-    });
-  }
-  
-  const getDatabases = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
-    console.log('get databases', afWebId);
-    return datasource.getDatabases(afWebId).then((dbs: PiwebapiRsp[]) => {
-      const databasesMap: Array<SelectableValue<PiwebapiRsp>> = dbs.map((d) => {
-        return { label: d.Name, value: d };
-      });
-      return databasesMap;
+      return templ.map((d) => ({ label: d.Name, value: d }));
     });
   }
 
-  datasource.getAssetServer(datasource.afserver.name).then((result) => {
-    setAfWebId(result.WebId!);
-  });
+  const getDatabases = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
+    return datasource.getDatabases(afWebId).then((dbs: PiwebapiRsp[]) => {
+      return dbs.map((d) => ({ label: d.Name, value: d }));
+    });
+  }
 
   const getValue = (key: string) => {
     const query: any = annotation.target as any;
@@ -60,9 +48,9 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
     return { label: query[key].Name, value: query[key] };
   }
 
-  const onChangeQuery = (query: PIWebAPIQuery) => {
-    onChange(query);
-  };
+  datasource.getAssetServer(datasource.afserver.name).then((result) => {
+    setAfWebId(result.WebId!);
+  });
 
   return (
     <>
@@ -87,17 +75,14 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               loadOptions={getEventFrames}
               loadingMessage={'Loading'}
               value={getValue('template')}
-              onChange={(e) => onChangeQuery({ ...query, template: e.value })}
+              onChange={(e) => onChange({ ...query, template: e.value })}
               defaultOptions
             />
           </InlineField>
           <InlineField label="Show Start and End Time" labelWidth={LABEL_WIDTH} grow={true}>
             <InlineSwitch
               value={!!query.showEndTime}
-              onChange={(e) => onChange({
-                ...query,
-                showEndTime: e.currentTarget.checked,
-              })}
+              onChange={(e) => onChange({ ...query, showEndTime: e.currentTarget.checked })}
             />
           </InlineField>
         </InlineFieldRow>
@@ -107,10 +92,7 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               type="text"
               value={query.categoryName}
               onBlur={(e) => onRunQuery()}
-              onChange={(e) => onChange({
-                ...query,
-                categoryName: e.currentTarget.value ,
-              })}
+              onChange={(e) => onChange({ ...query, categoryName: e.currentTarget.value })}
               placeholder='Enter category name'
             />
           </InlineField>
@@ -119,10 +101,7 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               type="text"
               value={query.nameFilter}
               onBlur={(e) => onRunQuery()}
-              onChange={(e) => onChange({
-                ...query,
-                nameFilter: e.currentTarget.value,
-              })}
+              onChange={(e) => onChange({ ...query, nameFilter: e.currentTarget.value })}
               placeholder='Enter name filter'
             />
           </InlineField>

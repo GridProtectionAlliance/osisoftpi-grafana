@@ -1,6 +1,6 @@
 import { DataSourcePlugin } from '@grafana/data';
-import { PIWebAPIConfigEditor } from './ConfigEditor';
-import { PIWebAPIQueryEditor } from './QueryEditor';
+import { PIWebAPIConfigEditor } from './config/ConfigEditor';
+import { PIWebAPIQueryEditor } from './query/QueryEditor';
 import { PiWebAPIDatasource } from './datasource';
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData } from './types';
 

@@ -1,7 +1,7 @@
 import React, { ChangeEvent, PureComponent } from 'react';
 import { LegacyForms, DataSourceHttpSettings, InlineField, InlineSwitch } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps, DataSourceJsonData, DataSourceSettings } from '@grafana/data';
-import { PIWebAPIDataSourceJsonData } from './types';
+import { PIWebAPIDataSourceJsonData } from '../types';
 
 const { FormField } = LegacyForms;
 

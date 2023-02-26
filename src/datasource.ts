@@ -36,7 +36,7 @@ import {
   parseRawQuery,
 } from 'helper';
 
-import { PiWebAPIAnnotationsQueryEditor } from 'AnnotationsQueryEditor';
+import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
 export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
   piserver: PiDataServer;

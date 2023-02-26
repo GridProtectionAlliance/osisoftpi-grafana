@@ -4,9 +4,9 @@ import React, { PureComponent, ChangeEvent } from 'react';
 import { Icon, InlineField, InlineFieldRow, InlineSwitch, Input, SegmentAsync, Segment } from '@grafana/ui';
 import { QueryEditorProps, SelectableValue, VariableModel } from '@grafana/data';
 
-import { PiWebAPIDatasource } from './datasource';
-import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from './components/Forms';
-import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from './types';
+import { PiWebAPIDatasource } from '../datasource';
+import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
+import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
 
 const LABEL_WIDTH = 24;
