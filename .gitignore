@@ -29,3 +29,8 @@ e2e-results/
 # Editor
 .idea
 
+# VS Code
+.vscode
+
+# Codealike
+codealike.json
