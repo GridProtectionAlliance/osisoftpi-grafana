@@ -805,6 +805,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         }
       } else {
         url += '/streamsets';
+        console.log(target);
         if (isSummary) {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary);
         } else if (target.interpolate && target.interpolate.enable) {
@@ -945,6 +946,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
               );
             } else {
               each(value.Content.Items, (item) => {
+                console.log(item);
                 each(
                   ds.processResults(item, target, displayName || item.Name || targetName, noTemplate),
                   (targetResult) => targetResults.push(targetResult)
