@@ -12,11 +12,13 @@
 
 - Added calculation to PI Points
 - Added PI point configuration (thanks you @TheFern2)
+- Added option to use last value from PiWebAPI
 - Updated to Grafana plugin SDK v9.3.6
 
 ## 4.0.0
 
 - Added a new label format. It can be disabled in the configuration page for backward compatibility
+- Added engineering units to Dataframe field
 - Optimized queries using PIWebAPI batch endpoint
 - Improved raw query processing
 - Added variable support in raw query

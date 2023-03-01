@@ -91,14 +91,13 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       },
     };
 
-    console.info('OSISoft PI Plugin v4.0.0');
     Promise.all([
       this.getDataServer(this.piserver.name).then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId)),
       this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),
       this.getDatabase(
         this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined
       ).then((result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)),
-    ]).then(() => console.info('Datasource configured'));
+    ]);
   }
 
   /**
