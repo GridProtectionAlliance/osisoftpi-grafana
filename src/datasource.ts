@@ -485,7 +485,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           // attributes
           tar.attributes = tar.attributes.map((attr: string) =>
             variables.map((vv: any) =>
-              !!v.allValue ? attr.replace(v.allValue, vv.value) : attr.replace(/{[a-zA-z0-9,-_]+}/gi, vv.value)
+              !!v.allValue ? attr.replace(v.allValue, vv.value) : attr.replace(/{[a-z 0-9,-_]+}/gi, vv.value)
             )
           );
           tar.attributes = uniq(flatten(tar.attributes));
@@ -673,12 +673,12 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     // elementPath
     let newElementPathArray: PiwebapiElementPath[] = [];
     elementPathArray.forEach((elem: PiwebapiElementPath) => {
-      if ((!!allValue && elem.path.indexOf(allValue) >= 0) || (!allValue && elem.path.match(/{[a-zA-z0-9,-_]+}/gi))) {
+      if ((!!allValue && elem.path.indexOf(allValue) >= 0) || (!allValue && elem.path.match(/{[a-z 0-9,-_]+}/gi))) {
         const temp: PiwebapiElementPath[] = variables.map((vv: any) => {
           return {
             path: !!allValue
               ? elem.path.replace(allValue, vv.value)
-              : elem.path.replace(/{[a-zA-z0-9,-_]+}/gi, vv.value),
+              : elem.path.replace(/{[a-z 0-9,-_]+}/gi, vv.value),
             variable: vv.value,
           } as PiwebapiElementPath;
         });
