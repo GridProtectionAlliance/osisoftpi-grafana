@@ -18,7 +18,7 @@
 ## 4.0.0
 
 - Added a new dataframe label format. It can be disabled in the configuration page for backward compatibility
-- Added engineering units to Dataframe field
+- Added engineering units to Dataframe field. This can be globaly disabled in the configuration page
 - Optimized queries using PIWebAPI batch endpoint
 - Improved raw query processing
 - Added variable support in raw query

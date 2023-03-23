@@ -925,6 +925,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const metricsQuery = defaults(queryProps, defaultQuery) as PIWebAPIQuery;
     const {
       useLastValue,
+      useUnit,
       interpolate,
       query,
       rawQuery,
@@ -1071,6 +1072,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             />
           </InlineField>
         </InlineFieldRow>
+
+        {this.props.datasource.useUnitConfig && (
+          <InlineFieldRow>
+            <InlineField label="Use unit from datapoints" labelWidth={LABEL_WIDTH}>
+              <InlineSwitch
+                value={useUnit.enable}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    useUnit: { ...useUnit, enable: !useUnit.enable },
+                  })
+                }
+              />
+            </InlineField>
+          </InlineFieldRow>
+        )}
 
         {!useLastValue.enable && (
           <>

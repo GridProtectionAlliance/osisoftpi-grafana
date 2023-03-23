@@ -46,6 +46,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   afdatabase: PiDataServer;
   piPointConfig: boolean;
   newFormatConfig: boolean;
+  useUnitConfig: boolean;
 
   url: string;
   name: string;
@@ -74,6 +75,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined };
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
+    this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
 
     this.annotations = {
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
@@ -453,6 +455,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         hide: target.hide,
         interpolate: target.interpolate || { enable: false },
         useLastValue: target.useLastValue || { enable: false },
+        useUnit: target.useUnit || { enable: false },
         recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid ?? '',
@@ -612,7 +615,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     const api = this;
     const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0;
     if (!target.isPiPoint && !target.display) {
-      if (this.newFormatConfig) {
+      if (api.newFormatConfig) {
         name = (noTemplate ? getLastPath(content.Path) : getPath(target.elementPathArray, content.Path)) + '|' + name;
       } else {
         name = noTemplate ? name : getPath(target.elementPathArray, content.Path) + '|' + name;
@@ -632,10 +635,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             path: webid.Path,
             pathSeparator: '\\',
           },
-          tags: this.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
+          tags: api.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
           datapoints: api.parsePiPointValueData(value, target, isSummary),
           path: webid.Path,
-          unit: webid.DefaultUnitsName,
+          unit: api.useUnitConfig && target.useUnit.enable ? webid.DefaultUnitsName : undefined,
         });
       });
       return innerResults;
@@ -648,10 +651,10 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           path: webid.Path,
           pathSeparator: '\\',
         },
-        tags: this.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
+        tags: api.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
         datapoints: api.parsePiPointValueData(content.Items || content.Value, target, isSummary),
         path: webid.Path,
-        unit: webid.DefaultUnitsName,
+        unit: api.useUnitConfig && target.useUnit.enable ? webid.DefaultUnitsName : undefined,
       },
     ];
     return results;

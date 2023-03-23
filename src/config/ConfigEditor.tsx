@@ -73,6 +73,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onUseUnitChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      useUnit: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -97,6 +106,11 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
           <div className="gf-form-inline">
             <InlineField label="Enable New Data Format" labelWidth={24}>
               <InlineSwitch value={options.jsonData.newFormat} onChange={this.onNewFormatChange} />
+            </InlineField>
+          </div>
+          <div className="gf-form-inline">
+            <InlineField label="Enable Unit in Data" labelWidth={24}>
+              <InlineSwitch value={options.jsonData.useUnit} onChange={this.onUseUnitChange} />
             </InlineField>
           </div>
         </div>

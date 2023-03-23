@@ -63,6 +63,7 @@ export interface PIWebAPIQuery extends DataQuery {
   recordedValues?: any;
   digitalStates?: any;
   useLastValue?: any;
+  useUnit?: any;
   regex?: any;
   summary?: any;
   expression?: string;
@@ -88,6 +89,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   useLastValue: { enable: false },
   recordedValues: { enable: false },
   digitalStates: { enable: false },
+  useUnit: { enable: false },
   isPiPoint: false,
 };
 
@@ -102,6 +104,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   afdatabase?: string;
   pipoint?: boolean;
   newFormat?: boolean;
+  useUnit?: boolean;
 }
 
 /**
