@@ -23,4 +23,6 @@
 - Improved raw query processing
 - Added variable support in raw query
 - Fixed annotations support
-- Updated to Grafana plugin SDK v9.4.3
+- Updated to Grafana plugin SDK v9.4.7
+- Fixed PI AF calculation
+- Added plugin screenshots

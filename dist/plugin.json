@@ -32,7 +32,9 @@
       }
     ],
     "screenshots": [
-      {"name": "Query Editor", "path": "img/configurator.png"}
+      {"name": "Query Editor", "path": "img/configurator.png"},
+      {"name": "Datasource Configuration", "path": "img/configuration.png"},
+      {"name": "Annotations Editor", "path": "img/annotations.png"}
     ],
     "version": "4.0.0",
     "updated": "2023-05-02"
