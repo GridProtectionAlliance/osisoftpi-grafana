@@ -865,7 +865,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     } else if (isPiPoint && segmentsArray.length > 0) {
       this.piServer = segmentsArray;
     }
-    this.updateArray(segmentsArray, attributesArray, summariesArray, true, () => {
+    this.updateArray(segmentsArray, attributesArray, summariesArray, !!isPiPoint, () => {
       this.onChange(query);
     });
   };
