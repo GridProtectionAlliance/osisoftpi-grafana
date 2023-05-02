@@ -70,8 +70,7 @@ Creating an annotation query and use the Event Frame category as the query strin
 Color and regex replacement strings for the name are supported.
 
 For example:  
-![event-frame-setup-1](https://github.com/GridProtectionAlliance/osisoftpi-grafana/raw/master/docs/img/event_frame_setup_1.png)
-![event-frame-setup-2](https://github.com/GridProtectionAlliance/osisoftpi-grafana/raw/master/docs/img/event_frame_setup_2.png)  
+![annotations](https://github.com/GridProtectionAlliance/osisoftpi-grafana/raw/master/docs/img/annotations.png)
 
 
 # Installation

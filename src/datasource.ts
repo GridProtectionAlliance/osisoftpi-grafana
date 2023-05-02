@@ -614,7 +614,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   ): PiwebapTargetRsp[] {
     const api = this;
     const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0;
-    if (!target.isPiPoint && !target.display) {
+    if (!target.isPiPoint && !target.display && content.Path) {
       if (api.newFormatConfig) {
         name = (noTemplate ? getLastPath(content.Path) : getPath(target.elementPathArray, content.Path)) + '|' + name;
       } else {
@@ -739,7 +739,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           results.push(
             ds.restGetWebId(target.elementPath, false).then((webidresponse: PiwebapiRsp) => {
               return ds
-                .restPost(url + webidresponse.WebId)
+                .restPost(url + '&webId=' + webidresponse.WebId)
                 .then((response: any) =>
                   ds.processResults(response.data, target, displayName || targetName, false, webidresponse)
                 )

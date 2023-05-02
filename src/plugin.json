@@ -31,7 +31,11 @@
         "url": "https://www.osisoft.com/pi-system"
       }
     ],
-    "screenshots": [],
+    "screenshots": [
+      {"name": "Query Editor", "path": "img/configurator.png"},
+      {"name": "Datasource Configuration", "path": "img/configuration.png"},
+      {"name": "Annotations Editor", "path": "img/annotations.png"}
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },

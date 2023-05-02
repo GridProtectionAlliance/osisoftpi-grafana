@@ -218,10 +218,10 @@ export function getLastPath(path: string): string {
  * @returns {string} last item of the element path
  */
 export function getPath(elementPathArray: PiwebapiElementPath[], path: string): string {
-  const splitStr = getLastPath(path);
-  if (elementPathArray.length === 0) {
+  if (!path || elementPathArray.length === 0) {
     return '';
   }
+  const splitStr = getLastPath(path);
   const foundElement = elementPathArray.find((e) => path.indexOf(e.path) >= 0)?.variable;
   return foundElement ? foundElement + '|' + splitStr : splitStr;
 }
