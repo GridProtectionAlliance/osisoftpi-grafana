@@ -26,3 +26,9 @@
 - Updated to Grafana plugin SDK v9.4.7
 - Fixed PI AF calculation
 - Added plugin screenshots
+
+## 4.1.0
+
+- Modified the links to be used when calculation is selected
+- Added calulation when last value is selected
+- When calculation is selected, change label from Interpolated to Interval

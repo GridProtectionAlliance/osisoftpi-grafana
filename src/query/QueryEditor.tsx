@@ -349,7 +349,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     const ctrl = this;
     const findQuery = query.isPiPoint
       ? { type: 'dataserver' }
-      : { path: this.getSegmentPathUpTo(currentSegment ?? this.state.segments.slice(0), index) };
+      : {
+          path: this.getSegmentPathUpTo(currentSegment ?? this.state.segments.slice(0), index),
+          afServerWebId: this.state.segments[0].value ? this.state.segments[0].value.webId : undefined,
+        };
 
     if (!query.isPiPoint) {
       if (datasource.afserver?.name && index === 0) {
@@ -374,10 +377,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           },
         ]);
       }
-
-      // if (!findQuery.path?.length) {
-      //   return Promise.resolve([]);
-      // }
     }
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
@@ -1060,7 +1059,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         )}
 
         <InlineFieldRow>
-          <InlineField label="Use Last Value" labelWidth={LABEL_WIDTH}>
+          <InlineField
+            label="Use Last Value"
+            tooltip={"Fetch only last value from time range"}
+            labelWidth={LABEL_WIDTH}
+          >
             <InlineSwitch
               value={useLastValue.enable}
               onChange={() =>
@@ -1071,11 +1074,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
             />
           </InlineField>
-        </InlineFieldRow>
-
-        {this.props.datasource.useUnitConfig && (
-          <InlineFieldRow>
-            <InlineField label="Use unit from datapoints" labelWidth={LABEL_WIDTH}>
+          {this.props.datasource.useUnitConfig && (
+            <InlineField
+              label="Use unit from datapoints"
+              tooltip={"Use unit in label from PI tag or PI AF attribute"}
+              labelWidth={LABEL_WIDTH}
+            >
               <InlineSwitch
                 value={useUnit.enable}
                 onChange={() =>
@@ -1086,28 +1090,30 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 }
               />
             </InlineField>
-          </InlineFieldRow>
-        )}
+          )}
+        </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField
+            label="Calculation"
+            labelWidth={LABEL_WIDTH}
+            tooltip={
+              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+            }
+          >
+            <Input
+              onBlur={onRunQuery}
+              value={expression}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                onChange({ ...metricsQuery, expression: event.target.value })
+              }
+              placeholder="'.'*2"
+            />
+          </InlineField>
+        </InlineFieldRow>
 
         {!useLastValue.enable && (
           <>
-            <InlineField
-              label="Calculation"
-              labelWidth={LABEL_WIDTH}
-              tooltip={
-                "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
-              }
-            >
-              <Input
-                onBlur={onRunQuery}
-                value={expression}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  onChange({ ...metricsQuery, expression: event.target.value })
-                }
-                placeholder="'.'*2"
-              />
-            </InlineField>
-
             <InlineFieldRow>
               <InlineField
                 label="Max Recorded Values"
@@ -1155,7 +1161,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
             <InlineFieldRow>
               <InlineField
-                label="Interpolate Period"
+                label={!!expression ? "Interval Period" : "Interpolate Period"}
                 labelWidth={LABEL_WIDTH}
                 tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
               >
@@ -1168,7 +1174,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   placeholder="30s"
                 />
               </InlineField>
-              <InlineField label="Interpolate" labelWidth={LABEL_WIDTH}>
+              <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
                 <InlineSwitch
                   value={interpolate.enable}
                   onChange={() =>
