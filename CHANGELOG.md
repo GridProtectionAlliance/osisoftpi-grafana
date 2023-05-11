@@ -29,6 +29,6 @@
 
 ## 4.1.0
 
-- Modified the links to be used when calculation is selected
-- Added calulation when last value is selected
+- Modified the PI Webapi controller endpoints used when calculation is selected
+- Allow calculation when last value option is selected
 - When calculation is selected, change label from Interpolated to Interval
