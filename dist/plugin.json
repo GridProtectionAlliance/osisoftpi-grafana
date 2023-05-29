@@ -37,7 +37,7 @@
       {"name": "Annotations Editor", "path": "img/annotations.png"}
     ],
     "version": "4.0.0",
-    "updated": "2023-05-11"
+    "updated": "2023-05-29"
   },
   "dependencies": {
     "grafanaDependency": ">=8.4.0",

@@ -797,9 +797,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   private handleBatchResponse(response: any, target: any, displayName: string | null): Promise<PiwebapTargetRsp[]> {
     const targetName = target.expression || target.elementPath;
     const noTemplate = target.elementPathArray.length === 1 && target.elementPath === target.elementPathArray[0].path;
-    let index = 1;
+    const totalSize = noTemplate ? target.attributes.length : target.elementPathArray.length;
     const targetResults: PiwebapTargetRsp[] = [];
-    for (const _ of target.attributes) {
+    for (let index = 1; index <= totalSize; index++) {
       const dataKey = `Req${index + 1000}`;
       const path = response.config.data[dataKey].Headers ? response.config.data[dataKey].Headers['Asset-Path'] : null;
       const data = response.data[dataKey];
