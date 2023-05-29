@@ -32,4 +32,4 @@
 - Modified the PI Webapi controller endpoints used when calculation is selected
 - Allow calculation when last value option is selected
 - When calculation is selected, change label from Interpolated to Interval
-- Fix issue with variable in Element Path
+- Fixed issue with variable in Element Path
