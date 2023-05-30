@@ -26,3 +26,10 @@
 - Updated to Grafana plugin SDK v9.4.7
 - Fixed PI AF calculation
 - Added plugin screenshots
+
+## 4.1.0
+
+- Modified the PI Webapi controller endpoints used when calculation is selected
+- Allow calculation when last value option is selected
+- When calculation is selected, change label from Interpolated to Interval
+- Fixed issue with variable in Element Path

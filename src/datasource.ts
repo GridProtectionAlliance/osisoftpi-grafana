@@ -203,6 +203,8 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
             .then((result: PiwebapiRsp) => [result])
             .then(metricQueryTransform)
         : ds.getAssetServers().then(metricQueryTransform);
+    } else if (query.type === 'databases' && !!query.afServerWebId) {
+      return ds.getDatabases(query.afServerWebId, {}).then(metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
         .getAssetServer(query.path)
@@ -718,6 +720,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       let url = '';
       const isSummary = target.summary && target.summary.types && target.summary.types.length > 0;
       const isInterpolated = target.interpolate && target.interpolate.enable;
+      const isRecorded = target.recordedValues && target.recordedValues.enable;
       // perhaps add a check to see if interpolate override time < query.interval
       const intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
       const timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
@@ -725,12 +728,24 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       const displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
       if (target.expression) {
         url += '/calculation';
-        if (isSummary) {
+        if (target.useLastValue?.enable) {
+          url += '/times?&time=' + query.range.to.toJSON();
+        } else if (isSummary) {
           url += '/summary' + timeRange + (isInterpolated ? '&sampleType=Interval&sampleInterval=' + intervalTime : '');
         } else if (isInterpolated) {
           url += '/intervals' + timeRange + '&sampleInterval=' + intervalTime;
-        } else {
+        } else if (isRecorded) {
           url += '/recorded' + timeRange;
+        } else {
+          const windowWidth = 40;
+          const diff = Math.floor((query.range.to.valueOf() - query.range.from.valueOf()) / windowWidth);
+          let timeQuery = 'time=' + query.range.from.toJSON();
+          for (let i = 1; i < windowWidth; i ++) {
+            const newTime = query.range.from.valueOf() + i * diff;
+            timeQuery += '&time=' + new Date(newTime).toISOString();
+          }
+          timeQuery += '&time=' + query.range.to.toJSON();
+          url += '/times?' + timeQuery;
         }
         url += '&expression=' + encodeURIComponent(target.expression.replace(/\${intervalTime}/g, intervalTime));
         if (target.attributes.length > 0) {
@@ -749,18 +764,18 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
         }
       } else {
         url += '/streamsets';
-        if (isSummary) {
+        if (target.useLastValue?.enable) {
+          url += '/value?time=' + query.range.to.toJSON();
+        } else if (isSummary) {
           url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary);
         } else if (isInterpolated) {
           url += '/interpolated' + timeRange + '&interval=' + intervalTime;
-        } else if (target.recordedValues && target.recordedValues.enable) {
+        } else if (isRecorded) {
           const maxNumber =
             target.recordedValues.maxNumber && !isNaN(target.recordedValues.maxNumber)
               ? target.recordedValues.maxNumber
               : query.maxDataPoints;
           url += '/recorded' + timeRange + '&maxCount=' + maxNumber;
-        } else if (target.useLastValue?.enable) {
-          url += '/value?time=' + query.range.to.toJSON();
         } else {
           url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints;
         }
@@ -782,9 +797,9 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   private handleBatchResponse(response: any, target: any, displayName: string | null): Promise<PiwebapTargetRsp[]> {
     const targetName = target.expression || target.elementPath;
     const noTemplate = target.elementPathArray.length === 1 && target.elementPath === target.elementPathArray[0].path;
-    let index = 1;
+    const totalSize = noTemplate ? target.attributes.length : target.elementPathArray.length;
     const targetResults: PiwebapTargetRsp[] = [];
-    for (const _ of target.attributes) {
+    for (let index = 1; index <= totalSize; index++) {
       const dataKey = `Req${index + 1000}`;
       const path = response.config.data[dataKey].Headers ? response.config.data[dataKey].Headers['Asset-Path'] : null;
       const data = response.data[dataKey];
