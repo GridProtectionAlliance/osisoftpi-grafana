@@ -836,7 +836,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
           );
         });
       }
-      index++;
     }
     return Promise.resolve(targetResults);
   }
