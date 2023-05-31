@@ -351,7 +351,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       ? { type: 'dataserver' }
       : {
           path: this.getSegmentPathUpTo(currentSegment ?? this.state.segments.slice(0), index),
-          afServerWebId: this.state.segments[0].value ? this.state.segments[0].value.webId : undefined,
+          afServerWebId: this.state.segments.length > 0 && this.state.segments[0].value ? this.state.segments[0].value.webId : undefined,
         };
 
     if (!query.isPiPoint) {

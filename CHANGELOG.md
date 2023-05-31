@@ -33,3 +33,8 @@
 - Allow calculation when last value option is selected
 - When calculation is selected, change label from Interpolated to Interval
 - Fixed issue with variable in Element Path
+
+## 4.2.0
+
+- Fixed issue that only odd attributes were been shown
+- Fixed issue when fetching afServerWebId
