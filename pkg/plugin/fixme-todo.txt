@@ -1,0 +1,94 @@
+// TODO impliment handling of summary data frames whith specific types. 
+// This will require a new response type. 
+// Summary data cannot be streamed. 
+Fix json unmarshaling
+  "summary": {
+    "basis": "EventWeightedIncludeBothEnds",
+    "interval": "30s",
+    "nodata": "Null",
+    "types": [
+      {
+        "label": "Total",
+        "value": {
+          "expandable": true,
+          "value": "Total"
+        }
+      },
+      {
+        "label": "Minimum",
+        "value": {
+          "expandable": true,
+          "value": "Minimum"
+        }
+      }
+    ]
+  },
+// Error should create a error notice to front F1DPZenJDV_uEUWKAhnXfXVYUAmQAAAAV0lOLVY3SjRCMjYxMjFBXFRFU1RESUdJVEFM
+// WORKING RESPONSE"
+// I think the frame should be shaped like Name.Type
+
+//"https://piapi.complacentsee.com/piwebapi/streamsets/summary?startTime=2023-02-18T18:49:43.008Z&endTime=2023-02-25T18:49:43.008Z&intervals=1008&summaryType=Total&summaryType=Minimum&calculationBasis=EventWeighted&summaryDuration=10000s&webid=F1DPZenJDV_uEUWKAhnXfXVYUAkwAAAAV0lOLVY3SjRCMjYxMjFBXEZBU1RTSU5FOTA"}
+
+{
+  "Links": {},
+  "Items": [
+    {
+      "WebId": "F1DPZenJDV_uEUWKAhnXfXVYUAkQAAAAV0lOLVY3SjRCMjYxMjFBXEZBU1RTSU5F",
+      "Name": "fastsine",
+      "Path": "\\\\WIN-V7J4B26121A\\fastsine",
+      "Links": {
+        "Source": "https://piapi.complacentsee.com/piwebapi/points/F1DPZenJDV_uEUWKAhnXfXVYUAkQAAAAV0lOLVY3SjRCMjYxMjFBXEZBU1RTSU5F"
+      },
+      "Items": [
+        {
+          "Type": "Total",
+          "Value": {
+            "Timestamp": "2023-02-25T18:40:08Z",
+            "Value": 0.003319847500986523,
+            "UnitsAbbreviation": "",
+            "Good": true,
+            "Questionable": false,
+            "Substituted": false,
+            "Annotated": false
+          }
+        }
+      ]
+    }
+  ]
+}
+// ERROR RESPONSE
+{
+  "Links": {},
+  "Items": [
+    {
+      "WebId": "F1DPZenJDV_uEUWKAhnXfXVYUAmQAAAAV0lOLVY3SjRCMjYxMjFBXFRFU1RESUdJVEFM",
+      "Name": "testDigital",
+      "Path": "\\\\WIN-V7J4B26121A\\testDigital",
+      "Links": {
+        "Source": "https://piapi.complacentsee.com/piwebapi/points/F1DPZenJDV_uEUWKAhnXfXVYUAmQAAAAV0lOLVY3SjRCMjYxMjFBXFRFU1RESUdJVEFM"
+      },
+      "Items": [
+        {
+          "Type": "Total",
+          "Value": {
+            "Timestamp": "2023-02-25T18:37:31Z",
+            "Value": null,
+            "UnitsAbbreviation": "",
+            "Good": false,
+            "Questionable": false,
+            "Substituted": false,
+            "Annotated": false,
+            "Errors": [
+              {
+                "FieldName": "Value",
+                "Message": [
+                  "Cannot do summary calculation on non-numeric data."
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
