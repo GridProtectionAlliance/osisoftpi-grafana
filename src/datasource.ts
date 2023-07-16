@@ -1,5 +1,5 @@
 import { 
-  each, 
+  //each, 
   filter, 
   //flatten, 
   //forOwn, 
@@ -22,6 +22,7 @@ import {
   //Labels,
   AnnotationQuery,
   DataFrame,
+  Field,
   //toDataFrame,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend} from '@grafana/runtime';
@@ -34,6 +35,7 @@ import {
   //PiwebapiElementPath,
   PiwebapiInternalRsp,
   PiwebapiRsp,
+  AnnotationItem,
 } from './types';
 import {
   //checkNumber,
@@ -92,6 +94,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
       prepareQuery(anno: AnnotationQuery<PIWebAPIQuery>): PIWebAPIQuery | undefined {
         if (anno.target) {
+          anno.target.queryType = 'Annotation';
           anno.target.isAnnotation = true;
         }
         return anno.target;
@@ -350,38 +353,47 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     const annotationOptions = annon.target!;
     const events: AnnotationEvent[] = [];
     data.forEach((d: DataFrame) => {
-      let attributeText = '';
-      let name = d.name!;
-      const endTime = d.fields.find((f) => f.name === 'EndTime')?.values.get(0);
-      const startTime = d.fields.find((f) => f.name === 'StartTime')?.values.get(0);
-      // check if we have more attributes in the table data
-      const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0);
-      if (attributeDataItems) {
-        each(attributeDataItems, (attributeData) => {
-          attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
+      d.fields.forEach((f: Field) => {
+        // FIXME: Confirm that this is an annotation item, not an attribute frame.
+        const annotation = Array.isArray(f.values) ? f.values[0] : f.values as unknown as AnnotationItem;
+        let attributeText = '';
+        let name = annotation.Name;
+        let startTime = annotation.StartTime;
+        let endTime = annotation.EndTime;
+        // check if we have more attributes in the table data
+
+        //FIXME: Revise thise code to work on the new data structure
+        // const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0);
+        // if (attributeDataItems) {
+        //   each(attributeDataItems, (attributeData) => {
+        //     attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
+        //   });
+        // }
+
+        // replace Dataframe name using Regex
+        if (annotationOptions.regex && annotationOptions.regex.enable) {
+          name = name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
+        }
+        // create the event
+        events.push({
+          id: annotationOptions.database?.WebId,
+          annotation: annon,
+          title: `Name: ${annon.name}`,
+          time: new Date(startTime).getTime(),
+          timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
+          text:
+            `Tag: ${name}` +
+            attributeText +
+            '<br />Start: ' +
+            new Date(startTime).toLocaleString('pt-BR') +
+            '<br />End: ' +
+            new Date(endTime).toLocaleString('pt-BR'),
+          tags: ['OSISoft PI'],
         });
-      }
-      // replace Dataframe name using Regex
-      if (annotationOptions.regex && annotationOptions.regex.enable) {
-        name = name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
-      }
-      // create the event
-      events.push({
-        id: annotationOptions.database?.WebId,
-        annotation: annon,
-        title: `Name: ${annon.name}`,
-        time: new Date(startTime).getTime(),
-        timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
-        text:
-          `Tag: ${name}` +
-          attributeText +
-          '<br />Start: ' +
-          new Date(startTime).toLocaleString('pt-BR') +
-          '<br />End: ' +
-          new Date(endTime).toLocaleString('pt-BR'),
-        tags: ['OSISoft PI'],
-      });
+      })
+
     });
+    console.info('eventFrameToAnnotation: events:', events);
     return events;
   }
 

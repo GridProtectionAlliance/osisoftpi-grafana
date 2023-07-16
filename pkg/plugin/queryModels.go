@@ -112,3 +112,107 @@ type PiProcessedQuery struct {
 	Response            PiBatchData     `json:"ResponseData"`
 	Error               error
 }
+
+// AnnotationQueryResponse is the response from the PI Web API for an annotation query
+type Links struct {
+	First string `json:"First"`
+	Last  string `json:"Last"`
+}
+
+// AnnotationItemSecurity is only needed for generating a new struct. In practice this can be ignored, by the frontend.
+type AnnotationItemSecurity struct {
+	CanAnnotate        bool     `json:"CanAnnotate"`
+	CanDelete          bool     `json:"CanDelete"`
+	CanExecute         bool     `json:"CanExecute"`
+	CanRead            bool     `json:"CanRead"`
+	CanReadData        bool     `json:"CanReadData"`
+	CanSubscribe       bool     `json:"CanSubscribe"`
+	CanSubscribeOthers bool     `json:"CanSubscribeOthers"`
+	CanWrite           bool     `json:"CanWrite"`
+	CanWriteData       bool     `json:"CanWriteData"`
+	HasAdmin           bool     `json:"HasAdmin"`
+	Rights             []string `json:"Rights"`
+}
+
+// AnnotationItemLinks is only needed for generating a new struct. In practice this can be ignored, by the frontend.
+type AnnotationItemLinks struct {
+	Self               string `json:"Self"`
+	Attributes         string `json:"Attributes"`
+	EventFrames        string `json:"EventFrames"`
+	Database           string `json:"Database"`
+	ReferencedElements string `json:"ReferencedElements"`
+	Template           string `json:"Template"`
+	Categories         string `json:"Categories"`
+	InterpolatedData   string `json:"InterpolatedData"`
+	RecordedData       string `json:"RecordedData"`
+	PlotData           string `json:"PlotData"`
+	SummaryData        string `json:"SummaryData"`
+	Value              string `json:"Value"`
+	EndValue           string `json:"EndValue"`
+	Security           string `json:"Security"`
+	SecurityEntries    string `json:"SecurityEntries"`
+}
+
+type AnnotationItem struct {
+	WebID              string                 `json:"WebId"`
+	ID                 string                 `json:"Id"`
+	Name               string                 `json:"Name"`
+	Description        string                 `json:"Description"`
+	Path               string                 `json:"Path"`
+	TemplateName       string                 `json:"TemplateName"`
+	HasChildren        bool                   `json:"HasChildren"`
+	CategoryNames      []string               `json:"CategoryNames"`
+	ExtendedProperties struct{}               `json:"ExtendedProperties"`
+	StartTime          string                 `json:"StartTime"`
+	EndTime            string                 `json:"EndTime"`
+	Severity           string                 `json:"Severity"`
+	AcknowledgedBy     string                 `json:"AcknowledgedBy"`
+	AcknowledgedDate   string                 `json:"AcknowledgedDate"`
+	CanBeAcknowledged  bool                   `json:"CanBeAcknowledged"`
+	IsAcknowledged     bool                   `json:"IsAcknowledged"`
+	IsAnnotated        bool                   `json:"IsAnnotated"`
+	IsLocked           bool                   `json:"IsLocked"`
+	AreValuesCaptured  bool                   `json:"AreValuesCaptured"`
+	RefElementWebIds   []string               `json:"RefElementWebIds"`
+	Security           AnnotationItemSecurity `json:"Security"`
+	Links              AnnotationItemLinks    `json:"Links"`
+}
+
+type AnnotationQueryResponse struct {
+	Links Links            `json:"Links"`
+	Items []AnnotationItem `json:"Items"`
+}
+
+func getFakeQueryResponse() AnnotationQueryResponse {
+	fiveMinAgo := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
+	threeMinAgo := time.Now().Add(-3 * time.Minute).Format(time.RFC3339)
+
+	return AnnotationQueryResponse{
+		Links: Links{
+			First: "https://piapi.complacentsee.com/piwebapi/assetdatabases/F1RDBy9ucRRb8ESE6SOe4ZuJsQYi78vFbGkU6ZIT2mvbKH4gV0lOLVY3SjRCMjYxMjFBXFRFU1RBRg/eventframes?templateName=TestAlert1&startTime=" + fiveMinAgo + "&endTime=" + threeMinAgo + "&startIndex=0",
+			Last:  "https://piapi.complacentsee.com/piwebapi/assetdatabases/F1RDBy9ucRRb8ESE6SOe4ZuJsQYi78vFbGkU6ZIT2mvbKH4gV0lOLVY3SjRCMjYxMjFBXFRFU1RBRg/eventframes?templateName=TestAlert1&startTime=" + fiveMinAgo + "&endTime=" + threeMinAgo + "&startIndex=0",
+		},
+		Items: []AnnotationItem{
+			{
+				WebID:             "F1FmBy9ucRRb8ESE6SOe4ZuJsQfD80tSQj7hGlv_84a1Sq4AV0lOLVY3SjRCMjYxMjFBXFRFU1RBRlxFVkVOVEZSQU1FU1tURVNUQUxFUlQxXzIwMjMwNzE1LTAwMV0",
+				ID:                "b5343f7c-2324-11ee-a5bf-ff386b54aae0",
+				Name:              "TestAlert1_20230715-001",
+				StartTime:         fiveMinAgo,
+				EndTime:           threeMinAgo,
+				Description:       "",
+				Path:              "\\\\WIN-V7J4B26121A\\TestAF\\EventFrames[TestAlert1_20230715-001]",
+				TemplateName:      "TestAlert1",
+				HasChildren:       false,
+				CategoryNames:     []string{"Fake1", "Alert"},
+				Severity:          "None",
+				AcknowledgedBy:    "",
+				AcknowledgedDate:  "1970-01-01T00:00:00Z",
+				CanBeAcknowledged: false,
+				IsAcknowledged:    false,
+				IsAnnotated:       false,
+				IsLocked:          false,
+				AreValuesCaptured: false,
+			},
+		},
+	}
+}

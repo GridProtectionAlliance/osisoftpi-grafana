@@ -93,6 +93,68 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   isPiPoint: false,
 };
 
+
+// AnnotationItemSecurity is only needed for generating a new interface. In practice this can be ignored, by the frontend.
+interface AnnotationItemSecurity {
+  CanAnnotate: boolean;
+  CanDelete: boolean;
+  CanExecute: boolean;
+  CanRead: boolean;
+  CanReadData: boolean;
+  CanSubscribe: boolean;
+  CanSubscribeOthers: boolean;
+  CanWrite: boolean;
+  CanWriteData: boolean;
+  HasAdmin: boolean;
+  Rights: string[];
+}
+
+// AnnotationItemLinks is only needed for generating a new interface. In practice this can be ignored, by the frontend.
+interface AnnotationItemLinks {
+  Self: string;
+  Attributes: string;
+  EventFrames: string;
+  Database: string;
+  ReferencedElements: string;
+  Template: string;
+  Categories: string;
+  InterpolatedData: string;
+  RecordedData: string;
+  PlotData: string;
+  SummaryData: string;
+  Value: string;
+  EndValue: string;
+  Security: string;
+  SecurityEntries: string;
+}
+
+export interface AnnotationItem {
+  WebID: string;
+  ID: string;
+  Name: string;
+  Description: string;
+  Path: string;
+  TemplateName: string;
+  HasChildren: boolean;
+  CategoryNames: string[];
+  ExtendedProperties: object;
+  StartTime: string;
+  EndTime: string;
+  Severity: string;
+  AcknowledgedBy: string;
+  AcknowledgedDate: string;
+  CanBeAcknowledged: boolean;
+  IsAcknowledged: boolean;
+  IsAnnotated: boolean;
+  IsLocked: boolean;
+  AreValuesCaptured: boolean;
+  RefElementWebIds: string[];
+  Security: AnnotationItemSecurity;
+  Links: AnnotationItemLinks;
+}
+
+
+
 /**
  * These are options configured for each DataSource instance
  */

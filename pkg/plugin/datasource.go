@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,9 +12,13 @@ import (
 	"github.com/go-co-op/gocron"
 	"github.com/gorilla/websocket"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Make sure Datasource implements required interfaces. This is important to do
@@ -37,30 +42,30 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		return nil, fmt.Errorf("http client options: %w", err)
 	}
 
-	cl, err := httpclient.New(opts)
+	httpClient, err := httpclient.New(opts)
 	if err != nil {
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
-	var webIDCache = map[string]WebIDCacheEntry{}
-	// TODO: Re-add streaming
-	//	var channelConstruct = map[string]StreamChannelConstruct{}
+
+	webIDCache := make(map[string]WebIDCacheEntry)
 
 	scheduler := gocron.NewScheduler(time.UTC)
 	scheduler.Every(5).Minute().Do(cleanWebIDCache, webIDCache)
 	scheduler.StartAsync()
 
-	return &Datasource{
-		settings:   settings,
-		httpClient: cl,
-		webIDCache: webIDCache,
-		//	channelConstruct:          channelConstruct,
+	ds := &Datasource{
+		settings:                  settings,
+		httpClient:                httpClient,
+		webIDCache:                webIDCache,
 		scheduler:                 scheduler,
 		websocketConnectionsMutex: &sync.Mutex{},
 		sendersByWebIDMutex:       &sync.Mutex{},
 		websocketConnections:      make(map[string]*websocket.Conn),
 		sendersByWebID:            make(map[string]map[*backend.StreamSender]bool),
 		streamChannels:            make(map[string]chan []byte),
-	}, nil
+	}
+	ds.queryMux = ds.newQueryMux()
+	return ds, nil
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
@@ -76,9 +81,22 @@ func (d *Datasource) Dispose() {
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
 
+func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+
+	return d.queryMux.QueryData(ctx, req)
+}
+
 // TODO: Add support for regex replace of frame names
 // TODO: Missing functionality: Fix summaries
-func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+
+	//TODO: Remove this debug information
+	jsonReq, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	}
+
+	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 
 	backend.Logger.Info("Query Recieved. Processing...")
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
@@ -101,9 +119,55 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return response, nil
 }
 
+// QueryAnnotations recevies annotation queries from the frontend and returns dataframes that contain json raw messages containing the annotations.
+func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+	response := &backend.QueryDataResponse{}
+	response.Responses = make(map[string]backend.DataResponse)
+
+	//TODO: Remove this temporary testing information
+	var fakeresponses []AnnotationQueryResponse
+	fakeresponse := getFakeQueryResponse()
+	fakeresponses = append(fakeresponses, fakeresponse)
+
+	annotationFrame, _ := convertAnnotationResponsetoFrame(fakeresponses)
+
+	backend.Logger.Info("Annotation query received. Processing.!..")
+
+	//TODO: Remove this debug information
+	jsonReq, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	}
+
+	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+
+	for _, q := range req.Queries {
+		backend.Logger.Info("Processing Query", "RefID", q.RefID)
+		var subResponse backend.DataResponse
+		subResponse.Frames = append(subResponse.Frames, annotationFrame)
+		response.Responses[q.RefID] = subResponse
+	}
+
+	return response, nil
+}
+
 // This function provides a way to proxy requests to the PI Web API. It is used to limit access fromt he frontend to the PI Web API.
 // These endpoints are called by the front end while configuring the datasource, query, and annotations.
 func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
+	// Create spans for this function.
+	// tracing.DefaultTracer() returns the tracer initialized when calling Manage().
+	// Refer to OpenTelemetry's Go SDK to know how to customize your spans.
+	ctx, span := tracing.DefaultTracer().Start(
+		ctx,
+		"call resource processing",
+		trace.WithAttributes(
+			attribute.String("resource.URL", req.URL),
+			attribute.String("resource.Path", req.Path),
+			attribute.String("resource.Method", req.Method),
+		),
+	)
+	defer span.End()
+
 	var isAllowed = true
 	var allowedBasePaths = []string{
 		"/assetdatabases",
@@ -170,4 +234,13 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 // and the specified message, which is formatted with Sprintf.
 func newHealthCheckErrorf(format string, args ...interface{}) *backend.CheckHealthResult {
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
+}
+
+func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
+	mux := datasource.NewQueryTypeMux()
+
+	// Register query handlers
+	mux.HandleFunc("Annotation", d.QueryAnnotations)
+	mux.HandleFunc("", d.QueryTSData)
+	return mux
 }

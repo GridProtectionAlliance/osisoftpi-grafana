@@ -7,10 +7,12 @@ import (
 	"github.com/go-co-op/gocron"
 	"github.com/gorilla/websocket"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
 )
 
 type Datasource struct {
 	settings      backend.DataSourceInstanceSettings
+	queryMux      *datasource.QueryTypeMux
 	StreamHandler backend.StreamHandler
 	httpClient    *http.Client
 	webIDCache    map[string]WebIDCacheEntry

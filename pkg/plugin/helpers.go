@@ -23,9 +23,10 @@ func (d *Datasource) apiGet(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if d.settings.BasicAuthEnabled {
-		req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
-	}
+	//TODO: grafana http client automatically adds basic auth, remove once confirmed
+	// if d.settings.BasicAuthEnabled {
+	// 	req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
+	// }
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -51,10 +52,10 @@ func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests map[s
 	if err != nil {
 		return nil, err
 	}
-
-	if d.settings.BasicAuthEnabled {
-		req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
-	}
+	//TODO: grafana http client automatically adds basic auth, remove once confirmed
+	// if d.settings.BasicAuthEnabled {
+	// 	req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
+	// }
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Requested-With", "message/http")
 	req.Header.Set("X-PIWEBAPI-HTTP-METHOD", "GET")
@@ -237,6 +238,29 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 	}
 
 	return ts, nil
+}
+
+func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*data.Frame, error) {
+	frame := data.NewFrame("Anno")
+
+	var annotationData []*json.RawMessage
+
+	for _, annotation := range annotations {
+		for _, annotationValue := range annotation.Items {
+			rawMsg, err := json.Marshal(annotationValue)
+			if err != nil {
+				return nil, fmt.Errorf("error marshalling annotationValue: %w", err)
+			}
+			rm := json.RawMessage(rawMsg)
+			annotationData = append(annotationData, &rm)
+		}
+	}
+
+	frame.Fields = append(frame.Fields, data.NewField("annotation", nil, annotationData))
+
+	frame.Meta = &data.FrameMeta{}
+
+	return frame, nil
 }
 
 // TODO: Code simplification: Determine if we should create metadata here.

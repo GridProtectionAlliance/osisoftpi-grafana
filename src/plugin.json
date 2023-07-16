@@ -4,7 +4,7 @@
   "type": "datasource",
   "id": "gridprotectionalliance-osisoftpi-datasource",
   "backend": true,
-  "executable": "gpx_osipiwebapistreaming",
+  "executable": "gpx_osipiwebapi",
   "metrics": true,
   "annotations": true,
   "alerting": true,
