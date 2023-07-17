@@ -91,14 +91,14 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
 	//TODO: Remove this debug information
-	jsonReq, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	}
+	// jsonReq, err := json.Marshal(req)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	// }
 
-	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 
-	backend.Logger.Info("Query Recieved. Processing...")
+	// backend.Logger.Info("Query Recieved. Processing...")
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
 
@@ -143,6 +143,11 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 
 	for _, q := range req.Queries {
 		backend.Logger.Info("Processing Query", "RefID", q.RefID)
+		// Process the annotation query request, extracting only the useful information
+		//ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
+		// Create a batch request
+
+		// complete batch request
 		var subResponse backend.DataResponse
 		subResponse.Frames = append(subResponse.Frames, annotationFrame)
 		response.Responses[q.RefID] = subResponse
