@@ -259,7 +259,6 @@ func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*d
 	frame.Fields = append(frame.Fields, data.NewField("annotation", nil, annotationData))
 
 	frame.Meta = &data.FrameMeta{}
-
 	return frame, nil
 }
 

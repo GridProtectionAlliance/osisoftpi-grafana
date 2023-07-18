@@ -163,13 +163,13 @@ func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.Da
 }
 
 func (q *PiProcessedAnnotationQuery) getTimeRangeURIComponent() string {
-	return "?startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
+	return "&startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 
 // getEventFrameQueryURL returns the URI for the event frame query
 func (q PiProcessedAnnotationQuery) getEventFrameQueryURL() string {
 	//example uri:
-	//http(s)://<host>/apiendpoint/assetdatabases/<webid of asset database>/eventframes?templateName=<template name>&startTime=<start time>&endTime=<end time>
+	//http(s)://<host>/<apiendpoint>/assetdatabases/<webid of asset database>/eventframes?templateName=<template name>&startTime=<start time>&endTime=<end time>
 	//optional parameters:
 	// ?categoryName=<category name>
 	// ?nameFilter=<name filter>

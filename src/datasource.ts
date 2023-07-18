@@ -350,11 +350,13 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @memberOf PiWebApiDatasource
    */
   private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
+    //FIXME: the front end cannot handle the new data structure
     const annotationOptions = annon.target!;
     const events: AnnotationEvent[] = [];
     data.forEach((d: DataFrame) => {
       d.fields.forEach((f: Field) => {
         // FIXME: Confirm that this is an annotation item, not an attribute frame.
+        // this only displays a single annotation.
         const annotation = Array.isArray(f.values) ? f.values[0] : f.values as unknown as AnnotationItem;
         let attributeText = '';
         let name = annotation.Name;
@@ -385,8 +387,10 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
             `Tag: ${name}` +
             attributeText +
             '<br />Start: ' +
+            // todo: use the same date format as grafana
             new Date(startTime).toLocaleString('pt-BR') +
             '<br />End: ' +
+            // todo: use the same date format as grafana
             new Date(endTime).toLocaleString('pt-BR'),
           tags: ['OSISoft PI'],
         });

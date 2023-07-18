@@ -125,11 +125,9 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	response.Responses = make(map[string]backend.DataResponse)
 
 	//TODO: Remove this temporary testing information
-	var fakeresponses []AnnotationQueryResponse
-	fakeresponse := getFakeQueryResponse()
-	fakeresponses = append(fakeresponses, fakeresponse)
-
-	annotationFrame, _ := convertAnnotationResponsetoFrame(fakeresponses)
+	var responses []AnnotationQueryResponse
+	//fakeresponse := getFakeQueryResponse()
+	//responses = append(responses, fakeresponse)
 
 	backend.Logger.Info("Annotation query received. Processing.!..")
 
@@ -144,8 +142,22 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	for _, q := range req.Queries {
 		backend.Logger.Info("Processing Query", "RefID", q.RefID)
 		// Process the annotation query request, extracting only the useful information
-		//ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
-		// Create a batch request
+		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
+		// TODO: Create a batch request, for now create a single request
+		url := ProcessedAnnotationQuery.getEventFrameQueryURL()
+		backend.Logger.Info("Sending Query to PI Web API", "URL", url)
+		r, err := d.apiGet(ctx, url)
+		if err != nil {
+			return nil, fmt.Errorf("error getting data from PI Web API: %w", err)
+		}
+		var annotationResult AnnotationQueryResponse
+		err = json.Unmarshal(r, &annotationResult)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshaling response from PI Web API: %w", err)
+		}
+		// Convert the raw response into a Grafana frame
+		responses = append(responses, annotationResult)
+		annotationFrame, err := convertAnnotationResponsetoFrame(responses)
 
 		// complete batch request
 		var subResponse backend.DataResponse
