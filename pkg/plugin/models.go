@@ -23,4 +23,16 @@ type Datasource struct {
 	websocketConnections      map[string]*websocket.Conn
 	sendersByWebID            map[string]map[*backend.StreamSender]bool
 	streamChannels            map[string]chan []byte
+	dataSourceOptions         *PIWebAPIDataSourceJsonData
+}
+
+type PIWebAPIDataSourceJsonData struct {
+	URL        *string `json:"url,omitempty"`
+	Access     *string `json:"access,omitempty"`
+	PIServer   *string `json:"piserver,omitempty"`
+	AFServer   *string `json:"afserver,omitempty"`
+	AFDatabase *string `json:"afdatabase,omitempty"`
+	PIPoint    *bool   `json:"pipoint,omitempty"`
+	NewFormat  *bool   `json:"newFormat,omitempty"`
+	UseUnit    *bool   `json:"useUnit,omitempty"`
 }

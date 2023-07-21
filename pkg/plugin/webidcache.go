@@ -17,6 +17,7 @@ type WebIDCacheEntry struct {
 	Type         reflect.Type
 	DigitalState bool
 	ExpTime      time.Time
+	PointType    string
 }
 
 type WebIDResponsePiPoint struct {
@@ -117,6 +118,7 @@ func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bo
 		Type:         dataType,
 		DigitalState: response.getDigitalSetName() != "",
 		ExpTime:      time.Now().Add(5 * time.Minute),
+		PointType:    response.getType(),
 	}, nil
 }
 
@@ -180,4 +182,14 @@ func (d *Datasource) getDigitalStateforWebID(webID string) bool {
 	}
 	// If the specified webID is not found in the webIDCache, return false
 	return false
+}
+
+func (d *Datasource) getPointTypeForWebID(webID string) string {
+	for _, entry := range d.webIDCache {
+		if entry.WebID == webID {
+			return entry.PointType
+		}
+	}
+	// If the specified webID is not found in the webIDCache, return empty string
+	return ""
 }

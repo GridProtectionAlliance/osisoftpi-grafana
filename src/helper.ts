@@ -1,6 +1,7 @@
 import { each, map } from 'lodash';
 
 import {
+  AnnotationQuery,
   DataFrame,
   FieldConfig,
   TimeSeries,
@@ -11,8 +12,11 @@ import {
   ArrayVector,
   TableData,
   MetricFindValue,
+  Field,
+  toDataFrame,
 } from '@grafana/data';
-import { PiwebapiElementPath, PiwebapiRsp } from 'types';
+
+import { PiwebapiElementPath, PiwebapiRsp, PIWebAPIQuery } from 'types';
 
 export function parseRawQuery(tr: string): any {
   const splitAttributes = tr.split(';');
@@ -126,8 +130,32 @@ export function isAllSelected(current: any): boolean {
   return current.text === 'All';
 }
 
+//FIXME: make this support batch request types
+export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,data: DataFrame[]): DataFrame[] {
+  let processedFrames: DataFrame[] = [];
+  
+  data.forEach((d: DataFrame) => {
+    d.fields.forEach((f: Field) => {
+
+      // Check whether f.values is an array or not to allow for each.
+      if (Array.isArray(f.values)) {
+        f.values.forEach((value: any) => {
+          let annotation;
+          annotation = value;  // use the value from forEach
+          const processedFrame = convertToTableData(annotation.Items).map((r) => {
+            console.log("converted to table, map", r)
+            return toDataFrame(r)});
+          processedFrames = processedFrames.concat(processedFrame);
+        });
+      } 
+    });
+  });
+  return processedFrames;
+}
+
 export function convertToTableData(items: any[], valueData?: any[]): TableData[] {
   // convert to TableData
+  console.log('convertToTableData input', items, valueData);
   const response: TableData[] = items.map((item: any, index: number) => {
     const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
     const rows = [item.StartTime, item.EndTime];
@@ -143,6 +171,7 @@ export function convertToTableData(items: any[], valueData?: any[]): TableData[]
       rows: [rows],
     };
   });
+  console.log('convertToTableData output', response);
   return response;
 }
 

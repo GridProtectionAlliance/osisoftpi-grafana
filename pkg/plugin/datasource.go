@@ -37,6 +37,12 @@ var (
 
 // NewDatasource creates a new PIWebAPI datasource instance.
 func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	var dataSourceOptions PIWebAPIDataSourceJsonData
+	err := json.Unmarshal(settings.JSONData, &dataSourceOptions)
+	if err != nil {
+		panic(err)
+	}
+
 	opts, err := settings.HTTPClientOptions()
 	if err != nil {
 		return nil, fmt.Errorf("http client options: %w", err)
@@ -63,6 +69,7 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		websocketConnections:      make(map[string]*websocket.Conn),
 		sendersByWebID:            make(map[string]map[*backend.StreamSender]bool),
 		streamChannels:            make(map[string]chan []byte),
+		dataSourceOptions:         &dataSourceOptions,
 	}
 	ds.queryMux = ds.newQueryMux()
 	return ds, nil
@@ -91,12 +98,12 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
 	//TODO: Remove this debug information
-	// jsonReq, err := json.Marshal(req)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	// }
+	jsonReq, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	}
 
-	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 
 	// backend.Logger.Info("Query Recieved. Processing...")
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
@@ -145,6 +152,20 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		// TODO: Create a batch request, for now create a single request
 		url := ProcessedAnnotationQuery.getEventFrameQueryURL()
+
+		var batchReq AnnotationBatchRequest
+
+		if len(ProcessedAnnotationQuery.Attributes) > 0 {
+			attributeURLs, err := ProcessedAnnotationQuery.getEventFrameAttributeQueryURL()
+			if err != nil {
+				backend.Logger.Error("Error getting attribute URLs", "Error", err)
+			}
+			batchReq = d.buildAnnotationBatch(url, attributeURLs...)
+		} else {
+			batchReq = d.buildAnnotationBatch(url)
+		}
+		backend.Logger.Info("batchReq", batchReq)
+
 		backend.Logger.Info("Sending Query to PI Web API", "URL", url)
 		r, err := d.apiGet(ctx, url)
 		if err != nil {
@@ -158,6 +179,9 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		// Convert the raw response into a Grafana frame
 		responses = append(responses, annotationResult)
 		annotationFrame, err := convertAnnotationResponsetoFrame(responses)
+		if err != nil {
+			fmt.Errorf("error converting response to frame: %w", err)
+		}
 
 		// complete batch request
 		var subResponse backend.DataResponse

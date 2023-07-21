@@ -151,7 +151,40 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 
 			PointType := d.getTypeForWebID(q.WebID)
 			IsPointDigitalState := d.getDigitalStateforWebID(q.WebID)
-			frame, err := convertItemsToDataFrame(q.Label, *q.Response.getItems(), PointType, IsPointDigitalState, false)
+
+			var tagLabel string
+
+			if d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat {
+				if q.IsPIPoint {
+					// New format returns the full path with metadata
+					// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
+					targetParts := strings.Split(q.FullTargetPath, "\\")
+					tagLabel = targetParts[len(targetParts)-1]
+					var element = targetParts[0]
+					var name = tagLabel
+					var targettype = d.getPointTypeForWebID(q.WebID)
+					tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + targettype + "\"}"
+					//tagLabel = q.FullTargetPath
+
+				} else {
+
+					// New format returns the full path with metadata
+					// Element|Attribute {element="Element", name="Attribute", type="Single"}
+					targetParts := strings.Split(q.FullTargetPath, "\\")
+					tagLabel = targetParts[len(targetParts)-1]
+					labelParts := strings.SplitN(tagLabel, "|", 2)
+					var element = labelParts[0]
+					var name = labelParts[1]
+					var targettype = d.getPointTypeForWebID(q.WebID)
+					tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + targettype + "\"}"
+				}
+
+			} else {
+				// Old format returns just the tag/attribute name
+				tagLabel = q.Label
+			}
+
+			frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(), PointType, IsPointDigitalState, false)
 
 			// if there is an error on a single frame we set metadata and continue to the next frame
 			if err != nil {

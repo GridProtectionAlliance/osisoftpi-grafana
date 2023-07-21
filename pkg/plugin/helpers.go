@@ -246,14 +246,12 @@ func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*d
 	var annotationData []*json.RawMessage
 
 	for _, annotation := range annotations {
-		for _, annotationValue := range annotation.Items {
-			rawMsg, err := json.Marshal(annotationValue)
-			if err != nil {
-				return nil, fmt.Errorf("error marshalling annotationValue: %w", err)
-			}
-			rm := json.RawMessage(rawMsg)
-			annotationData = append(annotationData, &rm)
+		rawMsg, err := json.Marshal(annotation)
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling annotationValue: %w", err)
 		}
+		rm := json.RawMessage(rawMsg)
+		annotationData = append(annotationData, &rm)
 	}
 
 	frame.Fields = append(frame.Fields, data.NewField("annotation", nil, annotationData))
@@ -271,6 +269,7 @@ func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*d
 // TODO: Missing functionality: Add support for replacing bad data.
 func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, SliceType reflect.Type, digitalState bool, summaryQuery bool) (*data.Frame, error) {
 	frame := data.NewFrame(frameName)
+	backend.Logger.Info("convertItemsToDataFrame", "FrameName: ", frameName)
 
 	//FIXME: Remove this once we have a better way to handle this
 	if len(items) < 10 {

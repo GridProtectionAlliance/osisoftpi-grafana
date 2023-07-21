@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -104,6 +105,20 @@ type PiProcessedAnnotationQuery struct {
 	Error        error
 }
 
+type AnnotationBatchRequest map[string]AnnotationRequest
+
+type AnnotationRequest struct {
+	Method          string                     `json:"Method"`
+	Resource        string                     `json:"Resource,omitempty"`
+	RequestTemplate *AnnotationRequestTemplate `json:"RequestTemplate,omitempty"`
+	Parameters      []string                   `json:"Parameters,omitempty"`
+	ParentIds       []string                   `json:"ParentIds,omitempty"`
+}
+
+type AnnotationRequestTemplate struct {
+	Resource string `json:"Resource"`
+}
+
 func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.DataQuery) PiProcessedAnnotationQuery {
 	var ProcessedQuery PiProcessedAnnotationQuery
 	var PiAnnotationQuery PIAnnotationQuery
@@ -186,6 +201,33 @@ func (q PiProcessedAnnotationQuery) getEventFrameQueryURL() string {
 		uri += "&nameFilter=" + q.NameFilter
 	}
 	return uri
+}
+
+func (d *Datasource) buildAnnotationBatch(efURL string, attributeURLs ...string) AnnotationBatchRequest {
+	batchRequest := AnnotationBatchRequest{}
+
+	// create a batch request for the event frames
+	eventFrameRequest := AnnotationRequest{
+		Method:   "GET",
+		Resource: efURL, // assuming efURL is already formatted with start/end times, templateName, etc.
+	}
+	batchRequest["1"] = eventFrameRequest
+
+	// create a batch request for each attribute
+	for i, attributeURL := range attributeURLs {
+		requestTemplateResource := attributeURL
+		attributeRequest := AnnotationRequest{
+			Method: "GET",
+			RequestTemplate: &AnnotationRequestTemplate{
+				Resource: requestTemplateResource,
+			},
+			Parameters: []string{"$.1.Content.Items[*].WebId"},
+			ParentIds:  []string{"1"},
+		}
+		batchRequest[strconv.Itoa(i+2)] = attributeRequest
+	}
+
+	return batchRequest
 }
 
 // getEventFrameAttributeQueryURL returns a slice of URIs for each attribute specified in the query
