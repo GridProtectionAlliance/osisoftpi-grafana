@@ -80,6 +80,9 @@ type PIWebAPIQuery struct {
 	} `json:"segments"`
 	Summary QuerySummary `json:"summary"`
 	Target  string       `json:"target"`
+	UseUnit struct {
+		Enable bool `json:"enable"`
+	} `json:"useUnit"`
 }
 
 type QuerySummary struct {
@@ -110,6 +113,7 @@ type PiProcessedQuery struct {
 	ResponseUnits       string
 	BatchRequest        BatchSubRequest `json:"BatchRequest"`
 	Response            PiBatchData     `json:"ResponseData"`
+	UseUnit             bool            `json:"UseUnit"`
 	Error               error
 }
 
@@ -181,38 +185,4 @@ type AnnotationItem struct {
 type AnnotationQueryResponse struct {
 	Links Links            `json:"Links"`
 	Items []AnnotationItem `json:"Items"`
-}
-
-func getFakeQueryResponse() AnnotationQueryResponse {
-	fiveMinAgo := time.Now().Add(-5 * time.Minute).Format(time.RFC3339)
-	threeMinAgo := time.Now().Add(-3 * time.Minute).Format(time.RFC3339)
-
-	return AnnotationQueryResponse{
-		Links: Links{
-			First: "https://piapi.complacentsee.com/piwebapi/assetdatabases/F1RDBy9ucRRb8ESE6SOe4ZuJsQYi78vFbGkU6ZIT2mvbKH4gV0lOLVY3SjRCMjYxMjFBXFRFU1RBRg/eventframes?templateName=TestAlert1&startTime=" + fiveMinAgo + "&endTime=" + threeMinAgo + "&startIndex=0",
-			Last:  "https://piapi.complacentsee.com/piwebapi/assetdatabases/F1RDBy9ucRRb8ESE6SOe4ZuJsQYi78vFbGkU6ZIT2mvbKH4gV0lOLVY3SjRCMjYxMjFBXFRFU1RBRg/eventframes?templateName=TestAlert1&startTime=" + fiveMinAgo + "&endTime=" + threeMinAgo + "&startIndex=0",
-		},
-		Items: []AnnotationItem{
-			{
-				WebID:             "F1FmBy9ucRRb8ESE6SOe4ZuJsQfD80tSQj7hGlv_84a1Sq4AV0lOLVY3SjRCMjYxMjFBXFRFU1RBRlxFVkVOVEZSQU1FU1tURVNUQUxFUlQxXzIwMjMwNzE1LTAwMV0",
-				ID:                "b5343f7c-2324-11ee-a5bf-ff386b54aae0",
-				Name:              "TestAlert1_20230715-001",
-				StartTime:         fiveMinAgo,
-				EndTime:           threeMinAgo,
-				Description:       "",
-				Path:              "\\\\WIN-V7J4B26121A\\TestAF\\EventFrames[TestAlert1_20230715-001]",
-				TemplateName:      "TestAlert1",
-				HasChildren:       false,
-				CategoryNames:     []string{"Fake1", "Alert"},
-				Severity:          "None",
-				AcknowledgedBy:    "",
-				AcknowledgedDate:  "1970-01-01T00:00:00Z",
-				CanBeAcknowledged: false,
-				IsAcknowledged:    false,
-				IsAnnotated:       false,
-				IsLocked:          false,
-				AreValuesCaptured: false,
-			},
-		},
-	}
 }

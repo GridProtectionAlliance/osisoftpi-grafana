@@ -49,6 +49,11 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 		return ProcessedQuery
 	}
 
+	var UseUnits = false
+	if PiQuery.Pi.UseUnit.Enable {
+		UseUnits = true
+	}
+
 	// the queries are may contain multiple targets, so we need to loop through them
 	for _, target := range PiQuery.Pi.getTargets() {
 		fullTargetPath := PiQuery.Pi.getBasePath()
@@ -69,6 +74,7 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 			IsPIPoint:           PiQuery.Pi.IsPiPoint,
 			//Streamable:          PiQuery.isStreamable(), //TODO: Implement this
 			FullTargetPath: fullTargetPath,
+			UseUnit:        UseUnits,
 		}
 
 		WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
@@ -149,9 +155,6 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				break
 			}
 
-			PointType := d.getTypeForWebID(q.WebID)
-			IsPointDigitalState := d.getDigitalStateforWebID(q.WebID)
-
 			var tagLabel string
 
 			if d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat {
@@ -184,7 +187,7 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				tagLabel = q.Label
 			}
 
-			frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(), PointType, IsPointDigitalState, false)
+			frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(), d, q.WebID, false, q.UseUnit)
 
 			// if there is an error on a single frame we set metadata and continue to the next frame
 			if err != nil {

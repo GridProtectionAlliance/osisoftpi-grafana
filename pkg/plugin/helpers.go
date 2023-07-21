@@ -267,9 +267,12 @@ func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*d
 // TODO: Code cleanup: handle this directly using slices of pointers.
 // TODO: Missing functionality: Add support for summary queries.
 // TODO: Missing functionality: Add support for replacing bad data.
-func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, SliceType reflect.Type, digitalState bool, summaryQuery bool) (*data.Frame, error) {
+
+func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Datasource, webID string, summaryQuery bool, includeMetaData bool) (*data.Frame, error) {
 	frame := data.NewFrame(frameName)
 	backend.Logger.Info("convertItemsToDataFrame", "FrameName: ", frameName)
+	SliceType := d.getTypeForWebID(webID)
+	digitalState := d.getDigitalStateForWebID(webID)
 
 	//FIXME: Remove this once we have a better way to handle this
 	if len(items) < 10 {
@@ -366,9 +369,21 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, Slice
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(values, badValues)
 
+	timeField := data.NewField("time", nil, timestamps)
+	valueField := data.NewField(frameName, nil, valuepointers)
+
+	fieldConfig := &data.FieldConfig{}
+
+	if includeMetaData {
+		fieldConfig.Unit = d.getUnitsForWebID(webID)
+		fieldConfig.Description = d.getDescriptionForWebID(webID)
+	}
+
+	valueField.SetConfig(fieldConfig)
+
 	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, timestamps),
-		data.NewField(frameName, nil, valuepointers),
+		timeField,
+		valueField,
 	)
 
 	if digitalState {
@@ -376,7 +391,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, Slice
 			data.NewField(frameName+".Value", nil, digitalStateValues),
 		)
 	}
-
+	// create a metadata struct for the frame so we can set it later.
 	frame.Meta = &data.FrameMeta{}
 	return frame, nil
 }

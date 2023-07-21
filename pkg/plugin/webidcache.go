@@ -18,14 +18,18 @@ type WebIDCacheEntry struct {
 	DigitalState bool
 	ExpTime      time.Time
 	PointType    string
+	Units        string
+	Description  string
 }
 
 type WebIDResponsePiPoint struct {
-	WebID          string `json:"WebId"`
-	Name           string `json:"Name"`
-	Path           string `json:"Path"`
-	Type           string `json:"PointType"`
-	DigitalSetName string `json:"DigitalSetName"`
+	WebID           string `json:"WebId"`
+	Name            string `json:"Name"`
+	Path            string `json:"Path"`
+	Type            string `json:"PointType"`
+	DigitalSetName  string `json:"DigitalSetName"`
+	EngieeringUnits string `json:"EngineeringUnits"`
+	Description     string `json:"Descriptor"`
 }
 
 func (w *WebIDResponsePiPoint) getType() string {
@@ -40,12 +44,18 @@ func (w *WebIDResponsePiPoint) getDigitalSetName() string {
 	return w.DigitalSetName
 }
 
+func (w *WebIDResponsePiPoint) getUnits() string {
+	return w.EngieeringUnits
+}
+
 type WebIDResponseAttribute struct {
-	WebID          string `json:"WebId"`
-	Name           string `json:"Name"`
-	Path           string `json:"Path"`
-	Type           string `json:"Type"`
-	DigitalSetName string `json:"DigitalSetName"`
+	WebID            string `json:"WebId"`
+	Name             string `json:"Name"`
+	Path             string `json:"Path"`
+	Type             string `json:"Type"`
+	DigitalSetName   string `json:"DigitalSetName"`
+	DefaultUnitsName string `json:"DefaultUnitsName"`
+	Description      string `json:"Description"`
 }
 
 func (w *WebIDResponseAttribute) getType() string {
@@ -60,10 +70,15 @@ func (w *WebIDResponseAttribute) getDigitalSetName() string {
 	return w.DigitalSetName
 }
 
+func (w *WebIDResponseAttribute) getUnits() string {
+	return w.DefaultUnitsName
+}
+
 type WebIDResponse interface {
 	getType() string
 	getWebID() string
 	getDigitalSetName() string
+	getUnits() string
 }
 
 func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
@@ -89,10 +104,10 @@ func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) 
 func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
 	uri := ""
 	if isPiPoint {
-		uri = "/points?selectedFields=WebId%3BName%3BPath%3BPointType%3BDigitalSetName&path=\\\\"
+		uri = "/points?selectedFields=WebId%3BName%3BPath%3BPointType%3BDigitalSetName%3BDescriptor%3BEngineeringUnits&path=\\\\"
 		uri += strings.Replace(strings.Replace(path, "|", "\\", -1), ";", "\\", -1)
 	} else {
-		uri = "/attributes?selectedFields=WebId%3BName%3BPath%3BType%3BDigitalSetName&path=\\\\"
+		uri = "/attributes?selectedFields=WebId%3BName%3BPath%3BType%3BDigitalSetName%3BDescription%3BDefaultUnitsName&path=\\\\"
 		uri += path
 	}
 	log.DefaultLogger.Info("WebID request", "uri", uri)
@@ -119,6 +134,7 @@ func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bo
 		DigitalState: response.getDigitalSetName() != "",
 		ExpTime:      time.Now().Add(5 * time.Minute),
 		PointType:    response.getType(),
+		Units:        response.getUnits(),
 	}, nil
 }
 
@@ -174,7 +190,7 @@ func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
 	return reflect.TypeOf([]string{})
 }
 
-func (d *Datasource) getDigitalStateforWebID(webID string) bool {
+func (d *Datasource) getDigitalStateForWebID(webID string) bool {
 	for _, entry := range d.webIDCache {
 		if entry.WebID == webID {
 			return entry.DigitalState
@@ -188,6 +204,26 @@ func (d *Datasource) getPointTypeForWebID(webID string) string {
 	for _, entry := range d.webIDCache {
 		if entry.WebID == webID {
 			return entry.PointType
+		}
+	}
+	// If the specified webID is not found in the webIDCache, return empty string
+	return ""
+}
+
+func (d *Datasource) getUnitsForWebID(webID string) string {
+	for _, entry := range d.webIDCache {
+		if entry.WebID == webID {
+			return entry.Units
+		}
+	}
+	// If the specified webID is not found in the webIDCache, return empty string
+	return ""
+}
+
+func (d *Datasource) getDescriptionForWebID(webID string) string {
+	for _, entry := range d.webIDCache {
+		if entry.WebID == webID {
+			return entry.Description
 		}
 	}
 	// If the specified webID is not found in the webIDCache, return empty string
