@@ -49,17 +49,42 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 		return ProcessedQuery
 	}
 
+	// Determine if we are using units in the response.
+	// The front end doesn't guarantee that the UseUnit field will be set, so we need to check for nils
 	var UseUnits = false
-	if PiQuery.Pi.UseUnit.Enable {
-		UseUnits = true
+	if PiQuery.Pi.UseUnit != nil && PiQuery.Pi.UseUnit.Enable != nil {
+		if *PiQuery.Pi.UseUnit.Enable {
+			UseUnits = true
+		}
 	}
 
+	// Upon creating a dashboard the initial query will be empty, so we need to check for that to avoid errors
+	// if the query is empty, we'll return a PiProcessedQuery with an error set.
+	if !PiQuery.Pi.checkValidTargets() {
+		piQuery := PiProcessedQuery{
+			Error: fmt.Errorf("no targets found in query"),
+		}
+		ProcessedQuery = append(ProcessedQuery, piQuery)
+		backend.Logger.Error("No targets found in query")
+		return ProcessedQuery
+	}
+
+	if PiQuery.Pi.checkNilSegments() {
+		piQuery := PiProcessedQuery{
+			Error: fmt.Errorf("no segments found in query"),
+		}
+		ProcessedQuery = append(ProcessedQuery, piQuery)
+		backend.Logger.Error("No segments found in query")
+		return ProcessedQuery
+	}
+
+	// At this point we expect that the query is valid, so we can start processing it.
 	// the queries are may contain multiple targets, so we need to loop through them
 	for _, target := range PiQuery.Pi.getTargets() {
 		fullTargetPath := PiQuery.Pi.getBasePath()
 
-		//TODO: I think this would be cleaner in separate function.
-		//set the full path for the query based on the type of the target
+		// TODO: I think this would be cleaner in separate function.
+		// set the full path for the query based on the type of the target
 		if PiQuery.Pi.IsPiPoint {
 			fullTargetPath += "\\" + target
 		} else {
@@ -72,7 +97,7 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 			UID:                 datasourceUID,
 			IntervalNanoSeconds: PiQuery.Interval,
 			IsPIPoint:           PiQuery.Pi.IsPiPoint,
-			//Streamable:          PiQuery.isStreamable(), //TODO: Implement this
+			//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
 			FullTargetPath: fullTargetPath,
 			UseUnit:        UseUnits,
 		}
@@ -105,6 +130,9 @@ func (d Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[string
 
 		// create a map of the batch requests. This allows us to map the response back to the original query
 		for i, p := range processed {
+			if p.Error != nil {
+				continue
+			}
 			batchRequest[fmt.Sprint(i)] = p.BatchRequest
 		}
 
@@ -124,6 +152,9 @@ func (d Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[string
 		tempresponse := make(map[int]PIBatchResponse)
 		err = json.Unmarshal(r, &tempresponse)
 		if err != nil {
+			// This likely means that the PI Web API returned an error,
+			// so we'll set the error in the PiProcessedQuery and break out of the loop
+			// TODO: we should try to parse the error message from the PI Web API and return that to the user
 			log.DefaultLogger.Error("Error unmarshaling batch response", "RefID", RefID, "error", err)
 			for i := range processed {
 				PIWebAPIQueries[RefID][i].Error = err
@@ -264,13 +295,52 @@ func (q *PIWebAPIQuery) isExpression() bool {
 }
 
 func (q *PIWebAPIQuery) getBasePath() string {
-	semiIndex := strings.Index(q.Target, ";")
-	return q.Target[:semiIndex]
+	if q.Target == nil {
+		return ""
+	}
+	semiIndex := strings.Index(*q.Target, ";")
+	if semiIndex == -1 {
+		return *q.Target
+	}
+	return (*q.Target)[:semiIndex]
 }
 
 func (q *PIWebAPIQuery) getTargets() []string {
-	semiIndex := strings.Index(q.Target, ";")
-	return strings.Split(q.Target[semiIndex+1:], ";")
+	if q.Target == nil {
+		return nil
+	}
+
+	semiIndex := strings.Index(*q.Target, ";")
+	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
+		return nil
+	}
+
+	return strings.Split((*q.Target)[semiIndex+1:], ";")
+}
+
+func (q *PIWebAPIQuery) checkNilSegments() bool {
+	if q.Target == nil {
+		return true
+	}
+	return false
+}
+
+func (q *PIWebAPIQuery) checkValidTargets() bool {
+	if q.Target == nil {
+		return false
+	}
+
+	if strings.Compare(*q.Target, ";") == 0 {
+		return false
+	}
+	return true
+}
+
+func (q *PIWebAPIQuery) getSegmentCount() int {
+	if q.Segments == nil {
+		return 0
+	}
+	return len(*q.Segments)
 }
 
 func (q *Query) getMaxDataPoints() int {
@@ -401,7 +471,7 @@ func (p PiBatchDataWithoutSubItems) getItems() *[]PiBatchContentItem {
 	return &p.Items
 }
 
-// Custom unmarshaler to unmarshal  PIBatchResponse to the correct struct type.
+// Custom unmarshaler to unmarshal PIBatchResponse to the correct struct type.
 // If the first item in the Items array has a WebId, then we have a PiBatchDataWithSubItems
 // If the first item in the Items array does not have a WebId, then we have a PiBatchDataWithoutSubItems
 // All other formations will return an PiBatchDataError

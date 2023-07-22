@@ -71,6 +71,8 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		streamChannels:            make(map[string]chan []byte),
 		dataSourceOptions:         &dataSourceOptions,
 	}
+
+	// Create a new query mux and assign it to the datasource.
 	ds.queryMux = ds.newQueryMux()
 	return ds, nil
 }
@@ -82,19 +84,34 @@ func (d *Datasource) Dispose() {
 	d.httpClient.CloseIdleConnections()
 }
 
+// newQueryMux creates a new query mux used for routing queries to the correct handler.
+func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
+	mux := datasource.NewQueryTypeMux()
+
+	// Register query handlers
+	// QueryAnnotations is called by Grafana when a user creates an annotation query.
+	mux.HandleFunc("Annotation", d.QueryAnnotations)
+
+	// QueryData is called by Grafana when a user executes any other query type.
+	mux.HandleFunc("", d.QueryTSData)
+
+	return mux
+}
+
 // Main entry point for a query. Called by Grafana when a query is executed.
 // QueryData handles multiple queries and returns multiple responses.
 // req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
-
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-
+	// Pass the query to the query muxer.
 	return d.queryMux.QueryData(ctx, req)
 }
 
 // TODO: Add support for regex replace of frame names
 // TODO: Missing functionality: Fix summaries
+//
+// QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
 	//TODO: Remove this debug information
@@ -104,6 +121,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	}
 
 	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// end remove this debug information
 
 	// backend.Logger.Info("Query Recieved. Processing...")
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
@@ -116,11 +134,11 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	}
 
 	// Send the queries to the PI Web API
-	backend.Logger.Error("Sending Queries to PI Web API")
+	//backend.Logger.Info("Sending Queries to PI Web API")
 	processedQueries_temp := d.batchRequest(ctx, processedPIWebAPIQueries)
 
 	// Convert the PI Web API response into Grafana frames
-	backend.Logger.Error("Processing PI Web API Responses into data frames")
+	backend.Logger.Info("Processing PI Web API Responses into data frames")
 	response := d.processBatchtoFrames(processedQueries_temp)
 
 	return response, nil
@@ -147,7 +165,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 
 	for _, q := range req.Queries {
-		backend.Logger.Info("Processing Query", "RefID", q.RefID)
+		backend.Logger.Info("Processing Annotation Query", "RefID", q.RefID)
 		// Process the annotation query request, extracting only the useful information
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		// TODO: Create a batch request, for now create a single request
@@ -180,7 +198,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		responses = append(responses, annotationResult)
 		annotationFrame, err := convertAnnotationResponsetoFrame(responses)
 		if err != nil {
-			fmt.Errorf("error converting response to frame: %w", err)
+			backend.Logger.Error("error converting response to frame: %w", err)
+			continue
 		}
 
 		// complete batch request
@@ -275,13 +294,4 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 // and the specified message, which is formatted with Sprintf.
 func newHealthCheckErrorf(format string, args ...interface{}) *backend.CheckHealthResult {
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
-}
-
-func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
-	mux := datasource.NewQueryTypeMux()
-
-	// Register query handlers
-	mux.HandleFunc("Annotation", d.QueryAnnotations)
-	mux.HandleFunc("", d.QueryTSData)
-	return mux
 }

@@ -70,18 +70,18 @@ type PIWebAPIQuery struct {
 	Regex struct {
 		Enable bool `json:"enable"`
 	} `json:"regex"`
-	Segments []struct {
-		Label string `json:"label"`
-		Value struct {
-			Expandable bool   `json:"expandable"`
-			Value      string `json:"value"`
-			WebID      string `json:"webId"`
+	Segments *[]struct {
+		Label *string `json:"label"`
+		Value *struct {
+			Expandable *bool   `json:"expandable"`
+			Value      *string `json:"value"`
+			WebID      *string `json:"webId"`
 		} `json:"value"`
 	} `json:"segments"`
 	Summary QuerySummary `json:"summary"`
-	Target  string       `json:"target"`
-	UseUnit struct {
-		Enable bool `json:"enable"`
+	Target  *string      `json:"target"`
+	UseUnit *struct {
+		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 }
 
