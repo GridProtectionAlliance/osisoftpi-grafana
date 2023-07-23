@@ -123,7 +123,6 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 	// end remove this debug information
 
-	// backend.Logger.Info("Query Recieved. Processing...")
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
 
@@ -134,11 +133,9 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	}
 
 	// Send the queries to the PI Web API
-	//backend.Logger.Info("Sending Queries to PI Web API")
 	processedQueries_temp := d.batchRequest(ctx, processedPIWebAPIQueries)
 
 	// Convert the PI Web API response into Grafana frames
-	backend.Logger.Info("Processing PI Web API Responses into data frames")
 	response := d.processBatchtoFrames(processedQueries_temp)
 
 	return response, nil
@@ -151,10 +148,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 
 	//TODO: Remove this temporary testing information
 	var responses []AnnotationQueryResponse
-	//fakeresponse := getFakeQueryResponse()
-	//responses = append(responses, fakeresponse)
 
-	backend.Logger.Info("Annotation query received. Processing.!..")
+	backend.Logger.Info("Annotation query received. Processing...")
 
 	//TODO: Remove this debug information
 	jsonReq, err := json.Marshal(req)
@@ -182,7 +177,9 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		} else {
 			batchReq = d.buildAnnotationBatch(url)
 		}
-		backend.Logger.Info("batchReq", batchReq)
+
+		//TODO: Use this, intead of just printing it
+		backend.Logger.Info("Annotation Batch Request", "BatchRequest", batchReq)
 
 		backend.Logger.Info("Sending Query to PI Web API", "URL", url)
 		r, err := d.apiGet(ctx, url)

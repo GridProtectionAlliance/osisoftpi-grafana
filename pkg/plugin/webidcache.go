@@ -100,7 +100,6 @@ func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) 
 	return c, nil
 }
 
-// Fixme: missing point type
 func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
 	uri := ""
 	if isPiPoint {

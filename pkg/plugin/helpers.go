@@ -23,10 +23,7 @@ func (d *Datasource) apiGet(ctx context.Context, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	//TODO: grafana http client automatically adds basic auth, remove once confirmed
-	// if d.settings.BasicAuthEnabled {
-	// 	req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
-	// }
+
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -52,10 +49,7 @@ func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests map[s
 	if err != nil {
 		return nil, err
 	}
-	//TODO: grafana http client automatically adds basic auth, remove once confirmed
-	// if d.settings.BasicAuthEnabled {
-	// 	req.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
-	// }
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Requested-With", "message/http")
 	req.Header.Set("X-PIWEBAPI-HTTP-METHOD", "GET")
@@ -270,7 +264,6 @@ func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*d
 
 func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Datasource, webID string, summaryQuery bool, includeMetaData bool) (*data.Frame, error) {
 	frame := data.NewFrame(frameName)
-	backend.Logger.Info("convertItemsToDataFrame", "FrameName: ", frameName)
 	SliceType := d.getTypeForWebID(webID)
 	digitalState := d.getDigitalStateForWebID(webID)
 
@@ -311,7 +304,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 		}
 
 		if !val.IsValid() {
-			timestamps = append(timestamps, item.getTimeStamp())
+			timestamps = append(timestamps, item.Timestamp)
 			badValues = append(badValues, i)
 			zeroVal := reflect.Zero(SliceType.Elem())
 			valuesValue := reflect.ValueOf(values)
@@ -324,12 +317,12 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 		//TODO we should make this pattern match the query options
 		if val.Type().Kind() != SliceType.Elem().Kind() || digitalState || !item.isGood() {
 
-			timestamps = append(timestamps, item.getTimeStamp())
+			timestamps = append(timestamps, item.Timestamp)
 			if digitalState {
 				var pds PointDigitalState
 				if b, err := json.Marshal(item.Value); err == nil {
 					if err := json.Unmarshal(b, &pds); err != nil {
-						backend.Logger.Info("Error unmarshalling digital state", err)
+						backend.Logger.Error("Error unmarshalling digital state", err)
 						badValues = append(badValues, i)
 						zeroVal := reflect.Zero(SliceType.Elem())
 						valuesValue := reflect.ValueOf(values)
@@ -341,7 +334,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 					digitalStateValues = append(digitalStateValues, int32(pds.Value))
 					continue
 				} else {
-					backend.Logger.Info("Error unmarshalling digital state", err)
+					backend.Logger.Error("Error unmarshalling digital state", err)
 					badValues = append(badValues, i)
 					zeroVal := reflect.Zero(SliceType.Elem())
 					valuesValue := reflect.ValueOf(values)
@@ -357,7 +350,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 			continue
 		}
 
-		timestamps = append(timestamps, item.getTimeStamp())
+		timestamps = append(timestamps, item.Timestamp)
 		values = reflect.Append(reflect.ValueOf(values), val).Interface()
 	}
 

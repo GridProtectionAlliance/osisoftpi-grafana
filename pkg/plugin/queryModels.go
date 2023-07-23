@@ -1,6 +1,9 @@
 package plugin
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Query struct {
 	RefID         string `json:"RefID"`
@@ -12,6 +15,21 @@ type Query struct {
 		To   time.Time `json:"To"`
 	} `json:"TimeRange"`
 	Pi PIWebAPIQuery `json:"JSON"`
+}
+
+// isValidQuery checks if the query is valid.
+// This function is called before the query is executed to handle
+// edge cases where the front end sends invalid queries.
+func (q *Query) isValidQuery() error {
+	if !q.Pi.checkValidTargets() {
+		return fmt.Errorf("no targets found in query")
+	}
+
+	if q.Pi.checkNilSegments() {
+		return fmt.Errorf("no segments found in query")
+	}
+
+	return nil
 }
 
 func (q *Query) getIntervalTime() int {
@@ -27,7 +45,11 @@ func (q *Query) getTimeRangeURIComponent() string {
 }
 
 func (q *Query) streamingEnabled() bool {
-	return q.Pi.EnableStreaming.Enable
+	if q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.Enable == nil {
+		return false
+	}
+	var streamingEnabled = *q.Pi.EnableStreaming.Enable
+	return streamingEnabled
 }
 
 func (q *Query) isStreamable() bool {
@@ -50,8 +72,8 @@ type PIWebAPIQuery struct {
 	DigitalStates struct {
 		Enable bool `json:"enable"`
 	} `json:"digitalStates"`
-	EnableStreaming struct {
-		Enable bool `json:"enable"`
+	EnableStreaming *struct {
+		Enable *bool `json:"enable"`
 	} `json:"EnableStreaming"`
 	ElementPath string `json:"elementPath"`
 	Expression  string `json:"expression"`
@@ -61,14 +83,14 @@ type PIWebAPIQuery struct {
 	} `json:"interpolate"`
 	IntervalMs     int  `json:"intervalMs"`
 	IsPiPoint      bool `json:"isPiPoint"`
-	MaxDataPoints  int  `json:"maxDataPoints"`
-	RecordedValues struct {
-		Enable    bool `json:"enable"`
-		MaxNumber int  `json:"maxNumber"`
+	MaxDataPoints  *int `json:"maxDataPoints"`
+	RecordedValues *struct {
+		Enable    *bool `json:"enable"`
+		MaxNumber *int  `json:"maxNumber"`
 	} `json:"recordedValues"`
-	RefID string `json:"refId"`
-	Regex struct {
-		Enable bool `json:"enable"`
+	RefID *string `json:"refId"`
+	Regex *struct {
+		Enable *bool `json:"enable"`
 	} `json:"regex"`
 	Segments *[]struct {
 		Label *string `json:"label"`
@@ -78,18 +100,18 @@ type PIWebAPIQuery struct {
 			WebID      *string `json:"webId"`
 		} `json:"value"`
 	} `json:"segments"`
-	Summary QuerySummary `json:"summary"`
-	Target  *string      `json:"target"`
+	Summary *QuerySummary `json:"summary"`
+	Target  *string       `json:"target"`
 	UseUnit *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 }
 
 type QuerySummary struct {
-	Basis    string        `json:"basis"`
-	Interval string        `json:"interval"`
-	Nodata   string        `json:"nodata"`
-	Types    []SummaryType `json:"types"`
+	Basis    *string        `json:"basis"`
+	Interval *string        `json:"interval"`
+	Nodata   *string        `json:"nodata"`
+	Types    *[]SummaryType `json:"types"`
 }
 
 type SummaryType struct {

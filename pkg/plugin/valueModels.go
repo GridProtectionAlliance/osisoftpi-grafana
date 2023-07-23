@@ -2,8 +2,6 @@ package plugin
 
 import (
 	"time"
-
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
 type PointDigitalState struct {
@@ -13,7 +11,7 @@ type PointDigitalState struct {
 }
 
 type PointSummaryValue struct {
-	Timestamp         string      `json:"Timestamp"`
+	Timestamp         time.Time   `json:"Timestamp"`
 	Value             interface{} `json:"Value"`
 	UnitsAbbreviation string      `json:"UnitsAbbreviation"`
 	Good              bool        `json:"Good"`
@@ -36,13 +34,4 @@ func (p PiBatchContentItem) isQuestionable() bool {
 
 func (p PiBatchContentItem) isSubstituted() bool {
 	return p.Substituted
-}
-
-func (p PiBatchContentItem) getTimeStamp() time.Time {
-	timeLayout := "2006-01-02T15:04:05.999999999Z07:00"
-	timestamp, err := time.Parse(timeLayout, p.Timestamp)
-	if err != nil {
-		backend.Logger.Error("Error parsing timestamp", "error", err)
-	}
-	return timestamp
 }

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -60,66 +63,85 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 
 	// Upon creating a dashboard the initial query will be empty, so we need to check for that to avoid errors
 	// if the query is empty, we'll return a PiProcessedQuery with an error set.
-	if !PiQuery.Pi.checkValidTargets() {
-		piQuery := PiProcessedQuery{
-			Error: fmt.Errorf("no targets found in query"),
-		}
-		ProcessedQuery = append(ProcessedQuery, piQuery)
-		backend.Logger.Error("No targets found in query")
-		return ProcessedQuery
-	}
 
-	if PiQuery.Pi.checkNilSegments() {
+	err = PiQuery.isValidQuery()
+	if err != nil {
 		piQuery := PiProcessedQuery{
-			Error: fmt.Errorf("no segments found in query"),
+			Error: err,
 		}
 		ProcessedQuery = append(ProcessedQuery, piQuery)
-		backend.Logger.Error("No segments found in query")
 		return ProcessedQuery
 	}
 
 	// At this point we expect that the query is valid, so we can start processing it.
 	// the queries are may contain multiple targets, so we need to loop through them
-	for _, target := range PiQuery.Pi.getTargets() {
-		fullTargetPath := PiQuery.Pi.getBasePath()
 
-		// TODO: I think this would be cleaner in separate function.
-		// set the full path for the query based on the type of the target
-		if PiQuery.Pi.IsPiPoint {
-			fullTargetPath += "\\" + target
-		} else {
-			fullTargetPath += "|" + target
+	for _, targetBasePath := range PiQuery.Pi.getTargetBasePaths() {
+		for _, target := range PiQuery.Pi.getTargets() {
+			fullTargetPath := targetBasePath + PiQuery.Pi.getTargetPathSeparator() + target
+			//create a processed query for the target
+			piQuery := PiProcessedQuery{
+				Label:               target,
+				UID:                 datasourceUID,
+				IntervalNanoSeconds: PiQuery.Interval,
+				IsPIPoint:           PiQuery.Pi.IsPiPoint,
+				//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
+				FullTargetPath: fullTargetPath,
+				UseUnit:        UseUnits,
+			}
+
+			WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
+			if err != nil {
+				log.DefaultLogger.Error("Error getting WebID", "error", err)
+				piQuery.Error = err
+			}
+
+			piQuery.WebID = WebID.WebID
+
+			//Create the subrequest for the overall batch request
+			batchSubRequest := BatchSubRequest{
+				Method:   "GET",
+				Resource: d.settings.URL + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
+			}
+
+			piQuery.BatchRequest = batchSubRequest
+
+			ProcessedQuery = append(ProcessedQuery, piQuery)
 		}
-
-		//create a processed query for the target
-		piQuery := PiProcessedQuery{
-			Label:               target,
-			UID:                 datasourceUID,
-			IntervalNanoSeconds: PiQuery.Interval,
-			IsPIPoint:           PiQuery.Pi.IsPiPoint,
-			//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
-			FullTargetPath: fullTargetPath,
-			UseUnit:        UseUnits,
-		}
-
-		WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
-		if err != nil {
-			log.DefaultLogger.Error("Error getting WebID", "error", err)
-			piQuery.Error = err
-		}
-
-		piQuery.WebID = WebID.WebID
-
-		//Create the subrequest for the overall batch request
-		batchSubRequest := BatchSubRequest{
-			Method:   "GET",
-			Resource: d.settings.URL + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
-		}
-
-		piQuery.BatchRequest = batchSubRequest
-
-		ProcessedQuery = append(ProcessedQuery, piQuery)
 	}
+
+	// for _, target := range PiQuery.Pi.getTargets() {
+	// 	fullTargetPath := PiQuery.Pi.getfullTargetPath(target)
+
+	// 	//create a processed query for the target
+	// 	piQuery := PiProcessedQuery{
+	// 		Label:               target,
+	// 		UID:                 datasourceUID,
+	// 		IntervalNanoSeconds: PiQuery.Interval,
+	// 		IsPIPoint:           PiQuery.Pi.IsPiPoint,
+	// 		//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
+	// 		FullTargetPath: fullTargetPath,
+	// 		UseUnit:        UseUnits,
+	// 	}
+
+	// 	WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
+	// 	if err != nil {
+	// 		log.DefaultLogger.Error("Error getting WebID", "error", err)
+	// 		piQuery.Error = err
+	// 	}
+
+	// 	piQuery.WebID = WebID.WebID
+
+	// 	//Create the subrequest for the overall batch request
+	// 	batchSubRequest := BatchSubRequest{
+	// 		Method:   "GET",
+	// 		Resource: d.settings.URL + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
+	// 	}
+
+	// 	piQuery.BatchRequest = batchSubRequest
+
+	// 	ProcessedQuery = append(ProcessedQuery, piQuery)
+	// }
 	return ProcessedQuery
 }
 
@@ -154,7 +176,6 @@ func (d Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[string
 		if err != nil {
 			// This likely means that the PI Web API returned an error,
 			// so we'll set the error in the PiProcessedQuery and break out of the loop
-			// TODO: we should try to parse the error message from the PI Web API and return that to the user
 			log.DefaultLogger.Error("Error unmarshaling batch response", "RefID", RefID, "error", err)
 			for i := range processed {
 				PIWebAPIQueries[RefID][i].Error = err
@@ -255,31 +276,86 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 }
 
 func (q *PIWebAPIQuery) isSummary() bool {
-	return q.Summary.Basis != "" && len(q.Summary.Types) > 0
+	if q.Summary == nil {
+		return false
+	}
+	if q.Summary.Types == nil {
+		return false
+	}
+	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
+// getSummaryDuration returns the summary duration in the format piwebapi expects
+// The summary duration is provided by the frontend in the format: <number><short_name>
+// The short name can be one of the following: ms, s, m, h, d, mo, w, wd, yd
+// A default of 30s is returned if the summary duration is not provided by the frontend
+// or if the format is invalid
+// TODO: FULLY VALIDATE THE SUMMARY DURATION FUNCTION
 func (q *PIWebAPIQuery) getSummaryDuration() string {
-	if q.Summary.Interval == "" {
+	// Return the default value if the summary is not provided by the frontend
+	if q.Summary == nil || *q.Summary.Interval == "" {
 		return "30s"
 	}
-	return q.Summary.Interval
+
+	// If the summary duration is provided, then validate the format piwebapi expects
+
+	// Regular expression to match the format: <number><short_name>
+	pattern := `^(\d+(\.\d+)?)\s*(ms|s|m|h|d|mo|w|wd|yd)$`
+	re := regexp.MustCompile(pattern)
+	matches := re.FindStringSubmatch(*q.Summary.Interval)
+
+	if len(matches) != 4 {
+		return "30s" // Return the default value if the format is invalid
+	}
+
+	// Extract the numeric part and the short name from the interval
+	numericPartStr := matches[1]
+	shortName := matches[3]
+
+	// Convert the numeric part to a float64
+	numericPart, err := strconv.ParseFloat(numericPartStr, 64)
+	if err != nil {
+		return "30s" // Return the default value if conversion fails
+	}
+
+	// Check if the short name is valid and whether fractions are allowed for that time unit
+	switch shortName {
+	case "ms", "s", "m", "h":
+		// Fractions allowed for millisecond, second, minute, and hour
+		return *q.Summary.Interval
+	case "d", "mo", "w", "wd", "yd":
+		// No fractions allowed for day, month, week, weekday, yearday
+		if numericPart == float64(int64(numericPart)) {
+			return *q.Summary.Interval
+		}
+	default:
+		return "30s" // Return the default value if the short name or fractions are not allowed
+	}
+
+	return "30s" // Return the default value if the short name or fractions are not allowed
 }
 
 func (q *PIWebAPIQuery) getSummaryURIComponent() string {
 	uri := ""
 	// FIXME: Validate that we cannot have a summary for a calculation
 	if !q.isExpression() {
-		for _, t := range q.Summary.Types {
+		for _, t := range *q.Summary.Types {
 			uri += "&summaryType=" + t.Value.Value
 		}
-		uri += "&summaryBasis=" + q.Summary.Basis
+		uri += "&summaryBasis=" + *q.Summary.Basis
 		uri += "&summaryDuration=" + q.getSummaryDuration()
 	}
 	return uri
 }
 
 func (q *PIWebAPIQuery) isRecordedValues() bool {
-	return q.RecordedValues.Enable
+	if q.RecordedValues == nil {
+		return false
+	}
+	if q.RecordedValues.Enable == nil {
+		return false
+	}
+	return *q.RecordedValues.Enable
 }
 
 func (q *PIWebAPIQuery) isInterpolated() bool {
@@ -287,7 +363,13 @@ func (q *PIWebAPIQuery) isInterpolated() bool {
 }
 
 func (q *PIWebAPIQuery) isRegex() bool {
-	return q.Regex.Enable
+	if q.Regex == nil {
+		return false
+	}
+	if q.Regex.Enable == nil {
+		return false
+	}
+	return *q.Regex.Enable
 }
 
 func (q *PIWebAPIQuery) isExpression() bool {
@@ -305,6 +387,56 @@ func (q *PIWebAPIQuery) getBasePath() string {
 	return (*q.Target)[:semiIndex]
 }
 
+func (q *PIWebAPIQuery) getTargetBasePaths() []string {
+	if q.Target == nil {
+		return []string{}
+	}
+
+	semiIndex := strings.Index(*q.Target, ";")
+	basePath := ""
+	if semiIndex == -1 {
+		basePath = *q.Target
+	} else {
+		basePath = (*q.Target)[:semiIndex]
+	}
+
+	// Find and process a pattern like {<variable1>,< variable2>,..., <variable20>}
+	startIndex := strings.Index(basePath, "{")
+	endIndex := strings.Index(basePath, "}")
+
+	if startIndex != -1 && endIndex != -1 && startIndex < endIndex {
+		prefix := basePath[:startIndex]
+		suffixes := basePath[startIndex+1 : endIndex]
+		suffixList := strings.Split(suffixes, ",")
+
+		basePaths := make([]string, 0, len(suffixList))
+		for _, suffix := range suffixList {
+			basePaths = append(basePaths, prefix+strings.TrimSpace(suffix))
+		}
+		return basePaths
+	}
+
+	// If no pattern was found, return the base path as the only item in the slice
+	return []string{basePath}
+}
+
+func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
+	fullTargetPath := q.getBasePath()
+	if q.IsPiPoint {
+		fullTargetPath += "\\" + target
+	} else {
+		fullTargetPath += "|" + target
+	}
+	return fullTargetPath
+}
+
+func (q *PIWebAPIQuery) getTargetPathSeparator() string {
+	if q.IsPiPoint {
+		return "\\"
+	}
+	return "|"
+}
+
 func (q *PIWebAPIQuery) getTargets() []string {
 	if q.Target == nil {
 		return nil
@@ -314,15 +446,11 @@ func (q *PIWebAPIQuery) getTargets() []string {
 	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
 		return nil
 	}
-
 	return strings.Split((*q.Target)[semiIndex+1:], ";")
 }
 
 func (q *PIWebAPIQuery) checkNilSegments() bool {
-	if q.Target == nil {
-		return true
-	}
-	return false
+	return q.Target == nil
 }
 
 func (q *PIWebAPIQuery) checkValidTargets() bool {
@@ -330,9 +458,15 @@ func (q *PIWebAPIQuery) checkValidTargets() bool {
 		return false
 	}
 
+	// check if the target provided is just a semicolon
 	if strings.Compare(*q.Target, ";") == 0 {
 		return false
 	}
+	// check if the target provided ends with a semicolon
+	if q.Target == nil || strings.HasSuffix(*q.Target, ";") {
+		return false
+	}
+
 	return true
 }
 
@@ -344,7 +478,7 @@ func (q *PIWebAPIQuery) getSegmentCount() int {
 }
 
 func (q *Query) getMaxDataPoints() int {
-	maxDataPoints := q.Pi.MaxDataPoints
+	maxDataPoints := *q.Pi.MaxDataPoints
 	if maxDataPoints == 0 {
 		maxDataPoints = q.MaxDataPoints
 	}
@@ -487,7 +621,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	var rawData map[string]interface{}
 	err := json.Unmarshal(data, &rawData)
 	if err != nil {
-		backend.Logger.Info("Error unmarshalling batch response", err)
+		backend.Logger.Error("Error unmarshalling batch response", err)
 		return err
 	}
 
@@ -536,7 +670,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		ResContent := PiBatchDataWithoutSubItems{}
 		err = json.Unmarshal(rawContent, &ResContent)
 		if err != nil {
-			backend.Logger.Info("Error unmarshalling batch response", err)
+			backend.Logger.Error("Error unmarshalling batch response", err)
 			//Return an error Batch Data Response so the user is notified
 			errMessages := &[]string{"Could not process response from PI Web API"}
 			p.Content = createPiBatchDataError(errMessages)
@@ -548,7 +682,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	ResContent := PiBatchDataWithSubItems{}
 	err = json.Unmarshal(rawContent, &ResContent)
 	if err != nil {
-		backend.Logger.Info("Error unmarshalling batch response", err)
+		backend.Logger.Error("Error unmarshalling batch response", err)
 		//Return an error Batch Data Response to the user is notified
 		errMessages := &[]string{"Could not process response from PI Web API"}
 		p.Content = createPiBatchDataError(errMessages)
@@ -578,7 +712,7 @@ type PiBatchContentItems struct {
 }
 
 type PiBatchContentItem struct {
-	Timestamp         string      `json:"Timestamp"`
+	Timestamp         time.Time   `json:"Timestamp"`
 	Value             interface{} `json:"Value"`
 	UnitsAbbreviation string      `json:"UnitsAbbreviation"`
 	Good              bool        `json:"Good"`

@@ -12,6 +12,7 @@ import {
   MetricFindValue,
   AnnotationQuery,
   DataFrame,
+  ScopedVars,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend} from '@grafana/runtime';
 
@@ -91,6 +92,26 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined
       ).then((result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)),
     ]);
+  }
+
+
+  /**
+   * This method overrides the applyTemplateVariables() method from the DataSourceWithBackend class.
+   * It is responsible for replacing the template variables in the query configuration prior 
+   * to sending the query to the backend. Templated variables are not able to be used for alerts
+   * or public facing dashboards.
+   * 
+   * @param {PIWebAPIQuery} query - The raw query configuration from the frontend as defined in the query editor.
+   * @param {ScopedVars} scopedVars - The template variables that are defined in the query editor and dashboard.
+   * @returns - PIWebAPIQuery.
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  applyTemplateVariables(query: PIWebAPIQuery, scopedVars: ScopedVars) {
+    return {
+      ...query,
+      target: query.target ? this.templateSrv.replace(query.target, scopedVars) : '',
+    };
   }
 
   /**
