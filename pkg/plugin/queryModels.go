@@ -88,10 +88,8 @@ type PIWebAPIQuery struct {
 		Enable    *bool `json:"enable"`
 		MaxNumber *int  `json:"maxNumber"`
 	} `json:"recordedValues"`
-	RefID *string `json:"refId"`
-	Regex *struct {
-		Enable *bool `json:"enable"`
-	} `json:"regex"`
+	RefID    *string `json:"refId"`
+	Regex    *Regex  `json:"regex"`
 	Segments *[]struct {
 		Label *string `json:"label"`
 		Value *struct {
@@ -124,6 +122,12 @@ type SummaryTYpeValue struct {
 	Value      string `json:"value"`
 }
 
+type Regex struct {
+	Enable  *bool   `json:"enable"`
+	Search  *string `json:"search"`
+	Replace *string `json:"replace"`
+}
+
 type PiProcessedQuery struct {
 	Label               string `json:"Label"`
 	WebID               string `json:"WebID"`
@@ -137,6 +141,7 @@ type PiProcessedQuery struct {
 	Response            PiBatchData     `json:"ResponseData"`
 	UseUnit             bool            `json:"UseUnit"`
 	Error               error
+	Regex               *Regex `json:"Regex"`
 }
 
 // AnnotationQueryResponse is the response from the PI Web API for an annotation query

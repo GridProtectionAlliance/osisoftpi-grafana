@@ -55,6 +55,7 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 
 	webIDCache := make(map[string]WebIDCacheEntry)
 
+	// Create a new scheduler that will be used to clean the webIDCache every 5 minutes.
 	scheduler := gocron.NewScheduler(time.UTC)
 	scheduler.Every(5).Minute().Do(cleanWebIDCache, webIDCache)
 	scheduler.StartAsync()
@@ -108,9 +109,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return d.queryMux.QueryData(ctx, req)
 }
 
-// TODO: Add support for regex replace of frame names
 // TODO: Missing functionality: Fix summaries
-//
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
@@ -141,28 +140,43 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	return response, nil
 }
 
+// TODO: Add support for regex replace of frame names
 // QueryAnnotations recevies annotation queries from the frontend and returns dataframes that contain json raw messages containing the annotations.
 func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	response := &backend.QueryDataResponse{}
 	response.Responses = make(map[string]backend.DataResponse)
-
-	//TODO: Remove this temporary testing information
 	var responses []AnnotationQueryResponse
 
-	backend.Logger.Info("Annotation query received. Processing...")
+	ctx, span := tracing.DefaultTracer().Start(
+		ctx,
+		"New annotation query recieved",
+	)
+	defer span.End()
 
 	//TODO: Remove this debug information
 	jsonReq, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
 	}
-
 	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// end remove this debug information
 
 	for _, q := range req.Queries {
+
+		span.AddEvent("Processing annotation query request",
+			trace.WithAttributes(
+				attribute.String("query.ref_id", q.RefID),
+				attribute.String("query.type", q.QueryType),
+				attribute.Int64("query.time_range.from", q.TimeRange.From.Unix()),
+				attribute.Int64("query.time_range.to", q.TimeRange.To.Unix()),
+			),
+		)
+
 		backend.Logger.Info("Processing Annotation Query", "RefID", q.RefID)
 		// Process the annotation query request, extracting only the useful information
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
+		span.AddEvent("Completed processing annotation query request")
+
 		// TODO: Create a batch request, for now create a single request
 		url := ProcessedAnnotationQuery.getEventFrameQueryURL()
 
@@ -178,6 +192,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			batchReq = d.buildAnnotationBatch(url)
 		}
 
+		span.AddEvent("Generated PI API URL for annotation query")
+
 		//TODO: Use this, intead of just printing it
 		backend.Logger.Info("Annotation Batch Request", "BatchRequest", batchReq)
 
@@ -186,6 +202,9 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		if err != nil {
 			return nil, fmt.Errorf("error getting data from PI Web API: %w", err)
 		}
+
+		span.AddEvent("Recieved response from PI Web API")
+
 		var annotationResult AnnotationQueryResponse
 		err = json.Unmarshal(r, &annotationResult)
 		if err != nil {
@@ -198,6 +217,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			backend.Logger.Error("error converting response to frame: %w", err)
 			continue
 		}
+		span.AddEvent("Converted response to Grafana frame")
 
 		// complete batch request
 		var subResponse backend.DataResponse
@@ -291,4 +311,8 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 // and the specified message, which is formatted with Sprintf.
 func newHealthCheckErrorf(format string, args ...interface{}) *backend.CheckHealthResult {
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
+}
+
+func (d *Datasource) isUsingNewFormat() bool {
+	return d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat
 }

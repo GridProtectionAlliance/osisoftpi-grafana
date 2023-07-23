@@ -88,12 +88,17 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 				//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
 				FullTargetPath: fullTargetPath,
 				UseUnit:        UseUnits,
+				Regex:          PiQuery.Pi.Regex,
 			}
 
+			// Get the WebID for the target
 			WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
+			// If there is an error getting the WebID, set the error and move to next target
 			if err != nil {
 				log.DefaultLogger.Error("Error getting WebID", "error", err)
 				piQuery.Error = err
+				ProcessedQuery = append(ProcessedQuery, piQuery)
+				continue
 			}
 
 			piQuery.WebID = WebID.WebID
@@ -109,39 +114,6 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 			ProcessedQuery = append(ProcessedQuery, piQuery)
 		}
 	}
-
-	// for _, target := range PiQuery.Pi.getTargets() {
-	// 	fullTargetPath := PiQuery.Pi.getfullTargetPath(target)
-
-	// 	//create a processed query for the target
-	// 	piQuery := PiProcessedQuery{
-	// 		Label:               target,
-	// 		UID:                 datasourceUID,
-	// 		IntervalNanoSeconds: PiQuery.Interval,
-	// 		IsPIPoint:           PiQuery.Pi.IsPiPoint,
-	// 		//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
-	// 		FullTargetPath: fullTargetPath,
-	// 		UseUnit:        UseUnits,
-	// 	}
-
-	// 	WebID, err := d.getWebID(ctx, fullTargetPath, PiQuery.Pi.IsPiPoint)
-	// 	if err != nil {
-	// 		log.DefaultLogger.Error("Error getting WebID", "error", err)
-	// 		piQuery.Error = err
-	// 	}
-
-	// 	piQuery.WebID = WebID.WebID
-
-	// 	//Create the subrequest for the overall batch request
-	// 	batchSubRequest := BatchSubRequest{
-	// 		Method:   "GET",
-	// 		Resource: d.settings.URL + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
-	// 	}
-
-	// 	piQuery.BatchRequest = batchSubRequest
-
-	// 	ProcessedQuery = append(ProcessedQuery, piQuery)
-	// }
 	return ProcessedQuery
 }
 
@@ -164,7 +136,6 @@ func (d Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[string
 		// if we get an error back from the PI Web API, we set the error in the PiProcessedQuery and break out of the loop
 		if err != nil {
 			log.DefaultLogger.Error("Error in batch request", "RefID", RefID, "error", err)
-			// TODO: Create a user friendly error message
 			for i := range processed {
 				PIWebAPIQueries[RefID][i].Error = err
 			}
@@ -207,37 +178,7 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				break
 			}
 
-			var tagLabel string
-
-			if d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat {
-				if q.IsPIPoint {
-					// New format returns the full path with metadata
-					// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
-					targetParts := strings.Split(q.FullTargetPath, "\\")
-					tagLabel = targetParts[len(targetParts)-1]
-					var element = targetParts[0]
-					var name = tagLabel
-					var targettype = d.getPointTypeForWebID(q.WebID)
-					tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + targettype + "\"}"
-					//tagLabel = q.FullTargetPath
-
-				} else {
-
-					// New format returns the full path with metadata
-					// Element|Attribute {element="Element", name="Attribute", type="Single"}
-					targetParts := strings.Split(q.FullTargetPath, "\\")
-					tagLabel = targetParts[len(targetParts)-1]
-					labelParts := strings.SplitN(tagLabel, "|", 2)
-					var element = labelParts[0]
-					var name = labelParts[1]
-					var targettype = d.getPointTypeForWebID(q.WebID)
-					tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + targettype + "\"}"
-				}
-
-			} else {
-				// Old format returns just the tag/attribute name
-				tagLabel = q.Label
-			}
+			tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID))
 
 			frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(), d, q.WebID, false, q.UseUnit)
 
@@ -283,6 +224,76 @@ func (q *PIWebAPIQuery) isSummary() bool {
 		return false
 	}
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
+}
+
+func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string) string {
+	var tagLabel string
+
+	if useNewFormat {
+		if q.IsPIPoint {
+			// New format returns the full path with metadata
+			// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
+			targetParts := strings.Split(q.FullTargetPath, "\\")
+			tagLabel = targetParts[len(targetParts)-1]
+			var element = targetParts[0]
+			var name = tagLabel
+			tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + "\"}"
+			//tagLabel = q.FullTargetPath
+
+		} else {
+			// New format returns the full path with metadata
+			// Element|Attribute {element="Element", name="Attribute", type="Single"}
+			targetParts := strings.Split(q.FullTargetPath, "\\")
+			tagLabel = targetParts[len(targetParts)-1]
+			labelParts := strings.SplitN(tagLabel, "|", 2)
+			var element = labelParts[0]
+			var name = labelParts[1]
+			tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + "\"}"
+		}
+
+	} else {
+		// Old format returns just the tag/attribute name
+		tagLabel = q.Label
+	}
+
+	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
+	if q.isRegexQuery() {
+		backend.Logger.Info("Replacing string", "search", *q.Regex.Search, "replace", *q.Regex.Replace)
+		regex := regexp.MustCompile(*q.Regex.Search)
+		tagLabel = regex.ReplaceAllString(tagLabel, *q.Regex.Replace)
+	}
+	return tagLabel
+}
+
+// PiProcessedQuery isRegex returns true if the query is a regex query and is enabled
+func (q *PiProcessedQuery) isRegex() bool {
+	if q.Regex == nil {
+		return false
+	}
+	if q.Regex.Enable == nil {
+		return false
+	}
+	return *q.Regex.Enable
+}
+
+// PiProcessedQuery isRegexValid returns true if the regex query is valid and enabled
+func (q *PiProcessedQuery) isRegexQuery() bool {
+	if !q.isRegex() {
+		return false
+	}
+	if q.Regex.Replace == nil {
+		return false
+	}
+	if q.Regex.Search == nil {
+		return false
+	}
+	if len(*q.Regex.Replace) == 0 {
+		return false
+	}
+	if len(*q.Regex.Search) == 0 {
+		return false
+	}
+	return true
 }
 
 // getSummaryDuration returns the summary duration in the format piwebapi expects
