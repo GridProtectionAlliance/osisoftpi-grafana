@@ -26,8 +26,6 @@ type TimeRange struct {
 	To   time.Time `json:"To"`
 }
 
-//{\"attribute\":{\"name\":\"attribute, take\"},
-
 type PIWebAPIAnnotationQuery struct {
 	CategoryName  string              `json:"categoryName"`
 	NameFilter    string              `json:"nameFilter"`
@@ -117,6 +115,15 @@ type AnnotationRequest struct {
 
 type AnnotationRequestTemplate struct {
 	Resource string `json:"Resource"`
+}
+
+type AnnotationBatchResponse struct {
+	Status  int                     `json:"Status"`
+	Headers map[string]string       `json:"Headers"`
+	Content AnnotationQueryResponse `json:"Content"`
+}
+
+type AnnotationQueryResponse interface {
 }
 
 func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.DataQuery) PiProcessedAnnotationQuery {
@@ -209,13 +216,17 @@ func (d *Datasource) buildAnnotationBatch(efURL string, attributeURLs ...string)
 	// create a batch request for the event frames
 	eventFrameRequest := AnnotationRequest{
 		Method:   "GET",
-		Resource: efURL, // assuming efURL is already formatted with start/end times, templateName, etc.
+		Resource: d.settings.URL + efURL, // assuming efURL is already formatted with start/end times, templateName, etc.
 	}
 	batchRequest["1"] = eventFrameRequest
 
+	if len(attributeURLs) == 0 {
+		return batchRequest
+	}
+
 	// create a batch request for each attribute
 	for i, attributeURL := range attributeURLs {
-		requestTemplateResource := attributeURL
+		requestTemplateResource := d.settings.URL + attributeURL
 		attributeRequest := AnnotationRequest{
 			Method: "GET",
 			RequestTemplate: &AnnotationRequestTemplate{

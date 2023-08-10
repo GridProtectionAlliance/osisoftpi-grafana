@@ -116,14 +116,14 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
-	//TODO: Remove this debug information
-	jsonReq, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	}
+	// //TODO: Remove this debug information
+	// jsonReq, err := json.Marshal(req)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	// }
 
-	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
-	// end remove this debug information
+	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// // end remove this debug information
 
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
@@ -148,21 +148,14 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	response := &backend.QueryDataResponse{}
 	response.Responses = make(map[string]backend.DataResponse)
-	var responses []AnnotationQueryResponse
+	requestType := make(map[string]string)
+	//var responses []AnnotationQueryResponse
 
 	ctx, span := tracing.DefaultTracer().Start(
 		ctx,
 		"New annotation query recieved",
 	)
 	defer span.End()
-
-	//TODO: Remove this debug information
-	jsonReq, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	}
-	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
-	// end remove this debug information
 
 	for _, q := range req.Queries {
 
@@ -180,7 +173,6 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		span.AddEvent("Completed processing annotation query request")
 
-		// TODO: Create a batch request, for now create a single request
 		url := ProcessedAnnotationQuery.getEventFrameQueryURL()
 
 		var batchReq AnnotationBatchRequest
@@ -190,36 +182,31 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			if err != nil {
 				backend.Logger.Error("Error getting attribute URLs", "Error", err)
 			}
+			requestType["eventframe"] = "true"
+			requestType["attribute"] = "true"
 			batchReq = d.buildAnnotationBatch(url, attributeURLs...)
 		} else {
+			requestType["eventframe"] = "true"
 			batchReq = d.buildAnnotationBatch(url)
 		}
 
 		span.AddEvent("Generated PI API URL for annotation query")
 
-		//TODO: Use this, intead of just printing it
-		backend.Logger.Info("Annotation Batch Request", "BatchRequest", batchReq)
-
-		backend.Logger.Info("Sending Query to PI Web API", "URL", url)
-		r, err := d.apiGet(ctx, url)
+		r, err := d.apiBatchRequest(ctx, batchReq)
 		if err != nil {
 			return nil, fmt.Errorf("error getting data from PI Web API: %w", err)
 		}
 
 		span.AddEvent("Recieved response from PI Web API")
 
-		var annotationResult AnnotationQueryResponse
-		err = json.Unmarshal(r, &annotationResult)
-		if err != nil {
-			return nil, fmt.Errorf("error unmarshaling response from PI Web API: %w", err)
-		}
-		// Convert the raw response into a Grafana frame
-		responses = append(responses, annotationResult)
-		annotationFrame, err := convertAnnotationResponsetoFrame(responses)
+		annotationFrame, err := convertRawAnnotationResponseToFrame(r, requestType)
 		if err != nil {
 			backend.Logger.Error("error converting response to frame: %w", err)
 			continue
 		}
+
+		backend.Logger.Info("Annotation Frame", "Frame", annotationFrame)
+
 		span.AddEvent("Converted response to Grafana frame")
 
 		// complete batch request

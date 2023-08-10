@@ -80,7 +80,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         anno: AnnotationQuery<PIWebAPIQuery>,
         data: DataFrame[]
       ): Observable<AnnotationEvent[] | undefined> => {
-        console.log('processEvents', anno, data);
         return of(this.eventFrameToAnnotation(anno, data));
       },
     };
@@ -243,9 +242,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       const currentLocale = Intl.DateTimeFormat().resolvedOptions().locale;
 
       const processedFrames = processAnnotationQuery(annon, data);
-      //todo: remove this
-      console.log('eventFrameToAnnotation',annon, processedFrames);
-
 
       processedFrames.forEach((d: DataFrame) => {
         let attributeText = '';
@@ -281,7 +277,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           tags: ['OSISoft PI'],
         });
       });
-      console.log('eventFrameToAnnotation',events);
       return events;
     }
   

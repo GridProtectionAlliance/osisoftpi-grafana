@@ -497,19 +497,6 @@ func (q *Query) getMaxDataPoints() int {
 }
 
 func (q Query) getQueryBaseURL() string {
-	// TODO: validate all of the options.
-	// Clean up this mess
-	// Valid list:
-	// - plot
-	// - calulcation w/ interval
-	// - recorded with no default max count override
-	// - recorded with override max count
-	// FIXME: Missing functionality
-	//    - summary
-	//    - regex replacement
-	//    - display name updates
-	//    - replace bad data
-
 	var uri string
 	if q.Pi.isExpression() {
 		uri += "/calculation"

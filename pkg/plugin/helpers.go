@@ -38,7 +38,7 @@ func (d *Datasource) apiGet(ctx context.Context, path string) ([]byte, error) {
 
 // apiBatchRequest performs a batch request against the PI Web API. It returns the response body as a byte slice.
 // If the request fails, an error is returned.
-func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests map[string]BatchSubRequest) ([]byte, error) {
+func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests interface{}) ([]byte, error) {
 	uri := d.settings.URL + "/batch"
 	jsonValue, err := json.Marshal(BatchSubRequests)
 	if err != nil {
@@ -63,10 +63,9 @@ func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests map[s
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		backend.Logger.Error("Batch request failed", "error", err, "uri", uri, "body", string(body))
 		return nil, err
 	}
-
-	backend.Logger.Debug("Batch request response", "body", string(body))
 
 	return body, nil
 }
@@ -234,21 +233,18 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 	return ts, nil
 }
 
-func convertAnnotationResponsetoFrame(annotations []AnnotationQueryResponse) (*data.Frame, error) {
-	frame := data.NewFrame("Anno")
-
-	var annotationData []*json.RawMessage
-
-	for _, annotation := range annotations {
-		rawMsg, err := json.Marshal(annotation)
-		if err != nil {
-			return nil, fmt.Errorf("error marshalling annotationValue: %w", err)
-		}
-		rm := json.RawMessage(rawMsg)
-		annotationData = append(annotationData, &rm)
+func convertRawAnnotationResponseToFrame(annotationResponse []byte, requestType map[string]string) (*data.Frame, error) {
+	var annotation json.RawMessage
+	var annotations []json.RawMessage
+	err := json.Unmarshal(annotationResponse, &annotation)
+	if err != nil {
+		return nil, err
 	}
 
-	frame.Fields = append(frame.Fields, data.NewField("annotation", nil, annotationData))
+	annotations = append(annotations, annotation)
+
+	frame := data.NewFrame("Anno")
+	frame.Fields = append(frame.Fields, data.NewField("annotation", requestType, annotations))
 
 	frame.Meta = &data.FrameMeta{}
 	return frame, nil
@@ -266,16 +262,6 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 	frame := data.NewFrame(frameName)
 	SliceType := d.getTypeForWebID(webID)
 	digitalState := d.getDigitalStateForWebID(webID)
-
-	//FIXME: Remove this once we have a better way to handle this
-	if len(items) < 10 {
-		itemsJSON, err := json.Marshal(items)
-		if err != nil {
-			backend.Logger.Warn("convertItemsToDataFrame", "Error marshalling items to JSON: ", err)
-		} else {
-			backend.Logger.Warn("convertItemsToDataFrame", "Items: ", string(itemsJSON))
-		}
-	}
 
 	var timestamps []time.Time
 	badValues := make([]int, 0)

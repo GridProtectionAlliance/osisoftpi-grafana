@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -144,72 +145,12 @@ type PiProcessedQuery struct {
 	Regex               *Regex `json:"Regex"`
 }
 
-// AnnotationQueryResponse is the response from the PI Web API for an annotation query
 type Links struct {
 	First string `json:"First"`
 	Last  string `json:"Last"`
 }
 
-// AnnotationItemSecurity is only needed for generating a new struct. In practice this can be ignored, by the frontend.
-type AnnotationItemSecurity struct {
-	CanAnnotate        bool     `json:"CanAnnotate"`
-	CanDelete          bool     `json:"CanDelete"`
-	CanExecute         bool     `json:"CanExecute"`
-	CanRead            bool     `json:"CanRead"`
-	CanReadData        bool     `json:"CanReadData"`
-	CanSubscribe       bool     `json:"CanSubscribe"`
-	CanSubscribeOthers bool     `json:"CanSubscribeOthers"`
-	CanWrite           bool     `json:"CanWrite"`
-	CanWriteData       bool     `json:"CanWriteData"`
-	HasAdmin           bool     `json:"HasAdmin"`
-	Rights             []string `json:"Rights"`
-}
-
-// AnnotationItemLinks is only needed for generating a new struct. In practice this can be ignored, by the frontend.
-type AnnotationItemLinks struct {
-	Self               string `json:"Self"`
-	Attributes         string `json:"Attributes"`
-	EventFrames        string `json:"EventFrames"`
-	Database           string `json:"Database"`
-	ReferencedElements string `json:"ReferencedElements"`
-	Template           string `json:"Template"`
-	Categories         string `json:"Categories"`
-	InterpolatedData   string `json:"InterpolatedData"`
-	RecordedData       string `json:"RecordedData"`
-	PlotData           string `json:"PlotData"`
-	SummaryData        string `json:"SummaryData"`
-	Value              string `json:"Value"`
-	EndValue           string `json:"EndValue"`
-	Security           string `json:"Security"`
-	SecurityEntries    string `json:"SecurityEntries"`
-}
-
-type AnnotationItem struct {
-	WebID              string                 `json:"WebId"`
-	ID                 string                 `json:"Id"`
-	Name               string                 `json:"Name"`
-	Description        string                 `json:"Description"`
-	Path               string                 `json:"Path"`
-	TemplateName       string                 `json:"TemplateName"`
-	HasChildren        bool                   `json:"HasChildren"`
-	CategoryNames      []string               `json:"CategoryNames"`
-	ExtendedProperties struct{}               `json:"ExtendedProperties"`
-	StartTime          string                 `json:"StartTime"`
-	EndTime            string                 `json:"EndTime"`
-	Severity           string                 `json:"Severity"`
-	AcknowledgedBy     string                 `json:"AcknowledgedBy"`
-	AcknowledgedDate   string                 `json:"AcknowledgedDate"`
-	CanBeAcknowledged  bool                   `json:"CanBeAcknowledged"`
-	IsAcknowledged     bool                   `json:"IsAcknowledged"`
-	IsAnnotated        bool                   `json:"IsAnnotated"`
-	IsLocked           bool                   `json:"IsLocked"`
-	AreValuesCaptured  bool                   `json:"AreValuesCaptured"`
-	RefElementWebIds   []string               `json:"RefElementWebIds"`
-	Security           AnnotationItemSecurity `json:"Security"`
-	Links              AnnotationItemLinks    `json:"Links"`
-}
-
-type AnnotationQueryResponse struct {
-	Links Links            `json:"Links"`
-	Items []AnnotationItem `json:"Items"`
+type EventFrameQueryResponse struct {
+	Links Links           `json:"Links"`
+	Items json.RawMessage `json:"Items"`
 }
