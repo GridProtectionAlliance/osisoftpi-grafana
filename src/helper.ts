@@ -150,6 +150,7 @@ export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,dat
       // Check whether f.values is an array or not to allow for each.
       // Check whether f.values is an array or not to allow for each.
       if (Array.isArray(f.values)) {
+        console.log(f.values)
         f.values.forEach((value: any) => {
 
           if (attribute) {
@@ -175,18 +176,21 @@ export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,dat
   return processedFrames;
 }
 
-export function convertToTableData(items: any[], valueData?: any[][]): TableData[] {
-  const response: TableData[] = items.map((item: any) => {
+// FIXME: Update this so it supports multiple results
+export function convertToTableData(items: any[], valueData?: any[]): TableData[] {
+  console.log("items",items)
+  const response: TableData[] = items.map((item: any, index: number) => {
+    console.log("item",item)
     const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
     const rows = [item.StartTime, item.EndTime];
     if (valueData) {
-      for (let i = 0; i in valueData; i++) {
-        valueData[i].forEach((val: any) => {
-          val.Content.Items.forEach((it: any) => {
-            columns.push({ text: it.Name });
-            rows.push(String(it.Value.Value ? it.Value.Value.Name || it.Value.Value.Value || it.Value.Value : ''));
+      for (let attributeIndex = 0; attributeIndex < valueData.length; attributeIndex++) {
+          let attributeData = valueData[attributeIndex]
+          let eventframeAributeData = attributeData[index].Content.Items
+          eventframeAributeData.forEach((attribute: any) => {
+            columns.push({ text: attribute.Name });
+            rows.push(String(attribute.Value.Value ? attribute.Value.Value.Name || attribute.Value.Value.Value || attribute.Value.Value : ''));
           });
-        });
       }
     }
 
@@ -196,6 +200,7 @@ export function convertToTableData(items: any[], valueData?: any[][]): TableData
       rows: [rows],
     };
   });
+  console.log("response",response)
   return response;
 }
 
