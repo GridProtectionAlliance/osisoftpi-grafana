@@ -148,8 +148,6 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	response := &backend.QueryDataResponse{}
 	response.Responses = make(map[string]backend.DataResponse)
-	requestType := make(map[string]string)
-	//var responses []AnnotationQueryResponse
 
 	ctx, span := tracing.DefaultTracer().Start(
 		ctx,
@@ -182,11 +180,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			if err != nil {
 				backend.Logger.Error("Error getting attribute URLs", "Error", err)
 			}
-			requestType["eventframe"] = "true"
-			requestType["attribute"] = "true"
 			batchReq = d.buildAnnotationBatch(url, attributeURLs...)
 		} else {
-			requestType["eventframe"] = "true"
 			batchReq = d.buildAnnotationBatch(url)
 		}
 
@@ -199,13 +194,11 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 
 		span.AddEvent("Recieved response from PI Web API")
 
-		annotationFrame, err := convertRawAnnotationResponseToFrame(r, requestType)
+		annotationFrame, err := convertAnnotationResponseToFrame(ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
 		if err != nil {
 			backend.Logger.Error("error converting response to frame: %w", err)
 			continue
 		}
-
-		backend.Logger.Info("Annotation Frame", "Frame", annotationFrame)
 
 		span.AddEvent("Converted response to Grafana frame")
 

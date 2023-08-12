@@ -233,23 +233,6 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 	return ts, nil
 }
 
-func convertRawAnnotationResponseToFrame(annotationResponse []byte, requestType map[string]string) (*data.Frame, error) {
-	var annotation json.RawMessage
-	var annotations []json.RawMessage
-	err := json.Unmarshal(annotationResponse, &annotation)
-	if err != nil {
-		return nil, err
-	}
-
-	annotations = append(annotations, annotation)
-
-	frame := data.NewFrame("Anno")
-	frame.Fields = append(frame.Fields, data.NewField("annotation", requestType, annotations))
-
-	frame.Meta = &data.FrameMeta{}
-	return frame, nil
-}
-
 // TODO: Code simplification: Determine if we should create metadata here.
 // if we passed in the entire query we could do that.
 // if we pass a pointer to the webid cache and the webid that might simplify things

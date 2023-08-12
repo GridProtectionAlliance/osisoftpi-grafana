@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
 type PIAnnotationQuery struct {
@@ -42,7 +44,8 @@ type PIWebAPIAnnotationQuery struct {
 }
 
 type AnnotationAttribute struct {
-	Name string `json:"name"`
+	Enable bool   `json:"enable"`
+	Name   string `json:"name"`
 }
 
 type AFDatabase struct {
@@ -93,14 +96,15 @@ type EventFrameTemplate struct {
 }
 
 type PiProcessedAnnotationQuery struct {
-	RefID        string    `json:"RefID"`
-	TimeRange    TimeRange `json:"TimeRange"`
-	Database     AFDatabase
-	Template     EventFrameTemplate
-	CategoryName string `json:"categoryName"`
-	NameFilter   string `json:"nameFilter"`
-	Attributes   []string
-	Error        error
+	RefID             string             `json:"RefID"`
+	TimeRange         TimeRange          `json:"TimeRange"`
+	Database          AFDatabase         `json:"Database"`
+	Template          EventFrameTemplate `json:"Template"`
+	CategoryName      string             `json:"categoryName"`
+	NameFilter        string             `json:"nameFilter"`
+	Attributes        []string           `json:"attributes"`
+	AttributesEnabled bool               `json:"attributesEnabled"`
+	Error             error              `json:"Error"`
 }
 
 type AnnotationBatchRequest map[string]AnnotationRequest
@@ -118,12 +122,94 @@ type AnnotationRequestTemplate struct {
 }
 
 type AnnotationBatchResponse struct {
-	Status  int                     `json:"Status"`
-	Headers map[string]string       `json:"Headers"`
-	Content AnnotationQueryResponse `json:"Content"`
+	Status  int               `json:"Status"`
+	Headers map[string]string `json:"Headers"`
+	Content json.RawMessage   `json:"Content"`
 }
 
-type AnnotationQueryResponse interface {
+type EventFrameResponse struct {
+	Links struct {
+		First string `json:"First"`
+		Last  string `json:"Last"`
+	} `json:"Links"`
+	Items []struct {
+		WebID              string `json:"WebId"`
+		ID                 string `json:"Id"`
+		Name               string `json:"Name"`
+		Description        string `json:"Description"`
+		Path               string `json:"Path"`
+		TemplateName       string `json:"TemplateName"`
+		HasChildren        bool   `json:"HasChildren"`
+		CategoryNames      []any  `json:"CategoryNames"`
+		ExtendedProperties struct {
+		} `json:"ExtendedProperties"`
+		StartTime         time.Time `json:"StartTime"`
+		EndTime           time.Time `json:"EndTime"`
+		Severity          string    `json:"Severity"`
+		AcknowledgedBy    string    `json:"AcknowledgedBy"`
+		AcknowledgedDate  time.Time `json:"AcknowledgedDate"`
+		CanBeAcknowledged bool      `json:"CanBeAcknowledged"`
+		IsAcknowledged    bool      `json:"IsAcknowledged"`
+		IsAnnotated       bool      `json:"IsAnnotated"`
+		IsLocked          bool      `json:"IsLocked"`
+		AreValuesCaptured bool      `json:"AreValuesCaptured"`
+		RefElementWebIds  []any     `json:"RefElementWebIds"`
+		Security          struct {
+			CanAnnotate        bool     `json:"CanAnnotate"`
+			CanDelete          bool     `json:"CanDelete"`
+			CanExecute         bool     `json:"CanExecute"`
+			CanRead            bool     `json:"CanRead"`
+			CanReadData        bool     `json:"CanReadData"`
+			CanSubscribe       bool     `json:"CanSubscribe"`
+			CanSubscribeOthers bool     `json:"CanSubscribeOthers"`
+			CanWrite           bool     `json:"CanWrite"`
+			CanWriteData       bool     `json:"CanWriteData"`
+			HasAdmin           bool     `json:"HasAdmin"`
+			Rights             []string `json:"Rights"`
+		} `json:"Security"`
+		Links struct {
+			Self               string `json:"Self"`
+			Attributes         string `json:"Attributes"`
+			EventFrames        string `json:"EventFrames"`
+			Database           string `json:"Database"`
+			ReferencedElements string `json:"ReferencedElements"`
+			Template           string `json:"Template"`
+			Categories         string `json:"Categories"`
+			InterpolatedData   string `json:"InterpolatedData"`
+			RecordedData       string `json:"RecordedData"`
+			PlotData           string `json:"PlotData"`
+			SummaryData        string `json:"SummaryData"`
+			Value              string `json:"Value"`
+			EndValue           string `json:"EndValue"`
+			Security           string `json:"Security"`
+			SecurityEntries    string `json:"SecurityEntries"`
+		} `json:"Links"`
+	} `json:"Items"`
+}
+
+type EventFrameAttribute struct {
+	Total int `json:"Total"`
+	Items []struct {
+		Status  int `json:"Status"`
+		Headers struct {
+			ContentType string `json:"Content-Type"`
+		} `json:"Headers"`
+		Content struct {
+			Items []struct {
+				WebID string `json:"WebId"`
+				Name  string `json:"Name"`
+				Value struct {
+					Timestamp         time.Time   `json:"Timestamp"`
+					Value             interface{} `json:"Value"`
+					UnitsAbbreviation string      `json:"UnitsAbbreviation"`
+					Good              bool        `json:"Good"`
+					Questionable      bool        `json:"Questionable"`
+					Substituted       bool        `json:"Substituted"`
+					Annotated         bool        `json:"Annotated"`
+				} `json:"Value"`
+			} `json:"Items"`
+		} `json:"Content"`
+	} `json:"Items"`
 }
 
 func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.DataQuery) PiProcessedAnnotationQuery {
@@ -156,7 +242,8 @@ func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.Da
 
 	var attributes []string
 
-	if PiAnnotationQuery.JSON.Attribute.Name != "" {
+	//TODO: Make this check if annotation query is enabled
+	if PiAnnotationQuery.JSON.Attribute.Name != "" && PiAnnotationQuery.JSON.Attribute.Enable {
 		// Splitting by comma
 		rawAttributes := strings.Split(PiAnnotationQuery.JSON.Attribute.Name, ",")
 
@@ -172,13 +259,14 @@ func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.Da
 
 	//create a processed query for the annotation query
 	ProcessedQuery = PiProcessedAnnotationQuery{
-		RefID:        PiAnnotationQuery.RefID,
-		TimeRange:    PiAnnotationQuery.TimeRange,
-		Database:     PiAnnotationQuery.JSON.Database,
-		Template:     PiAnnotationQuery.JSON.Template,
-		CategoryName: PiAnnotationQuery.JSON.CategoryName,
-		NameFilter:   PiAnnotationQuery.JSON.NameFilter,
-		Attributes:   attributes,
+		RefID:             PiAnnotationQuery.RefID,
+		TimeRange:         PiAnnotationQuery.TimeRange,
+		Database:          PiAnnotationQuery.JSON.Database,
+		Template:          PiAnnotationQuery.JSON.Template,
+		CategoryName:      PiAnnotationQuery.JSON.CategoryName,
+		NameFilter:        PiAnnotationQuery.JSON.NameFilter,
+		Attributes:        attributes,
+		AttributesEnabled: PiAnnotationQuery.JSON.Attribute.Enable,
 	}
 
 	return ProcessedQuery
@@ -259,8 +347,100 @@ func (q PiProcessedAnnotationQuery) getEventFrameAttributeQueryURL() ([]string, 
 
 	for _, attribute := range q.Attributes {
 		var uri string
-		uri += "streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name&nameFilter=" + attribute
+		uri += "streamsets/{0}/value?selectedFields=Items.Value%3BItems.Name&nameFilter=" + attribute
 		URIs = append(URIs, uri)
 	}
 	return URIs, nil
+}
+
+func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte, attributesEnabled bool) (*data.Frame, error) {
+	var annotationResponse map[string]AnnotationBatchResponse
+	var attributeDataItems []string
+
+	//log attributesEnabled
+	log.DefaultLogger.Info("Attributes Enabled", "attributesEnabled", attributesEnabled)
+
+	err := json.Unmarshal(rawAnnotationResponse, &annotationResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	var fields []*data.Field
+
+	for key, value := range annotationResponse {
+		if key == "1" {
+			var startTimes []time.Time
+			var endTimes []time.Time
+			var titles []string
+			var id []string
+
+			var eventFrameResponse = value.Content
+
+			var eventFrames EventFrameResponse
+
+			err = json.Unmarshal(eventFrameResponse, &eventFrames)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, eventFrame := range eventFrames.Items {
+				startTimes = append(startTimes, eventFrame.StartTime)
+				endTimes = append(endTimes, eventFrame.EndTime)
+				titles = append(titles, eventFrame.Name)
+				id = append(id, eventFrame.ID)
+			}
+
+			fieldStartTime := data.NewField("time", nil, startTimes)
+			fieldEndTime := data.NewField("timeEnd", nil, endTimes)
+			fieldTitle := data.NewField("title", nil, titles)
+			fieldID := data.NewField("id", nil, id)
+
+			fields = append(fields, fieldStartTime)
+			fields = append(fields, fieldEndTime)
+			fields = append(fields, fieldTitle)
+			fields = append(fields, fieldID)
+
+		} else {
+			var attributeResponse = value.Content
+
+			var attributes EventFrameAttribute
+
+			err = json.Unmarshal(attributeResponse, &attributes)
+			if err != nil {
+				backend.Logger.Error("Error unmarshalling attribute response", "error", err)
+				continue
+			}
+			var attributeName string
+			var attributeValues []string
+
+			for i, attributes := range attributes.Items {
+				for j, values := range attributes.Content.Items {
+					var sValue string = fmt.Sprintf("%v", values.Value.Value)
+
+					if j == 0 {
+						attributeName = values.Name
+					}
+					if i < len(attributeDataItems) {
+						attributeDataItems[i] += "<br />" + values.Name + ": " + sValue
+					} else {
+						item := "<br />" + values.Name + ": " + sValue
+						attributeDataItems = append(attributeDataItems, item)
+					}
+					attributeValues = append(attributeValues, sValue)
+				}
+			}
+			if attributesEnabled {
+				fieldAttribute := data.NewField(attributeName, nil, attributeValues)
+				fields = append(fields, fieldAttribute)
+			}
+		}
+	}
+
+	if attributesEnabled {
+		fields = append(fields, data.NewField("attributeText", nil, attributeDataItems))
+	}
+
+	frame := data.NewFrame(refID, fields...)
+	frame.Meta = &data.FrameMeta{}
+	return frame, nil
 }
