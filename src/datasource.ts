@@ -1,5 +1,4 @@
 import { 
-  each, 
   filter, 
   map, 
 } from 'lodash';
@@ -8,11 +7,11 @@ import { Observable, of } from 'rxjs';
 
 import {
   DataSourceInstanceSettings,
-  AnnotationEvent,
   MetricFindValue,
   AnnotationQuery,
-  DataFrame,
   ScopedVars,
+  AnnotationEvent,
+  DataFrame,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend} from '@grafana/runtime';
 
@@ -24,7 +23,6 @@ import {
   PiwebapiRsp,
 } from './types';
 import {
-  processAnnotationQuery,
   metricQueryTransform,
 } from 'helper';
 
@@ -82,6 +80,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       ): Observable<AnnotationEvent[] | undefined> => {
         return of(this.eventFrameToAnnotation(anno, data));
       },
+
     };
 
     Promise.all([
@@ -228,8 +227,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   /** PRIVATE SECTION */
   
     /**
-     * Converts a PIWebAPI Event Frame response to a Grafana Annotation
-     *
+     * Localize the eventFrame dataFrame records to Grafana Annotations.
      * @param {any} annon - The annotation object.
      * @param {any} data - The dataframe recrords.
      * @returns - Grafana Annotation
@@ -240,46 +238,65 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       const annotationOptions = annon.target!;
       const events: AnnotationEvent[] = [];
       const currentLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+    
+      data.forEach((d: DataFrame) => {
+          let values = this.transformDataFrameToMap(d);
+          for (let i = 0; i < values['time'].length; i++) {
 
-      const processedFrames = processAnnotationQuery(annon, data);
+            // replace Dataframe name using Regex
+            let title = values['title'][i];
+            if (annotationOptions.regex && annotationOptions.regex.enable) {
+              title = title.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
+            }
 
-      processedFrames.forEach((d: DataFrame) => {
-        let attributeText = '';
-        let name = d.name!;
-        const endTime = d.fields.find((f) => f.name === 'EndTime')?.values.get(0);
-        const startTime = d.fields.find((f) => f.name === 'StartTime')?.values.get(0);
-        // check if we have more attributes in the table data
-        const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0);
-        if (attributeDataItems) {
-          each(attributeDataItems, (attributeData) => {
-            attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
-          });
-        }
-        // replace Dataframe name using Regex
-        if (annotationOptions.regex && annotationOptions.regex.enable) {
-          name = name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
-        }
+            // test if timeEnd is negative and if so, set it to null
+            if (values['timeEnd'][i] < 0) {
+              values['timeEnd'][i] = null;
+            }
 
-        // create the event
-        events.push({
-          id: annotationOptions.database?.WebId,
-          annotation: annon,
-          title: `Name: ${annon.name}`,
-          time: new Date(startTime).getTime(),
-          timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
-          text:
-            `Tag: ${name}` +
-            attributeText +
-            '<br />Start: ' +
-            new Date(startTime).toLocaleString(currentLocale) +
-            '<br />End: ' +
-            new Date(endTime).toLocaleString(currentLocale),
-          tags: ['OSISoft PI'],
+            // format the text and localize the dates to browser locale
+            let text = "Tag: " + title;
+            if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+              text += values['attributeText'][i];
+            }
+            text += '<br />Start: ' + 
+              new Date(values['time'][i]).toLocaleString(currentLocale) +
+              '<br />End: '
+
+            if (values['timeEnd'][i]) {
+              text += new Date(values['timeEnd'][i]).toLocaleString(currentLocale) 
+            } else {
+              text += 'Eventframe is open'
+            }
+
+            const event: AnnotationEvent = {
+              time: values['time'][i],
+              timeEnd: !!annotationOptions.showEndTime ? values['timeEnd'][i] : undefined,
+              title: title,
+              id: values['id'][i],
+              text: text,
+              tags: ['OSISoft PI'],
+            };
+
+            events.push(event);
+          }
         });
-      });
       return events;
     }
+    
+  /**
+   * 
+   */
+  private transformDataFrameToMap(dataFrame: DataFrame): Record<string, any[]> {
+    const map: Record<string, any[]> = {};
   
+    dataFrame.fields.forEach((field) => {
+      map[field.name] = field.values.toArray();
+    });
+  
+    return map;
+  }
+
   /**
    * Abstraction for calling the PI Web API REST endpoint
    *
