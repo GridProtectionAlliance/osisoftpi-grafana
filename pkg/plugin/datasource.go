@@ -110,8 +110,6 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 }
 
 // TODO: Missing functionality: Fix summaries
-// TODO: Missing functionality: Fix calucations
-// TODO: Missing functionality: Add Last Value
 // TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
@@ -267,9 +265,6 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, d.settings.URL, nil)
 	if err != nil {
 		return newHealthCheckErrorf("could not create request"), nil
-	}
-	if d.settings.BasicAuthEnabled {
-		r.SetBasicAuth(d.settings.BasicAuthUser, d.settings.DecryptedSecureJSONData["basicAuthPassword"])
 	}
 	resp, err := d.httpClient.Do(r)
 	if err != nil {

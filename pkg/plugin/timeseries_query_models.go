@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -45,6 +44,10 @@ func (q *Query) getTimeRangeURIComponent() string {
 	return "?startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 
+func (q *Query) getTimeRangeURIToComponent() string {
+	return q.TimeRange.To.UTC().Format(time.RFC3339)
+}
+
 func (q *Query) streamingEnabled() bool {
 	if q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.Enable == nil {
 		return false
@@ -73,6 +76,9 @@ type PIWebAPIQuery struct {
 	DigitalStates struct {
 		Enable bool `json:"enable"`
 	} `json:"digitalStates"`
+	UseLastValue *struct {
+		Enable *bool `json:"enable"`
+	} `json:"useLastValue"`
 	EnableStreaming *struct {
 		Enable *bool `json:"enable"`
 	} `json:"EnableStreaming"`
@@ -148,9 +154,4 @@ type PiProcessedQuery struct {
 type Links struct {
 	First string `json:"First"`
 	Last  string `json:"Last"`
-}
-
-type EventFrameQueryResponse struct {
-	Links Links           `json:"Links"`
-	Items json.RawMessage `json:"Items"`
 }
