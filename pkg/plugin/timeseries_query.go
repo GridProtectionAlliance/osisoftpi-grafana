@@ -176,10 +176,9 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				break
 			}
 
-			for _, getSummaryTypes := range *q.Response.getSummaryTypes() {
-				tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), getSummaryTypes)
-
-				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(getSummaryTypes), d, q.WebID, false, q.UseUnit)
+			for _, SummaryType := range *q.Response.getSummaryTypes() {
+				tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), SummaryType)
+				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(SummaryType), d, q.WebID, false, q.UseUnit)
 
 				// if there is an error on a single frame we set metadata and continue to the next frame
 				if err != nil {
@@ -232,7 +231,7 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 
 	if summaryLabel != "" {
 		summaryNewFormat = "\" summaryType=\"" + summaryLabel
-		summaryLabel += "[" + summaryLabel + "]"
+		summaryLabel = "[" + summaryLabel + "]"
 	}
 
 	if useNewFormat {
