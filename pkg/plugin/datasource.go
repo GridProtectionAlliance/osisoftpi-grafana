@@ -109,18 +109,17 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return d.queryMux.QueryData(ctx, req)
 }
 
-// TODO: Missing functionality: Fix summaries
 // TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
 	// //TODO: Remove this debug information
-	jsonReq, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	}
+	// jsonReq, err := json.Marshal(req)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	// }
 
-	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
 	// end remove this debug information
 
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)

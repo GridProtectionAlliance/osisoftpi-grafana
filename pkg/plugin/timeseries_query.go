@@ -176,38 +176,40 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				break
 			}
 
-			tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID))
+			for _, getSummaryTypes := range *q.Response.getSummaryTypes() {
+				tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), getSummaryTypes)
 
-			frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(), d, q.WebID, false, q.UseUnit)
+				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(getSummaryTypes), d, q.WebID, false, q.UseUnit)
 
-			// if there is an error on a single frame we set metadata and continue to the next frame
-			if err != nil {
-				backend.Logger.Error("Error processing query", "RefID", RefID, "QueryIndex", i, "error", err.Error)
-				continue
+				// if there is an error on a single frame we set metadata and continue to the next frame
+				if err != nil {
+					backend.Logger.Error("Error processing query", "RefID", RefID, "QueryIndex", i, "error", err.Error)
+					continue
+				}
+
+				frame.RefID = RefID
+				frame.Meta.ExecutedQueryString = q.BatchRequest.Resource
+
+				// TODO: enable streaming
+				// If the query is streamable, then we need to set the channel URI
+				// and the executed query string.
+				// if q.Streamable {
+				// 	// Create a new channel for this frame request.
+				// 	// Creating a new channel for each frame request is not ideal,
+				// 	// but it is the only way to ensure that the frame data is refreshed
+				// 	// on a time interval update.
+				// 	channeluuid := uuid.New()
+				// 	channelURI := "ds/" + q.UID + "/" + channeluuid.String()
+				// 	channel := StreamChannelConstruct{
+				// 		WebID:               q.WebID,
+				// 		IntervalNanoSeconds: q.IntervalNanoSeconds,
+				// 	}
+				// 	d.channelConstruct[channeluuid.String()] = channel
+				// 	frame.Meta.Channel = channelURI
+				// }
+
+				subResponse.Frames = append(subResponse.Frames, frame)
 			}
-
-			frame.RefID = RefID
-			frame.Meta.ExecutedQueryString = q.BatchRequest.Resource
-
-			// TODO: enable streaming
-			// If the query is streamable, then we need to set the channel URI
-			// and the executed query string.
-			// if q.Streamable {
-			// 	// Create a new channel for this frame request.
-			// 	// Creating a new channel for each frame request is not ideal,
-			// 	// but it is the only way to ensure that the frame data is refreshed
-			// 	// on a time interval update.
-			// 	channeluuid := uuid.New()
-			// 	channelURI := "ds/" + q.UID + "/" + channeluuid.String()
-			// 	channel := StreamChannelConstruct{
-			// 		WebID:               q.WebID,
-			// 		IntervalNanoSeconds: q.IntervalNanoSeconds,
-			// 	}
-			// 	d.channelConstruct[channeluuid.String()] = channel
-			// 	frame.Meta.Channel = channelURI
-			// }
-
-			subResponse.Frames = append(subResponse.Frames, frame)
 		}
 		response.Responses[RefID] = subResponse
 	}
@@ -224,8 +226,14 @@ func (q *PIWebAPIQuery) isSummary() bool {
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
-func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string) string {
+func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) string {
 	var tagLabel string
+	summaryNewFormat := ""
+
+	if summaryLabel != "" {
+		summaryNewFormat = "\" summaryType=\"" + summaryLabel
+		summaryLabel += "[" + summaryLabel + "]"
+	}
 
 	if useNewFormat {
 		if q.IsPIPoint {
@@ -235,9 +243,7 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string) stri
 			tagLabel = targetParts[len(targetParts)-1]
 			var element = targetParts[0]
 			var name = tagLabel
-			tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + "\"}"
-			//tagLabel = q.FullTargetPath
-
+			tagLabel = tagLabel + summaryLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + summaryNewFormat + "\"}"
 		} else {
 			// New format returns the full path with metadata
 			// Element|Attribute {element="Element", name="Attribute", type="Single"}
@@ -246,12 +252,12 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string) stri
 			labelParts := strings.SplitN(tagLabel, "|", 2)
 			var element = labelParts[0]
 			var name = labelParts[1]
-			tagLabel = tagLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + "\"}"
+			tagLabel = tagLabel + summaryLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + summaryNewFormat + "\"}"
 		}
 
 	} else {
 		// Old format returns just the tag/attribute name
-		tagLabel = q.Label
+		tagLabel = q.Label + summaryLabel
 	}
 
 	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
@@ -469,7 +475,7 @@ func (q *PIWebAPIQuery) checkValidTargets() bool {
 	return true
 }
 
-func (q *PIWebAPIQuery) checkUseLastValue() bool {
+func (q *PIWebAPIQuery) isUseLastValue() bool {
 	if q.UseLastValue == nil {
 		return false
 	}
@@ -498,7 +504,7 @@ func (q Query) getQueryBaseURL() string {
 	var uri string
 	if q.Pi.isExpression() {
 		uri += "/calculation"
-		if q.Pi.checkUseLastValue() {
+		if q.Pi.isUseLastValue() {
 			uri += "/times?time=" + q.getTimeRangeURIToComponent()
 		} else {
 			if q.Pi.isSummary() {
@@ -518,7 +524,7 @@ func (q Query) getQueryBaseURL() string {
 		uri += "&expression=" + url.QueryEscape(q.Pi.Expression)
 	} else {
 		uri += "/streamsets"
-		if q.Pi.checkUseLastValue() {
+		if q.Pi.isUseLastValue() {
 			uri += "/value?time=" + q.getTimeRangeURIToComponent()
 		} else {
 			if q.Pi.isSummary() {

@@ -9,10 +9,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
-type ErrorResponse struct {
-	Errors []string `json:"Errors"`
-}
-
 type PIBatchResponse struct {
 	Status  int               `json:"Status"`
 	Headers map[string]string `json:"Headers"`
@@ -24,84 +20,31 @@ type PIBatchResponseBase struct {
 	Headers map[string]string `json:"Headers"`
 }
 
+type PiBatchContentLinks struct {
+	Source string `json:"Source"`
+}
+
+type PiBatchContentItem struct {
+	Timestamp         time.Time   `json:"Timestamp"`
+	Value             interface{} `json:"Value"`
+	UnitsAbbreviation string      `json:"UnitsAbbreviation"`
+	Good              bool        `json:"Good"`
+	Questionable      bool        `json:"Questionable"`
+	Substituted       bool        `json:"Substituted"`
+	Annotated         bool        `json:"Annotated"`
+}
+
 type PiBatchData interface {
-	getUnits() string
-	getItems() *[]PiBatchContentItem
-}
-
-type PiBatchDataError struct {
-	Error *ErrorResponse
-}
-
-func (p PiBatchDataError) getUnits() string {
-	return ""
-}
-
-func (p PiBatchDataError) getItems() *[]PiBatchContentItem {
-	var items []PiBatchContentItem
-	return &items
-}
-
-type PiBatchDataWithSubItems struct {
-	Links map[string]interface{} `json:"Links"`
-	Items []struct {
-		WebId             string               `json:"WebId"`
-		Name              string               `json:"Name"`
-		Path              string               `json:"Path"`
-		Links             PiBatchContentLinks  `json:"Links"`
-		Items             []PiBatchContentItem `json:"Items"`
-		UnitsAbbreviation string               `json:"UnitsAbbreviation"`
-	} `json:"Items"`
-	Error *string
-}
-
-func (p PiBatchDataWithSubItems) getUnits() string {
-	return p.Items[0].UnitsAbbreviation
-}
-
-func (p PiBatchDataWithSubItems) getItems() *[]PiBatchContentItem {
-	return &p.Items[0].Items
-}
-
-type PiBatchDataWithSingleItem struct {
-	Links map[string]interface{} `json:"Links"`
-	Items []struct {
-		WebId string              `json:"WebId"`
-		Name  string              `json:"Name"`
-		Path  string              `json:"Path"`
-		Links PiBatchContentLinks `json:"Links"`
-		Value PiBatchContentItem  `json:"Value"`
-	} `json:"Items"`
-	Error *string
-}
-
-func (p PiBatchDataWithSingleItem) getUnits() string {
-	return p.Items[0].Value.UnitsAbbreviation
-}
-
-func (p PiBatchDataWithSingleItem) getItems() *[]PiBatchContentItem {
-	var items []PiBatchContentItem
-	items = append(items, p.Items[0].Value)
-	return &items
-}
-
-type PiBatchDataWithoutSubItems struct {
-	Links             map[string]interface{} `json:"Links"`
-	Items             []PiBatchContentItem   `json:"Items"`
-	UnitsAbbreviation string                 `json:"UnitsAbbreviation"`
-}
-
-func (p PiBatchDataWithoutSubItems) getUnits() string {
-	return p.UnitsAbbreviation
-}
-
-func (p PiBatchDataWithoutSubItems) getItems() *[]PiBatchContentItem {
-	return &p.Items
+	getUnits(typeFilter string) string
+	getSummaryTypes() *[]string
+	getItems(typeFilter string) *[]PiBatchContentItem
 }
 
 // Custom unmarshaler to unmarshal PIBatchResponse to the correct struct type.
 // If the first item in the Items array has a WebId, then we have a PiBatchDataWithSubItems
 // If the first item in the Items array does not have a WebId, then we have a PiBatchDataWithoutSubItems
+// If the first item is a Value then we have a PiBatchDataWithSingleItem
+// If the first item in the Items array has a Type property, then we have a PiBatchDataSummaryItems
 // All other formations will return an PiBatchDataError
 func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	var PIBatchResponseBase PIBatchResponseBase
@@ -138,7 +81,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	items, ok := Content["Items"].([]interface{})
+	parentItems, ok := Content["Items"].([]interface{})
 	if !ok {
 		backend.Logger.Error("key 'Items' not found in 'Content'", "Content", Content)
 		//Return an error Batch Data Response to the user is notified
@@ -147,9 +90,9 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	item, ok := items[0].(map[string]interface{})
+	parentItem, ok := parentItems[0].(map[string]interface{})
 	if !ok {
-		backend.Logger.Error("key '0' not found in 'Items'", "Items", items)
+		backend.Logger.Error("key '0' not found in 'Items'", "Items", parentItems)
 		//Return an error Batch Data Response to the user is notified
 		errMessages := &[]string{"Could not process response from PI Web API"}
 		p.Content = createPiBatchDataError(errMessages)
@@ -158,7 +101,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 
 	// Check if the response contained a WebId, if the response did contain a WebID
 	// then it is a PiBatchDataWithSubItems, otherwise it is a PiBatchDataWithoutSubItems
-	_, ok = item["WebId"].(string)
+	_, ok = parentItem["WebId"].(string)
 
 	if !ok {
 		ResContent := PiBatchDataWithoutSubItems{}
@@ -175,7 +118,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	}
 
 	// Check if the response contained a value or a subitems array of values
-	_, ok = item["Value"].(interface{})
+	_, ok = parentItem["Value"]
 	if ok {
 		ResContent := PiBatchDataWithSingleItem{}
 		err = json.Unmarshal(rawContent, &ResContent)
@@ -190,6 +133,46 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	// Check if the 'Items' key exists and is a slice.
+	itemsSlice, ok := parentItem["Items"].([]interface{})
+	if !ok {
+		backend.Logger.Error("key 'Items' not found in 'Items'", "Items", parentItem)
+		backend.Logger.Error("Error unmarshalling batch response", err)
+		//Return an error Batch Data Response to the user is notified
+		errMessages := &[]string{"Could not process response from PI Web API"}
+		p.Content = createPiBatchDataError(errMessages)
+		return nil
+	}
+
+	// If there's at least one item in the slice, check its type.
+	if len(itemsSlice) > 0 {
+		firstItem, ok := itemsSlice[0].(map[string]interface{})
+		if !ok {
+			backend.Logger.Error("First item in 'Items' is not a map[string]interface{}", "FirstItem", itemsSlice[0])
+			//Return an error Batch Data Response to the user is notified
+			errMessages := &[]string{"First item in 'Items' is not a map[string]interface{}"}
+			p.Content = createPiBatchDataError(errMessages)
+			return nil
+		}
+
+		// Now check for the "Type" key.
+		if _, ok := firstItem["Type"]; ok {
+			// This is a summary response
+			ResContent := PiBatchDataSummaryItems{}
+			err = json.Unmarshal(rawContent, &ResContent)
+			if err != nil {
+				backend.Logger.Error("Error unmarshalling batch response", err)
+				//Return an error Batch Data Response to the user is notified
+				errMessages := &[]string{"Could not process response from PI Web API"}
+				p.Content = createPiBatchDataError(errMessages)
+				return nil
+			}
+			p.Content = ResContent
+			return nil
+		}
+	}
+
+	// The default response is a PiBatchDataWithSubItems, this works
 	ResContent := PiBatchDataWithSubItems{}
 	err = json.Unmarshal(rawContent, &ResContent)
 	if err != nil {
@@ -201,24 +184,4 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	}
 	p.Content = ResContent
 	return nil
-}
-
-func createPiBatchDataError(errorMessage *[]string) *PiBatchDataError {
-	errorResponse := &ErrorResponse{Errors: *errorMessage}
-	resContent := &PiBatchDataError{Error: errorResponse}
-	return resContent
-}
-
-type PiBatchContentLinks struct {
-	Source string `json:"Source"`
-}
-
-type PiBatchContentItem struct {
-	Timestamp         time.Time   `json:"Timestamp"`
-	Value             interface{} `json:"Value"`
-	UnitsAbbreviation string      `json:"UnitsAbbreviation"`
-	Good              bool        `json:"Good"`
-	Questionable      bool        `json:"Questionable"`
-	Substituted       bool        `json:"Substituted"`
-	Annotated         bool        `json:"Annotated"`
 }

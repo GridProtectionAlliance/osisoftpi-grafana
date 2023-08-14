@@ -238,9 +238,7 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 // if we pass a pointer to the webid cache and the webid that might simplify things
 
 // TODO: Code cleanup: handle this directly using slices of pointers.
-// TODO: Missing functionality: Add support for summary queries.
 // TODO: Missing functionality: Add support for replacing bad data.
-
 func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Datasource, webID string, summaryQuery bool, includeMetaData bool) (*data.Frame, error) {
 	frame := data.NewFrame(frameName)
 	SliceType := d.getTypeForWebID(webID)

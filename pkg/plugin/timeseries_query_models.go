@@ -67,10 +67,6 @@ func (q *Query) getTimeRangeURIToComponent() string {
 	return q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 
-func (q *Query) getTimeRangeURIFromComponent() string {
-	return q.TimeRange.From.UTC().Format(time.RFC3339)
-}
-
 func (q *Query) streamingEnabled() bool {
 	if q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.Enable == nil {
 		return false
@@ -144,10 +140,10 @@ type QuerySummary struct {
 
 type SummaryType struct {
 	Label string           `json:"label"`
-	Value SummaryTYpeValue `json:"value"`
+	Value SummaryTypeValue `json:"value"`
 }
 
-type SummaryTYpeValue struct {
+type SummaryTypeValue struct {
 	Expandable bool   `json:"expandable"`
 	Value      string `json:"value"`
 }
@@ -159,14 +155,14 @@ type Regex struct {
 }
 
 type PiProcessedQuery struct {
-	Label               string `json:"Label"`
-	WebID               string `json:"WebID"`
-	UID                 string `json:"-"`
-	IntervalNanoSeconds int64  `json:"IntervalNanoSeconds"`
-	IsPIPoint           bool   `json:"IsPiPoint"`
-	Streamable          bool   `json:"isStreamable"`
-	FullTargetPath      string `json:"FullTargetPath"`
-	ResponseUnits       string
+	Label               string          `json:"Label"`
+	WebID               string          `json:"WebID"`
+	UID                 string          `json:"-"`
+	IntervalNanoSeconds int64           `json:"IntervalNanoSeconds"`
+	IsPIPoint           bool            `json:"IsPiPoint"`
+	Streamable          bool            `json:"isStreamable"`
+	FullTargetPath      string          `json:"FullTargetPath"`
+	ResponseUnits       string          `json:"ResponseUnits"`
 	BatchRequest        BatchSubRequest `json:"BatchRequest"`
 	Response            PiBatchData     `json:"ResponseData"`
 	UseUnit             bool            `json:"UseUnit"`
