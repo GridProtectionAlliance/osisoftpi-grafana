@@ -67,7 +67,7 @@ func (q *Query) getTimeRangeURIToComponent() string {
 	return q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 
-func (q *Query) streamingEnabled() bool {
+func (q *Query) isstreamingEnabled() bool {
 	if q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.Enable == nil {
 		return false
 	}
@@ -76,7 +76,7 @@ func (q *Query) streamingEnabled() bool {
 }
 
 func (q *Query) isStreamable() bool {
-	return !q.Pi.isExpression() && q.streamingEnabled()
+	return !q.Pi.isExpression() && q.isstreamingEnabled()
 }
 
 type PIWebAPIQuery struct {

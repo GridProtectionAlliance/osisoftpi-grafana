@@ -484,13 +484,6 @@ func (q *PIWebAPIQuery) isUseLastValue() bool {
 	return *q.UseLastValue.Enable
 }
 
-func (q *PIWebAPIQuery) getSegmentCount() int {
-	if q.Segments == nil {
-		return 0
-	}
-	return len(*q.Segments)
-}
-
 func (q *Query) getMaxDataPoints() int {
 	maxDataPoints := *q.Pi.MaxDataPoints
 	if maxDataPoints == 0 {
