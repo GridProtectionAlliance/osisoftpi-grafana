@@ -115,13 +115,13 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 
 	// //TODO: Remove this debug information
-	// jsonReq, err := json.Marshal(req)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	// }
+	jsonReq, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
+	}
 
-	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
-	// // end remove this debug information
+	backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// end remove this debug information
 
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID

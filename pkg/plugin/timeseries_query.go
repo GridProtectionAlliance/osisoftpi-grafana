@@ -494,7 +494,6 @@ func (q *Query) getMaxDataPoints() int {
 	return maxDataPoints
 }
 
-// TODO: support windowwidth from existing package.
 func (q Query) getQueryBaseURL() string {
 	var uri string
 	if q.Pi.isExpression() {
@@ -507,9 +506,13 @@ func (q Query) getQueryBaseURL() string {
 				if q.Pi.isInterpolated() {
 					uri += fmt.Sprintf("&sampleType=Interval&sampleInterval=%dms", q.getIntervalTime())
 				}
-			} else {
+			} else if q.Pi.isInterpolated() {
 				uri += "/intervals" + q.getTimeRangeURIComponent()
 				uri += fmt.Sprintf("&sampleInterval=%dms", q.getIntervalTime())
+			} else if q.Pi.isRecordedValues() {
+				uri += "/recorded" + q.getTimeRangeURIComponent()
+			} else {
+				uri += "/times?" + q.getWindowedTimeStampURI()
 			}
 		}
 		uri += "&expression=" + url.QueryEscape(q.Pi.Expression)

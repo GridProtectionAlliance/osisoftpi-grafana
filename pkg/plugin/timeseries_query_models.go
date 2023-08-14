@@ -40,12 +40,35 @@ func (q *Query) getIntervalTime() int {
 	return intervalTime
 }
 
+func (q *Query) getWindowedTimeStampURI() string {
+	// Potential Improvement: Make windowWidth a user input
+	const windowWidth = 40
+	fromTime := q.TimeRange.From
+	toTime := q.TimeRange.To
+
+	diff := toTime.Sub(fromTime).Nanoseconds() / int64(windowWidth)
+	timeQuery := "time=" + fromTime.Format(time.RFC3339)
+
+	for i := 1; i < windowWidth; i++ {
+		newTime := fromTime.Add(time.Duration(i * int(diff)))
+		timeQuery += "&time=" + newTime.Format(time.RFC3339)
+	}
+
+	timeQuery += "&time=" + toTime.Format(time.RFC3339)
+
+	return "/times?" + timeQuery
+}
+
 func (q *Query) getTimeRangeURIComponent() string {
 	return "?startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 
 func (q *Query) getTimeRangeURIToComponent() string {
 	return q.TimeRange.To.UTC().Format(time.RFC3339)
+}
+
+func (q *Query) getTimeRangeURIFromComponent() string {
+	return q.TimeRange.From.UTC().Format(time.RFC3339)
 }
 
 func (q *Query) streamingEnabled() bool {
