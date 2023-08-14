@@ -176,7 +176,6 @@ export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,dat
   return processedFrames;
 }
 
-// FIXME: Update this so it supports multiple results
 export function convertToTableData(items: any[], valueData?: any[]): TableData[] {
   console.log("items",items)
   const response: TableData[] = items.map((item: any, index: number) => {
