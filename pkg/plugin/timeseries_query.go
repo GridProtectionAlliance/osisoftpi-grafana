@@ -351,14 +351,11 @@ func (q *PIWebAPIQuery) getSummaryDuration() string {
 
 func (q *PIWebAPIQuery) getSummaryURIComponent() string {
 	uri := ""
-	// FIXME: Validate that we cannot have a summary for a calculation
-	if !q.isExpression() {
-		for _, t := range *q.Summary.Types {
-			uri += "&summaryType=" + t.Value.Value
-		}
-		uri += "&summaryBasis=" + *q.Summary.Basis
-		uri += "&summaryDuration=" + q.getSummaryDuration()
+	for _, t := range *q.Summary.Types {
+		uri += "&summaryType=" + t.Value.Value
 	}
+	uri += "&summaryBasis=" + *q.Summary.Basis
+	uri += "&summaryDuration=" + q.getSummaryDuration()
 	return uri
 }
 

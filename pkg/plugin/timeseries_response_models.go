@@ -99,24 +99,6 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Check if the response contained a WebId, if the response did contain a WebID
-	// then it is a PiBatchDataWithSubItems, otherwise it is a PiBatchDataWithoutSubItems
-	_, ok = parentItem["WebId"].(string)
-
-	if !ok {
-		ResContent := PiBatchDataWithoutSubItems{}
-		err = json.Unmarshal(rawContent, &ResContent)
-		if err != nil {
-			backend.Logger.Error("Error unmarshalling batch response", err)
-			//Return an error Batch Data Response so the user is notified
-			errMessages := &[]string{"Could not process response from PI Web API"}
-			p.Content = createPiBatchDataError(errMessages)
-			return nil
-		}
-		p.Content = ResContent
-		return nil
-	}
-
 	// Check if the response contained a value or a subitems array of values
 	_, ok = parentItem["Value"]
 	if ok {
@@ -170,6 +152,24 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 			p.Content = ResContent
 			return nil
 		}
+	}
+
+	// Check if the response contained a WebId, if the response did contain a WebID
+	// then it is a PiBatchDataWithSubItems, otherwise it is a PiBatchDataWithoutSubItems
+	_, ok = parentItem["WebId"].(string)
+
+	if !ok {
+		ResContent := PiBatchDataWithoutSubItems{}
+		err = json.Unmarshal(rawContent, &ResContent)
+		if err != nil {
+			backend.Logger.Error("Error unmarshalling batch response", err)
+			//Return an error Batch Data Response so the user is notified
+			errMessages := &[]string{"Could not process response from PI Web API"}
+			p.Content = createPiBatchDataError(errMessages)
+			return nil
+		}
+		p.Content = ResContent
+		return nil
 	}
 
 	// The default response is a PiBatchDataWithSubItems, this works
