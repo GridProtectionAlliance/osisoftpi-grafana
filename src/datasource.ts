@@ -1,46 +1,34 @@
-import { each, filter, flatten, forOwn, groupBy, keys, map, uniq, omitBy } from 'lodash';
+import { 
+  filter, 
+  map, 
+} from 'lodash';
+
 import { Observable, of } from 'rxjs';
 
 import {
-  DataQueryRequest,
-  DataQueryResponse,
-  DataSourceApi,
   DataSourceInstanceSettings,
-  AnnotationEvent,
   MetricFindValue,
-  Labels,
   AnnotationQuery,
+  ScopedVars,
+  AnnotationEvent,
   DataFrame,
-  toDataFrame,
 } from '@grafana/data';
-import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
+import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend} from '@grafana/runtime';
 
 import {
   PIWebAPIQuery,
   PIWebAPIDataSourceJsonData,
   PiDataServer,
-  PiwebapTargetRsp,
-  PiwebapiElementPath,
   PiwebapiInternalRsp,
   PiwebapiRsp,
 } from './types';
 import {
-  checkNumber,
-  convertTimeSeriesToDataFrame,
-  convertToTableData,
-  getFinalUrl,
-  getLastPath,
-  getPath,
-  isAllSelected,
-  lowerCaseFirstLetter,
   metricQueryTransform,
-  noDataReplace,
-  parseRawQuery,
 } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
-export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
+export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
   piserver: PiDataServer;
   afserver: PiDataServer;
   afdatabase: PiDataServer;
@@ -81,6 +69,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
       prepareQuery(anno: AnnotationQuery<PIWebAPIQuery>): PIWebAPIQuery | undefined {
         if (anno.target) {
+          anno.target.queryType = 'Annotation';
           anno.target.isAnnotation = true;
         }
         return anno.target;
@@ -91,6 +80,7 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       ): Observable<AnnotationEvent[] | undefined> => {
         return of(this.eventFrameToAnnotation(anno, data));
       },
+
     };
 
     Promise.all([
@@ -102,67 +92,24 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
     ]);
   }
 
+
   /**
-   * Datasource Implementation. Primary entry point for data source.
-   * This takes the panel configuration and queries, sends them to PI Web API and parses the response.
-   *
-   * @param {any} options - Grafana query and panel options.
-   * @returns - Promise of data in the format for Grafana panels.
+   * This method overrides the applyTemplateVariables() method from the DataSourceWithBackend class.
+   * It is responsible for replacing the template variables in the query configuration prior 
+   * to sending the query to the backend. Templated variables are not able to be used for alerts
+   * or public facing dashboards.
+   * 
+   * @param {PIWebAPIQuery} query - The raw query configuration from the frontend as defined in the query editor.
+   * @param {ScopedVars} scopedVars - The template variables that are defined in the query editor and dashboard.
+   * @returns - PIWebAPIQuery.
    *
    * @memberOf PiWebApiDatasource
    */
-  async query(options: DataQueryRequest<PIWebAPIQuery>): Promise<DataQueryResponse> {
-    if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
-      return this.processAnnotationQuery(options);
-    }
-
-    const query = this.buildQueryParameters(options);
-
-    if (query.targets.length <= 0) {
-      return Promise.resolve({ data: [] });
-    } else {
-      return Promise.all(this.getStream(query)).then((targetResponses) => {
-        let flattened: PiwebapTargetRsp[] = [];
-        each(targetResponses, (tr) => {
-          each(tr, (item) => flattened.push(item));
-        });
-        flattened = flattened.filter((v) => v.datapoints.length > 0);
-        // handle no data properly
-        if (flattened.length === 0) {
-          return { data: [] };
-        }
-        const response: DataQueryResponse = {
-          data: flattened
-            .sort((a, b) => {
-              return +(a.target > b.target) || +(a.target === b.target) - 1;
-            })
-            .map((d) => convertTimeSeriesToDataFrame(d)),
-        };
-        return response;
-      });
-    }
-  }
-
-  /**
-   * Datasource Implementation.
-   * Used for testing datasource in datasource configuration pange
-   *
-   * @returns - Success or failure message.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  testDatasource(): Promise<any> {
-    return this.backendSrv
-      .datasourceRequest({
-        url: this.url + '/',
-        method: 'GET',
-      })
-      .then((response: any) => {
-        if (response.status < 300) {
-          return { status: 'success', message: 'Data source is working', title: 'Success' };
-        }
-        throw new Error('Failed');
-      });
+  applyTemplateVariables(query: PIWebAPIQuery, scopedVars: ScopedVars) {
+    return {
+      ...query,
+      target: query.target ? this.templateSrv.replace(query.target, scopedVars) : '',
+    };
   }
 
   /**
@@ -278,653 +225,76 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
   }
 
   /** PRIVATE SECTION */
+  
+    /**
+     * Localize the eventFrame dataFrame records to Grafana Annotations.
+     * @param {any} annon - The annotation object.
+     * @param {any} data - The dataframe recrords.
+     * @returns - Grafana Annotation
+     *
+     * @memberOf PiWebApiDatasource
+     */
+    private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
+      const annotationOptions = annon.target!;
+      const events: AnnotationEvent[] = [];
+      const currentLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+    
+      data.forEach((d: DataFrame) => {
+          let values = this.transformDataFrameToMap(d);
+          for (let i = 0; i < values['time'].length; i++) {
 
-  /**
-   * Datasource Implementation.
-   * This queries PI Web API for Event Frames and converts them into annotations.
-   *
-   * @param {any} options - Annotation options, usually the Event Frame Category.
-   * @returns - A Grafana annotation.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private processAnnotationQuery(options: DataQueryRequest<PIWebAPIQuery>): Promise<DataQueryResponse> {
-    const annotationQuery = options.targets[0];
+            // replace Dataframe name using Regex
+            let title = values['title'][i];
+            if (annotationOptions.regex && annotationOptions.regex.enable) {
+              title = title.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
+            }
 
-    const categoryName = annotationQuery.categoryName
-      ? this.templateSrv.replace(annotationQuery.categoryName, options.scopedVars, 'glob')
-      : null;
-    const nameFilter = annotationQuery.nameFilter
-      ? this.templateSrv.replace(annotationQuery.nameFilter, options.scopedVars, 'glob')
-      : null;
-    const templateName = annotationQuery.template ? annotationQuery.template.Name : null;
-    const annotationOptions = {
-      datasource: annotationQuery.datasource,
-      showEndTime: annotationQuery.showEndTime,
-      regex: annotationQuery.regex,
-      attribute: annotationQuery.attribute,
-      categoryName: categoryName,
-      templateName: templateName,
-      nameFilter: nameFilter,
-    };
+            // test if timeEnd is negative and if so, set it to null
+            if (values['timeEnd'][i] < 0) {
+              values['timeEnd'][i] = null;
+            }
 
-    const filter = [];
-    if (!!annotationOptions.categoryName) {
-      filter.push('categoryName=' + annotationOptions.categoryName);
-    }
-    if (!!annotationOptions.nameFilter) {
-      filter.push('nameFilter=' + annotationOptions.nameFilter);
-    }
-    if (!!annotationOptions.templateName) {
-      filter.push('templateName=' + annotationOptions.templateName);
-    }
-    if (!filter.length) {
-      return Promise.resolve({ data: [] });
-    }
-    filter.push('startTime=' + options.range.from.toISOString());
-    filter.push('endTime=' + options.range.to.toISOString());
+            // format the text and localize the dates to browser locale
+            let text = "Tag: " + title;
+            if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+              text += values['attributeText'][i];
+            }
+            text += '<br />Start: ' + 
+              new Date(values['time'][i]).toLocaleString(currentLocale) +
+              '<br />End: '
 
-    if (annotationOptions.attribute && annotationOptions.attribute.enable) {
-      let resourceUrl =
-        this.piwebapiurl + '/streamsets/{0}/value?selectedFields=Items.WebId%3BItems.Value%3BItems.Name';
-      if (annotationOptions.attribute.name && annotationOptions.attribute.name.trim().length > 0) {
-        resourceUrl += '&nameFilter=' + annotationOptions.attribute.name.trim();
-      }
-      const query: any = {
-        '1': {
-          Method: 'GET',
-          Resource:
-            this.piwebapiurl +
-            '/assetdatabases/' +
-            annotationQuery.database?.WebId +
-            '/eventframes?' +
-            filter.join('&'),
-        },
-        '2': {
-          Method: 'GET',
-          RequestTemplate: {
-            Resource: resourceUrl,
-          },
-          Parameters: ['$.1.Content.Items[*].WebId'],
-          ParentIds: ['1'],
-        },
-      };
-      return this.restBatch(query).then((result) => {
-        const data = result.data['1'].Content;
-        const valueData = result.data['2'].Content;
-        return {
-          data: convertToTableData(data.Items!, valueData.Items).map((r) => toDataFrame(r)),
-        };
-      });
-    } else {
-      return this.restGet(
-        '/assetdatabases/' + annotationQuery.database?.WebId + '/eventframes?' + filter.join('&')
-      ).then((result) => {
-        return {
-          data: convertToTableData(result.data.Items!).map((r) => toDataFrame(r)),
-        };
-      });
-    }
-  }
+            if (values['timeEnd'][i]) {
+              text += new Date(values['timeEnd'][i]).toLocaleString(currentLocale) 
+            } else {
+              text += 'Eventframe is open'
+            }
 
-  /**
-   * Converts a PIWebAPI Event Frame response to a Grafana Annotation
-   *
-   * @param {any} annon - The annotation object.
-   * @param {any} data - The dataframe recrords.
-   * @returns - Grafana Annotation
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
-    const annotationOptions = annon.target!;
-    const events: AnnotationEvent[] = [];
-    data.forEach((d: DataFrame) => {
-      let attributeText = '';
-      let name = d.name!;
-      const endTime = d.fields.find((f) => f.name === 'EndTime')?.values.get(0);
-      const startTime = d.fields.find((f) => f.name === 'StartTime')?.values.get(0);
-      // check if we have more attributes in the table data
-      const attributeDataItems = d.fields.filter((f) => ['StartTime', 'EndTime'].indexOf(f.name) < 0);
-      if (attributeDataItems) {
-        each(attributeDataItems, (attributeData) => {
-          attributeText += '<br />' + attributeData.name + ': ' + attributeData.values.get(0);
-        });
-      }
-      // replace Dataframe name using Regex
-      if (annotationOptions.regex && annotationOptions.regex.enable) {
-        name = name.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
-      }
-      // create the event
-      events.push({
-        id: annotationOptions.database?.WebId,
-        annotation: annon,
-        title: `Name: ${annon.name}`,
-        time: new Date(startTime).getTime(),
-        timeEnd: !!annotationOptions.showEndTime ? new Date(endTime).getTime() : undefined,
-        text:
-          `Tag: ${name}` +
-          attributeText +
-          '<br />Start: ' +
-          new Date(startTime).toLocaleString('pt-BR') +
-          '<br />End: ' +
-          new Date(endTime).toLocaleString('pt-BR'),
-        tags: ['OSISoft PI'],
-      });
-    });
-    return events;
-  }
+            const event: AnnotationEvent = {
+              time: values['time'][i],
+              timeEnd: !!annotationOptions.showEndTime ? values['timeEnd'][i] : undefined,
+              title: title,
+              id: values['id'][i],
+              text: text,
+              tags: ['OSISoft PI'],
+            };
 
-  /**
-   * Builds the PIWebAPI query parameters.
-   *
-   * @param {any} options - Grafana query and panel options.
-   * @returns - PIWebAPI query parameters.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private buildQueryParameters(options: DataQueryRequest<PIWebAPIQuery>) {
-    options.targets = filter(options.targets, (target) => {
-      if (!target || !target.target || !!target.hide) {
-        return false;
-      }
-      return !target.target.startsWith('Select AF');
-    });
-
-    options.targets = map(options.targets, (target) => {
-      if (!!target.rawQuery && !!target.target) {
-        const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
-        target.attributes = attributes;
-        target.elementPath = elementPath;
-      }
-      const ds = this;
-      const tar = {
-        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        elementPathArray: [
-          {
-            path: this.templateSrv.replace(target.elementPath, options.scopedVars),
-            variable: '',
-          } as PiwebapiElementPath,
-        ],
-        attributes: map(target.attributes, (att) =>
-          this.templateSrv.replace(att.value?.value || att, options.scopedVars)
-        ),
-        isAnnotation: !!target.isAnnotation,
-        segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
-        display: target.display,
-        refId: target.refId,
-        hide: target.hide,
-        interpolate: target.interpolate || { enable: false },
-        useLastValue: target.useLastValue || { enable: false },
-        useUnit: target.useUnit || { enable: false },
-        recordedValues: target.recordedValues || { enable: false },
-        digitalStates: target.digitalStates || { enable: false },
-        webid: target.webid ?? '',
-        webids: target.webids || [],
-        regex: target.regex || { enable: false },
-        expression: target.expression || '',
-        summary: target.summary || { types: [] },
-        startTime: options.range.from,
-        endTime: options.range.to,
-        isPiPoint: !!target.isPiPoint,
-        scopedVars: options.scopedVars,
-      };
-
-      if (tar.expression) {
-        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
-      }
-
-      if (tar.summary.types !== undefined) {
-        tar.summary.types = filter(tar.summary.types, (item) => {
-          return item !== undefined && item !== null && item !== '';
-        });
-      }
-
-      // explode All or Multi-selection
-      const varsKeys = keys(options.scopedVars);
-      this.templateSrv.getVariables().forEach((v: any) => {
-        if (isAllSelected(v.current) && varsKeys.indexOf(v.name) < 0) {
-          // All selection
-          const variables = v.options.filter((o: any) => !o.selected);
-          // attributes
-          tar.attributes = tar.attributes.map((attr: string) =>
-            variables.map((vv: any) =>
-              !!v.allValue ? attr.replace(v.allValue, vv.value) : attr.replace(/{[a-z 0-9,-_]+}/gi, vv.value)
-            )
-          );
-          tar.attributes = uniq(flatten(tar.attributes));
-          // elementPath
-          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, v.allValue);
-        } else if (Array.isArray(v.current.text) && varsKeys.indexOf(v.name) < 0) {
-          // Multi-selection
-          const variables = v.options.filter((o: any) => o.selected);
-          // attributes
-          const query = v.current.value.join(',');
-          tar.attributes = tar.attributes.map((attr: string) =>
-            variables.map((vv: any) => attr.replace(`{${query}}`, vv.value))
-          );
-          tar.attributes = uniq(flatten(tar.attributes));
-          // elementPath
-          tar.elementPathArray = ds.getElementPath(tar.elementPathArray, variables, `{${query}}`);
-        }
-      });
-
-      return tar;
-    });
-
-    return options;
-  }
-
-  /**
-   * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
-   *
-   * @param {any} value - A list of PIWebAPI values.
-   * @param {any} target - The target Grafana metric.
-   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
-   * @returns - An array of Grafana value, timestamp pairs.
-   *
-   */
-  private parsePiPointValueData(value: any, target: any, isSummary: boolean) {
-    const datapoints: any[] = [];
-    if (Array.isArray(value)) {
-      each(value, (item) => {
-        this.piPointValue(isSummary ? item.Value : item, target, isSummary, datapoints);
-      });
-    } else {
-      this.piPointValue(value, target, isSummary, datapoints);
-    }
-    return datapoints;
-  }
-
-  /**
-   * Resolve PIWebAPI response 'value' data to value - timestamp pairs.
-   *
-   * @param {any} value - PI Point value.
-   * @param {any} target - The target grafana metric.
-   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
-   * @param {any[]} datapoints - Array with Grafana datapoints.
-   *
-   */
-  private piPointValue(value: any, target: any, isSummary: boolean, datapoints: any[]) {
-    // @ts-ignore
-    const { grafanaDataPoint, previousValue, drop } = noDataReplace(
-      value,
-      target.summary.nodata,
-      this.parsePiPointValue(value, target, isSummary)
-    );
-    if (!drop) {
-      datapoints.push(grafanaDataPoint);
-    }
-  }
-
-  /**
-   * Convert a PI Point value to use Grafana value/timestamp.
-   *
-   * @param {any} value - PI Point value.
-   * @param {any} target - The target grafana metric.
-   * @param {boolean} isSummary - Boolean for tracking if data is of summary class.
-   * @returns - Grafana value pair.
-   *
-   */
-  private parsePiPointValue(value: any, target: any, isSummary: boolean) {
-    let num = !isSummary && typeof value.Value === 'object' ? value.Value?.Value : value.Value;
-
-    if (!value.Good || !!target.digitalStates?.enable) {
-      num = (!isSummary && typeof value.Value === 'object' ? value.Value?.Name : value.Name) ?? '';
-      return [checkNumber(num) ? Number(num) : num.trim(), new Date(value.Timestamp).getTime()];
-    }
-
-    return [checkNumber(num) ? Number(num) : num.trim(), new Date(value.Timestamp).getTime()];
-  }
-
-  /**
-   * Convert the Pi web api response object to the Grafana Labels object.
-   *
-   * @param {PiwebapiRsp} webid - Pi web api response object.
-   * @returns The converted Labels object.
-   */
-  private toTags(webid: PiwebapiRsp, isPiPoint: boolean): Labels {
-    const omitArray = ['Path', 'WebId', 'Id', 'ServerTime', 'ServerVersion'];
-    const obj = omitBy(webid, (value: any, key: string) => !value || !value.length || omitArray.indexOf(key) >= 0);
-    obj.Element = isPiPoint ? this.piserver.name : getLastPath(webid.Path ?? '');
-    const sorted = Object.keys(obj)
-      .sort()
-      .reduce((accumulator: any, key: string) => {
-        accumulator[lowerCaseFirstLetter(key)] = obj[key];
-        return accumulator;
-      }, {});
-    return sorted as Labels;
-  }
-
-  /**
-   * Process the response from PI Web API for a single item.
-   *
-   * @param {any} content - Web response data.
-   * @param {any} target - The target grafana metric.
-   * @param {any} name - The target metric name.
-   * @returns - Parsed metric in target/datapoint json format.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private processResults(
-    content: any,
-    target: any,
-    name: any,
-    noTemplate: boolean,
-    webid: PiwebapiRsp
-  ): PiwebapTargetRsp[] {
-    const api = this;
-    const isSummary: boolean = target.summary && target.summary.types && target.summary.types.length > 0;
-    if (!target.isPiPoint && !target.display && content.Path) {
-      if (api.newFormatConfig) {
-        name = (noTemplate ? getLastPath(content.Path) : getPath(target.elementPathArray, content.Path)) + '|' + name;
-      } else {
-        name = noTemplate ? name : getPath(target.elementPathArray, content.Path) + '|' + name;
-      }
-    }
-    if (target.regex && target.regex.enable && target.regex.search.length && target.regex.replace.length) {
-      name = name.replace(new RegExp(target.regex.search), target.regex.replace);
-    }
-    if (isSummary) {
-      const innerResults: PiwebapTargetRsp[] = [];
-      const groups = groupBy(content.Items, (item: any) => item.Type);
-      forOwn(groups, (value, key) => {
-        innerResults.push({
-          refId: target.refId,
-          target: name + '[' + key + ']',
-          meta: {
-            path: webid.Path,
-            pathSeparator: '\\',
-          },
-          tags: api.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
-          datapoints: api.parsePiPointValueData(value, target, isSummary),
-          path: webid.Path,
-          unit: api.useUnitConfig && target.useUnit.enable ? webid.DefaultUnitsName : undefined,
-        });
-      });
-      return innerResults;
-    }
-    const results: PiwebapTargetRsp[] = [
-      {
-        refId: target.refId,
-        target: name,
-        meta: {
-          path: webid.Path,
-          pathSeparator: '\\',
-        },
-        tags: api.newFormatConfig ? api.toTags(webid, target.isPiPoint) : {},
-        datapoints: api.parsePiPointValueData(content.Items || content.Value, target, isSummary),
-        path: webid.Path,
-        unit: api.useUnitConfig && target.useUnit.enable ? webid.DefaultUnitsName : undefined,
-      },
-    ];
-    return results;
-  }
-
-  /**
-   * Returns a new element path list based on the panel variables.
-   *
-   * @param {string} elementPathArray array of element paths
-   * @param {string} variables the list of variable values
-   * @param {string} allValue the all value value for the variable
-   * @returns {PiwebapiElementPath[]} new element path list
-   */
-  private getElementPath(
-    elementPathArray: PiwebapiElementPath[],
-    variables: any[],
-    allValue: string
-  ): PiwebapiElementPath[] {
-    // elementPath
-    let newElementPathArray: PiwebapiElementPath[] = [];
-    elementPathArray.forEach((elem: PiwebapiElementPath) => {
-      if ((!!allValue && elem.path.indexOf(allValue) >= 0) || (!allValue && elem.path.match(/{[a-z 0-9,-_]+}/gi))) {
-        const temp: PiwebapiElementPath[] = variables.map((vv: any) => {
-          return {
-            path: !!allValue
-              ? elem.path.replace(allValue, vv.value)
-              : elem.path.replace(/{[a-z 0-9,-_]+}/gi, vv.value),
-            variable: vv.value,
-          } as PiwebapiElementPath;
-        });
-        newElementPathArray = newElementPathArray.concat(temp);
-      }
-    });
-    if (newElementPathArray.length) {
-      return uniq(flatten(newElementPathArray));
-    }
-    return elementPathArray;
-  }
-
-  /**
-   * Gets historical data from a PI Web API stream source.
-   *
-   * @param {any} query - Grafana query.
-   * @returns - Metric data.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private getStream(query: any): Array<Promise<PiwebapTargetRsp[]>> {
-    const ds = this;
-    const results: Array<Promise<PiwebapTargetRsp[]>> = [];
-
-    each(query.targets, (target) => {
-      // pi point config disabled
-      if (target.isPiPoint && !ds.piPointConfig) {
-        console.error('Trying to call Pi Point server with Pi Point config disabled');
-        return;
-      }
-      target.attributes = filter(target.attributes || [], (attribute) => {
-        return 1 && attribute;
-      });
-      let url = '';
-      const isSummary = target.summary && target.summary.types && target.summary.types.length > 0;
-      const isInterpolated = target.interpolate && target.interpolate.enable;
-      const isRecorded = target.recordedValues && target.recordedValues.enable;
-      // perhaps add a check to see if interpolate override time < query.interval
-      const intervalTime = target.interpolate.interval ? target.interpolate.interval : query.interval;
-      const timeRange = '?startTime=' + query.range.from.toJSON() + '&endTime=' + query.range.to.toJSON();
-      const targetName = target.expression || target.elementPath;
-      const displayName = target.display ? this.templateSrv.replace(target.display, query.scopedVars) : null;
-      if (target.expression) {
-        url += '/calculation';
-        if (target.useLastValue?.enable) {
-          url += '/times?&time=' + query.range.to.toJSON();
-        } else if (isSummary) {
-          url += '/summary' + timeRange + (isInterpolated ? '&sampleType=Interval&sampleInterval=' + intervalTime : '');
-        } else if (isInterpolated) {
-          url += '/intervals' + timeRange + '&sampleInterval=' + intervalTime;
-        } else if (isRecorded) {
-          url += '/recorded' + timeRange;
-        } else {
-          const windowWidth = 40;
-          const diff = Math.floor((query.range.to.valueOf() - query.range.from.valueOf()) / windowWidth);
-          let timeQuery = 'time=' + query.range.from.toJSON();
-          for (let i = 1; i < windowWidth; i ++) {
-            const newTime = query.range.from.valueOf() + i * diff;
-            timeQuery += '&time=' + new Date(newTime).toISOString();
+            events.push(event);
           }
-          timeQuery += '&time=' + query.range.to.toJSON();
-          url += '/times?' + timeQuery;
-        }
-        url += '&expression=' + encodeURIComponent(target.expression.replace(/\${intervalTime}/g, intervalTime));
-        if (target.attributes.length > 0) {
-          results.push(ds.createBatchGetWebId(target, url, displayName));
-        } else {
-          results.push(
-            ds.restGetWebId(target.elementPath, false).then((webidresponse: PiwebapiRsp) => {
-              return ds
-                .restPost(url + '&webId=' + webidresponse.WebId)
-                .then((response: any) =>
-                  ds.processResults(response.data, target, displayName || targetName, false, webidresponse)
-                )
-                .catch((err: any) => (ds.error = err));
-            })
-          );
-        }
-      } else {
-        url += '/streamsets';
-        if (target.useLastValue?.enable) {
-          url += '/value?time=' + query.range.to.toJSON();
-        } else if (isSummary) {
-          url += '/summary' + timeRange + '&intervals=' + query.maxDataPoints + this.getSummaryUrl(target.summary);
-        } else if (isInterpolated) {
-          url += '/interpolated' + timeRange + '&interval=' + intervalTime;
-        } else if (isRecorded) {
-          const maxNumber =
-            target.recordedValues.maxNumber && !isNaN(target.recordedValues.maxNumber)
-              ? target.recordedValues.maxNumber
-              : query.maxDataPoints;
-          url += '/recorded' + timeRange + '&maxCount=' + maxNumber;
-        } else {
-          url += '/plot' + timeRange + '&intervals=' + query.maxDataPoints;
-        }
-        results.push(ds.createBatchGetWebId(target, url, displayName));
-      }
+        });
+      return events;
+    }
+    
+  /**
+   * 
+   */
+  private transformDataFrameToMap(dataFrame: DataFrame): Record<string, any[]> {
+    const map: Record<string, any[]> = {};
+  
+    dataFrame.fields.forEach((field) => {
+      map[field.name] = field.values.toArray();
     });
-
-    return results;
-  }
-
-  /**
-   * Process batch response to metric data.
-   *
-   * @param {any} response - The batch response.
-   * @param {any} target - Grafana query target.
-   * @param {string} displayName - The display name.
-   * @returns - Process metric data.
-   */
-  private handleBatchResponse(response: any, target: any, displayName: string | null): Promise<PiwebapTargetRsp[]> {
-    const targetName = target.expression || target.elementPath;
-    const noTemplate = target.elementPathArray.length === 1 && target.elementPath === target.elementPathArray[0].path;
-    const totalSize = noTemplate ? target.attributes.length : target.elementPathArray.length;
-    const targetResults: PiwebapTargetRsp[] = [];
-    for (let index = 1; index <= totalSize; index++) {
-      const dataKey = `Req${index + 1000}`;
-      const path = response.config.data[dataKey].Headers ? response.config.data[dataKey].Headers['Asset-Path'] : null;
-      const data = response.data[dataKey];
-      if (data.Status >= 400) {
-        continue;
-      }
-
-      let webid: PiwebapiRsp;
-      if (!!path) {
-        webid = this.webidCache.get(path);
-      } else {
-        const respData = response.data[`Req${index}`].Content;
-        webid = {
-          Path: respData.Path!,
-          Type: respData.Type || respData.PointType,
-          DefaultUnitsName: respData.DefaultUnitsName || respData.EngineeringUnits,
-          Description: respData.Description || respData.Descriptor,
-          WebId: respData.WebId,
-          Name: respData.Name,
-        };
-        this.webidCache.set(webid.Path!, webid);
-      }
-
-      if (target.expression) {
-        each(
-          this.processResults(data.Content, target, displayName || webid.Name || targetName, noTemplate, webid),
-          (targetResult) => targetResults.push(targetResult)
-        );
-      } else {
-        each(data.Content.Items, (item) => {
-          each(
-            this.processResults(item, target, displayName || item.Name || targetName, noTemplate, webid),
-            (targetResult) => targetResults.push(targetResult)
-          );
-        });
-      }
-    }
-    return Promise.resolve(targetResults);
-  }
-
-  /**
-   * Creates a batch query pair.
-   *
-   * @param {boolean} isPiPoint - is Pi point flag.
-   * @param {string} elementPath - the PI element path or PI Data server name.
-   * @param {string} attribute - the attribute or PI point name.
-   * @param {any} query - the batch query to build.
-   * @param {number} index - the current query index.
-   * @param {boolean} replace - is pi point and calculation.
-   * @param {string} url - the base url to call.
-   */
-  private createQueryPair(
-    isPiPoint: boolean,
-    elementPath: string,
-    attribute: string,
-    query: any,
-    index: number,
-    replace: boolean,
-    url: string
-  ) {
-    let path = '';
-    let assetPath = '';
-    if (isPiPoint) {
-      assetPath = '\\\\' + elementPath + '\\' + attribute;
-      path = '/points?selectedFields=Descriptor%3BPointType%3BEngineeringUnits%3BWebId%3BName%3BPath&path=' + assetPath;
-    } else {
-      assetPath = '\\\\' + elementPath + '|' + attribute;
-      path = '/attributes?selectedFields=Type%3BDefaultUnitsName%3BDescription%3BWebId%3BName%3BPath&path=' + assetPath;
-    }
-
-    const data = this.webidCache.get(assetPath);
-    if (!!data) {
-      query[`Req${index + 1000}`] = {
-        Method: 'GET',
-        Resource:
-          this.piwebapiurl +
-          getFinalUrl(replace, { Name: attribute }, url) +
-          '&webId=' +
-          (replace ? this.piserver.webid : data.WebId),
-        Headers: {
-          'Asset-Path': assetPath,
-        },
-      };
-    } else {
-      query[`Req${index}`] = {
-        Method: 'GET',
-        Resource: this.piwebapiurl + path,
-      };
-      query[`Req${index + 1000}`] = {
-        Method: 'GET',
-        ParentIds: [`Req${index}`],
-        Parameters: [`$.Req${index}.Content.WebId`],
-        Resource:
-          this.piwebapiurl +
-          getFinalUrl(replace, { Name: attribute }, url) +
-          (replace ? '&webId=' + this.piserver.webid : '&webId={0}'),
-      };
-    }
-  }
-
-  /**
-   * Get metric data using Batch.
-   *
-   * @param {any} target - Grafana query target.
-   * @param {string} url The base URL for the query.
-   * @param {string} displayName - The display name.
-   * @returns - Metric data.
-   */
-  private createBatchGetWebId(target: any, url: string, displayName: string | null): Promise<PiwebapTargetRsp[]> {
-    const noTemplate = target.elementPathArray.length === 1 && target.elementPath === target.elementPathArray[0].path;
-    const replace = target.isPiPoint && !!target.expression;
-    const query: any = {};
-    let index = 1;
-    for (const attribute of target.attributes) {
-      if (noTemplate) {
-        this.createQueryPair(target.isPiPoint, target.elementPath, attribute, query, index, replace, url);
-        index++;
-      } else {
-        target.elementPathArray.forEach((elementPath: PiwebapiElementPath) => {
-          this.createQueryPair(target.isPiPoint, elementPath.path, attribute, query, index, replace, url);
-          index++;
-        });
-      }
-    }
-    return this.restBatch(query).then((response: any) => this.handleBatchResponse(response, target, displayName));
+  
+    return map;
   }
 
   /**
@@ -945,102 +315,6 @@ export class PiWebAPIDatasource extends DataSourceApi<PIWebAPIQuery, PIWebAPIDat
       .then((response: any) => {
         return response as PiwebapiInternalRsp;
       });
-  }
-
-  /**
-   * Resolve a Grafana query into a PI Web API webid. Uses client side cache when possible to reduce lookups.
-   *
-   * @param {string} assetPath - The AF Path or the Pi Point Path (\\ServerName\piPointName) to the asset.
-   * @param {boolean} isPiPoint - Flag indicating it's a PI Point
-   * @returns - URL query parameters.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private restGetWebId(assetPath: string, isPiPoint: boolean): Promise<PiwebapiRsp> {
-    const ds = this;
-
-    // check cache
-    const cachedWebId = ds.webidCache.get(assetPath);
-    if (cachedWebId) {
-      return Promise.resolve({
-        ...cachedWebId,
-      });
-    }
-
-    // no cache hit, query server
-    let path = '';
-    if (isPiPoint) {
-      path =
-        '/points?selectedFields=Descriptor%3BPointType%3BEngineeringUnits%3BWebId%3BName%3BPath&path=\\\\' +
-        assetPath.replace('|', '\\');
-    } else {
-      path =
-        (assetPath.indexOf('|') >= 0
-          ? '/attributes?selectedFields=Type%3BDefaultUnitsName%3BDescription%3BWebId%3BName%3BPath&path=\\\\'
-          : '/elements?selectedFields=Description%3BWebId%3BName%3BPath&path=\\\\') + assetPath;
-    }
-
-    return this.backendSrv
-      .datasourceRequest({
-        url: this.url + path,
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      })
-      .then((response: any) => {
-        const data = {
-          Path: assetPath,
-          Type: response.data.Type || response.data.PointType,
-          DefaultUnitsName: response.data.DefaultUnitsName || response.data.EngineeringUnits,
-          Description: response.data.Description || response.data.Descriptor,
-          WebId: response.data.WebId,
-          Name: response.data.Name,
-        };
-        ds.webidCache.set(assetPath, data);
-        return {
-          ...data,
-        };
-      });
-  }
-
-  /**
-   * Execute a batch query on the PI Web API.
-   *
-   * @param {any} batch - Batch JSON query data.
-   * @returns - Batch response.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private restBatch(batch: any) {
-    return this.backendSrv.datasourceRequest({
-      url: this.url + '/batch',
-      data: batch,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'message/http',
-      },
-    });
-  }
-
-  /**
-   * Execute a POST on the PI Web API.
-   *
-   * @param {string} path - The full url of the POST.
-   * @returns - POST response data.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  private restPost(path: string) {
-    return this.backendSrv.datasourceRequest({
-      url: this.url,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Requested-With': 'message/http',
-        'X-PIWEBAPI-HTTP-METHOD': 'GET',
-        'X-PIWEBAPI-RESOURCE-ADDRESS': path,
-      },
-    });
   }
 
   // Get a list of all data (PI) servers

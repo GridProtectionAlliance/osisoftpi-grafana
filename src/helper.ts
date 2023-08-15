@@ -1,6 +1,7 @@
 import { each, map } from 'lodash';
 
 import {
+  AnnotationQuery,
   DataFrame,
   FieldConfig,
   TimeSeries,
@@ -11,8 +12,11 @@ import {
   ArrayVector,
   TableData,
   MetricFindValue,
+  Field,
+  toDataFrame,
 } from '@grafana/data';
-import { PiwebapiElementPath, PiwebapiRsp } from 'types';
+
+import { PiwebapiElementPath, PiwebapiRsp, PIWebAPIQuery } from 'types';
 
 export function parseRawQuery(tr: string): any {
   const splitAttributes = tr.split(';');
@@ -126,23 +130,76 @@ export function isAllSelected(current: any): boolean {
   return current.text === 'All';
 }
 
+export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,data: DataFrame[]): DataFrame[] {
+  let processedFrames: DataFrame[] = [];
+  
+  data.forEach((d: DataFrame) => {
+    d.fields.forEach((f: Field) => {
+
+      // check if the label has been set, if it hasn't been set then the eventframe annotation is not valid. 
+      if (!f.labels) { 
+        return 
+      }
+
+      if (!('eventframe' in f.labels)) {
+        return;
+      }
+
+      let attribute = 'attribute' in f.labels
+
+      // Check whether f.values is an array or not to allow for each.
+      // Check whether f.values is an array or not to allow for each.
+      if (Array.isArray(f.values)) {
+        console.log(f.values)
+        f.values.forEach((value: any) => {
+
+          if (attribute) {
+            let annotation = value['1'].Content
+            let valueData:  any[] = []
+            for (let i = 2; i in value; i++) {
+              valueData.push(value[i].Content.Items)
+            }
+
+            const processedFrame = convertToTableData(annotation.Items!, valueData).map((r) => {
+              return toDataFrame(r)});
+            processedFrames = processedFrames.concat(processedFrame);
+          } else {
+            let annotation = value['1'].Content
+            const processedFrame = convertToTableData(annotation.Items!).map((r) => {
+              return toDataFrame(r)});
+            processedFrames = processedFrames.concat(processedFrame);
+          }
+        });
+      } 
+    });
+  });
+  return processedFrames;
+}
+
 export function convertToTableData(items: any[], valueData?: any[]): TableData[] {
-  // convert to TableData
+  console.log("items",items)
   const response: TableData[] = items.map((item: any, index: number) => {
+    console.log("item",item)
     const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
     const rows = [item.StartTime, item.EndTime];
     if (valueData) {
-      valueData[index].Content.Items.forEach((it: any) => {
-        columns.push({ text: it.Name });
-        rows.push(String(it.Value.Value ? it.Value.Value.Name || it.Value.Value.Value || it.Value.Value : ''));
-      });
+      for (let attributeIndex = 0; attributeIndex < valueData.length; attributeIndex++) {
+          let attributeData = valueData[attributeIndex]
+          let eventframeAributeData = attributeData[index].Content.Items
+          eventframeAributeData.forEach((attribute: any) => {
+            columns.push({ text: attribute.Name });
+            rows.push(String(attribute.Value.Value ? attribute.Value.Value.Name || attribute.Value.Value.Value || attribute.Value.Value : ''));
+          });
+      }
     }
+
     return {
       name: item.Name,
       columns,
       rows: [rows],
     };
   });
+  console.log("response",response)
   return response;
 }
 
