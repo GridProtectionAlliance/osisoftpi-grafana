@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
@@ -83,10 +84,10 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 				UID:                 datasourceUID,
 				IntervalNanoSeconds: PiQuery.Interval,
 				IsPIPoint:           PiQuery.Pi.IsPiPoint,
-				//Streamable:          PiQuery.isStreamable(), //TODO: re-enable this
-				FullTargetPath: fullTargetPath,
-				UseUnit:        UseUnits,
-				Regex:          PiQuery.Pi.Regex,
+				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
+				FullTargetPath:      fullTargetPath,
+				UseUnit:             UseUnits,
+				Regex:               PiQuery.Pi.Regex,
 			}
 
 			// Get the WebID for the target
@@ -178,7 +179,7 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 
 			for _, SummaryType := range *q.Response.getSummaryTypes() {
 				tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), SummaryType)
-				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(SummaryType), d, q.WebID, false, q.UseUnit)
+				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(SummaryType), &d, q.WebID, q.UseUnit)
 
 				// if there is an error on a single frame we set metadata and continue to the next frame
 				if err != nil {
@@ -192,20 +193,21 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 				// TODO: enable streaming
 				// If the query is streamable, then we need to set the channel URI
 				// and the executed query string.
-				// if q.Streamable {
-				// 	// Create a new channel for this frame request.
-				// 	// Creating a new channel for each frame request is not ideal,
-				// 	// but it is the only way to ensure that the frame data is refreshed
-				// 	// on a time interval update.
-				// 	channeluuid := uuid.New()
-				// 	channelURI := "ds/" + q.UID + "/" + channeluuid.String()
-				// 	channel := StreamChannelConstruct{
-				// 		WebID:               q.WebID,
-				// 		IntervalNanoSeconds: q.IntervalNanoSeconds,
-				// 	}
-				// 	d.channelConstruct[channeluuid.String()] = channel
-				// 	frame.Meta.Channel = channelURI
-				// }
+				if q.Streamable {
+					// Create a new channel for this frame request.
+					// Creating a new channel for each frame request is not ideal,
+					// but it is the only way to ensure that the frame data is refreshed
+					// on a time interval update.
+					channeluuid := uuid.New()
+					channelURI := "ds/" + q.UID + "/" + channeluuid.String()
+					channel := StreamChannelConstruct{
+						WebID:               q.WebID,
+						IntervalNanoSeconds: q.IntervalNanoSeconds,
+						tagLabel:            tagLabel,
+					}
+					d.channelConstruct[channeluuid.String()] = channel
+					frame.Meta.Channel = channelURI
+				}
 
 				subResponse.Frames = append(subResponse.Frames, frame)
 			}
@@ -260,6 +262,7 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 	}
 
 	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
+	// FIXME: This is working, but graph panels seem to not render the trend.
 	if q.isRegexQuery() {
 		backend.Logger.Info("Replacing string", "search", *q.Regex.Search, "replace", *q.Regex.Replace)
 		regex := regexp.MustCompile(*q.Regex.Search)
@@ -304,7 +307,6 @@ func (q *PiProcessedQuery) isRegexQuery() bool {
 // The short name can be one of the following: ms, s, m, h, d, mo, w, wd, yd
 // A default of 30s is returned if the summary duration is not provided by the frontend
 // or if the format is invalid
-// TODO: FULLY VALIDATE THE SUMMARY DURATION FUNCTION
 func (q *PIWebAPIQuery) getSummaryDuration() string {
 	// Return the default value if the summary is not provided by the frontend
 	if q.Summary == nil || *q.Summary.Interval == "" {

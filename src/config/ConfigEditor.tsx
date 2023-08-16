@@ -82,6 +82,25 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onUseExperimentalChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      useExperimental : event.target.checked,
+      useStreaming : event.target.checked ? options.jsonData.useStreaming : false,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
+  onUseStreamingChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      useStreaming: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -113,6 +132,18 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
               <InlineSwitch value={options.jsonData.useUnit} onChange={this.onUseUnitChange} />
             </InlineField>
           </div>
+          <div className="gf-form-inline">
+            <InlineField label="Enable Experimental Features" labelWidth={24}>
+              <InlineSwitch value={options.jsonData.useExperimental} onChange={this.onUseExperimentalChange} />
+            </InlineField>
+          </div>
+          {options.jsonData.useExperimental && (
+            <div className="gf-form-inline">
+              <InlineField label="Enable Steaming Support" labelWidth={24}>
+                <InlineSwitch value={options.jsonData.useStreaming} onChange={this.onUseStreamingChange} />
+              </InlineField>
+            </div>
+          )}
         </div>
 
         <h3 className="page-heading">PI/AF Connection Details</h3>

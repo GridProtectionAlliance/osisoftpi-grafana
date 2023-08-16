@@ -31,8 +31,7 @@ var (
 	_ backend.CheckHealthHandler    = (*Datasource)(nil)
 	_ instancemgmt.InstanceDisposer = (*Datasource)(nil)
 	_ backend.CallResourceHandler   = (*Datasource)(nil)
-
-// _ backend.StreamHandler         = (*Datasource)(nil)
+	_ backend.StreamHandler         = (*Datasource)(nil)
 )
 
 // NewDatasource creates a new PIWebAPI datasource instance.
@@ -67,6 +66,7 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		scheduler:                 scheduler,
 		websocketConnectionsMutex: &sync.Mutex{},
 		sendersByWebIDMutex:       &sync.Mutex{},
+		channelConstruct:          make(map[string]StreamChannelConstruct),
 		websocketConnections:      make(map[string]*websocket.Conn),
 		sendersByWebID:            make(map[string]map[*backend.StreamSender]bool),
 		streamChannels:            make(map[string]chan []byte),

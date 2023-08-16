@@ -35,6 +35,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   piPointConfig: boolean;
   newFormatConfig: boolean;
   useUnitConfig: boolean;
+  useExperimental: boolean;
+  useStreaming: boolean;
 
   url: string;
   name: string;
@@ -64,6 +66,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
     this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
+    this.useExperimental = instanceSettings.jsonData.useExperimental || false;
+    this.useStreaming = instanceSettings.jsonData.useStreaming || false;
 
     this.annotations = {
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
