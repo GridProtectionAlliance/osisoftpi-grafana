@@ -252,6 +252,29 @@ var PIWebAPIConfigEditor = /*#__PURE__*/function (_PureComponent) {
         jsonData: jsonData
       }));
     });
+    _defineProperty(_assertThisInitialized(_this), "onUseExperimentalChange", function (event) {
+      var _this$props7 = _this.props,
+        onOptionsChange = _this$props7.onOptionsChange,
+        options = _this$props7.options;
+      var jsonData = _extends({}, options.jsonData, {
+        useExperimental: event.target.checked,
+        useStreaming: event.target.checked ? options.jsonData.useStreaming : false
+      });
+      onOptionsChange(_extends({}, options, {
+        jsonData: jsonData
+      }));
+    });
+    _defineProperty(_assertThisInitialized(_this), "onUseStreamingChange", function (event) {
+      var _this$props8 = _this.props,
+        onOptionsChange = _this$props8.onOptionsChange,
+        options = _this$props8.options;
+      var jsonData = _extends({}, options.jsonData, {
+        useStreaming: event.target.checked
+      });
+      onOptionsChange(_extends({}, options, {
+        jsonData: jsonData
+      }));
+    });
     return _this;
   }
   _createClass(PIWebAPIConfigEditor, [{
@@ -292,6 +315,22 @@ var PIWebAPIConfigEditor = /*#__PURE__*/function (_PureComponent) {
       }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_1__.InlineSwitch, {
         value: options.jsonData.useUnit,
         onChange: this.onUseUnitChange
+      }))), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+        className: "gf-form-inline"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_1__.InlineField, {
+        label: "Enable Experimental Features",
+        labelWidth: 24
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_1__.InlineSwitch, {
+        value: options.jsonData.useExperimental,
+        onChange: this.onUseExperimentalChange
+      }))), options.jsonData.useExperimental && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
+        className: "gf-form-inline"
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_1__.InlineField, {
+        label: "Enable Steaming Support",
+        labelWidth: 24
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_1__.InlineSwitch, {
+        value: options.jsonData.useStreaming,
+        onChange: this.onUseStreamingChange
       })))), _h2 || (_h2 = /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("h3", {
         className: "page-heading"
       }, "PI/AF Connection Details")), /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_0___default().createElement("div", {
@@ -383,6 +422,8 @@ var PiWebAPIDatasource = /*#__PURE__*/function (_DataSourceWithBacken) {
     _defineProperty(_assertThisInitialized(_this), "piPointConfig", void 0);
     _defineProperty(_assertThisInitialized(_this), "newFormatConfig", void 0);
     _defineProperty(_assertThisInitialized(_this), "useUnitConfig", void 0);
+    _defineProperty(_assertThisInitialized(_this), "useExperimental", void 0);
+    _defineProperty(_assertThisInitialized(_this), "useStreaming", void 0);
     _defineProperty(_assertThisInitialized(_this), "url", void 0);
     _defineProperty(_assertThisInitialized(_this), "name", void 0);
     _defineProperty(_assertThisInitialized(_this), "isProxy", false);
@@ -410,6 +451,8 @@ var PiWebAPIDatasource = /*#__PURE__*/function (_DataSourceWithBacken) {
     _this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     _this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
     _this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
+    _this.useExperimental = instanceSettings.jsonData.useExperimental || false;
+    _this.useStreaming = instanceSettings.jsonData.useStreaming || false;
     _this.annotations = {
       QueryEditor: query_AnnotationsQueryEditor__WEBPACK_IMPORTED_MODULE_4__.PiWebAPIAnnotationsQueryEditor,
       prepareQuery: function prepareQuery(anno) {
@@ -1078,8 +1121,6 @@ function processAnnotationQuery(annon, data) {
   });
   return processedFrames;
 }
-
-// FIXME: Update this so it supports multiple results
 function convertToTableData(items, valueData) {
   console.log("items", items);
   var response = items.map(function (item, index) {
@@ -2425,6 +2466,7 @@ var PIWebAPIQueryEditor = /*#__PURE__*/function (_PureComponent) {
         query = metricsQuery.query,
         rawQuery = metricsQuery.rawQuery,
         digitalStates = metricsQuery.digitalStates,
+        enableStreaming = metricsQuery.enableStreaming,
         recordedValues = metricsQuery.recordedValues,
         expression = metricsQuery.expression,
         isPiPoint = metricsQuery.isPiPoint,
@@ -2562,6 +2604,19 @@ var PIWebAPIQueryEditor = /*#__PURE__*/function (_PureComponent) {
           return _this6.onChange(_extends({}, metricsQuery, {
             useUnit: _extends({}, useUnit, {
               enable: !useUnit.enable
+            })
+          }));
+        }
+      })), this.props.datasource.useStreaming && /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_2__.InlineField, {
+        label: "Enable Streaming",
+        labelWidth: LABEL_WIDTH,
+        tooltip: 'Enable streaming data if it is supported for the point type.'
+      }, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(_grafana_ui__WEBPACK_IMPORTED_MODULE_2__.InlineSwitch, {
+        value: enableStreaming.enable,
+        onChange: function onChange() {
+          return _this6.onChange(_extends({}, metricsQuery, {
+            enableStreaming: _extends({}, enableStreaming, {
+              enable: !enableStreaming.enable
             })
           }));
         }
@@ -2808,6 +2863,9 @@ var defaultQuery = {
     enable: false
   },
   digitalStates: {
+    enable: false
+  },
+  enableStreaming: {
     enable: false
   },
   useUnit: {

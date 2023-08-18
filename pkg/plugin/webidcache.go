@@ -190,7 +190,7 @@ func getValueType(Type string) reflect.Type {
 func cleanWebIDCache(cache WebIDCache) {
 	now := time.Now()
 	for key, entry := range cache.webIDCache {
-		if now.Before(entry.ExpTime) {
+		if now.After(entry.ExpTime) {
 			log.DefaultLogger.Info("Removing aged WebID path: ", entry.Path)
 			delete(cache.webIDCache, key)
 			delete(cache.webIDPaths, entry.Path)
