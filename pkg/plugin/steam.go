@@ -143,7 +143,7 @@ func (d *Datasource) createWebsocketConnection(WebID string) (*websocket.Conn, e
 
 	// Construct the URI for the websocket connection
 	uri := strings.Replace(d.settings.URL, "https://", "wss://", 1)
-	uri = uri + "/streams/" + WebID + "/channel?includeInitialValues=false"
+	uri = uri + "/streams/" + WebID + "/channel?includeInitialValues=true"
 
 	// Set the headers for the websocket connection
 	header := http.Header{}

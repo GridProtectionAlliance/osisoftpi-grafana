@@ -15,7 +15,7 @@ type Datasource struct {
 	queryMux                  *datasource.QueryTypeMux
 	StreamHandler             backend.StreamHandler
 	httpClient                *http.Client
-	webIDCache                map[string]WebIDCacheEntry
+	webIDCache                WebIDCache
 	channelConstruct          map[string]StreamChannelConstruct
 	scheduler                 *gocron.Scheduler
 	websocketConnectionsMutex *sync.Mutex

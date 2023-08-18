@@ -52,7 +52,7 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
 
-	webIDCache := make(map[string]WebIDCacheEntry)
+	webIDCache := newWebIDCache()
 
 	// Create a new scheduler that will be used to clean the webIDCache every 5 minutes.
 	scheduler := gocron.NewScheduler(time.UTC)
