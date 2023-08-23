@@ -312,7 +312,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   private restGet(path: string): Promise<PiwebapiInternalRsp> {
     return this.backendSrv
       .datasourceRequest({
-        url: this.url + path,
+        url: `/api/datasources/${this.id}/resources/${path}`,
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       })
