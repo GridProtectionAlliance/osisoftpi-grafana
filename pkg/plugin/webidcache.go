@@ -11,6 +11,22 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
+// WebIDCache is a cache for WebIDs. It is used to reduce the number of requests to the PI Web API.
+// It contains two maps. The first map has the path as a key, and the WebID as the value.
+// The second map has the WebID as the key, and the cache entry as the value.
+type WebIDCache struct {
+	webIDPaths map[string]string
+	webIDCache map[string]WebIDCacheEntry
+}
+
+// newWebIDCache creates a new WebIDCache with initialized maps.
+func newWebIDCache() WebIDCache {
+	return WebIDCache{
+		webIDPaths: make(map[string]string),
+		webIDCache: make(map[string]WebIDCacheEntry),
+	}
+}
+
 type WebIDCacheEntry struct {
 	Path         string
 	WebID        string
@@ -22,6 +38,7 @@ type WebIDCacheEntry struct {
 	Description  string
 }
 
+// WebIDResponsePiPoint is the response from the PI Web API when requesting a PI Point.
 type WebIDResponsePiPoint struct {
 	WebID           string `json:"WebId"`
 	Name            string `json:"Name"`
@@ -48,6 +65,7 @@ func (w *WebIDResponsePiPoint) getUnits() string {
 	return w.EngieeringUnits
 }
 
+// WebIDResponseAttribute is the response from the PI Web API when requesting an attribute.
 type WebIDResponseAttribute struct {
 	WebID            string `json:"WebId"`
 	Name             string `json:"Name"`
@@ -74,6 +92,7 @@ func (w *WebIDResponseAttribute) getUnits() string {
 	return w.DefaultUnitsName
 }
 
+// WebIDResponse is an interface for the WebID responses.
 type WebIDResponse interface {
 	getType() string
 	getWebID() string
@@ -82,20 +101,22 @@ type WebIDResponse interface {
 }
 
 func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
-	WebIDCache, ok := d.webIDCache[path]
+	entry, ok := d.webIDCache.webIDCache[path]
 
-	if ok && time.Now().Before(WebIDCache.ExpTime) {
+	if ok && time.Now().Before(entry.ExpTime) {
 		log.DefaultLogger.Debug("WebID cache hit", "path", path)
-		return WebIDCache, nil
+		d.webIDCache.webIDPaths[entry.WebID] = path
+		return entry, nil
 	}
-	WebIDCache = WebIDCacheEntry{}
+	entry = WebIDCacheEntry{}
 	c, err := d.requestWebID(ctx, path, isPiPoint)
 	if err != nil {
 		log.DefaultLogger.Error("WebID cache error", "path", path, "error", err)
-		return WebIDCache, err
+		return entry, err
 	}
 	log.DefaultLogger.Debug("WebID cache added", "path", path)
-	d.webIDCache[path] = c
+	d.webIDCache.webIDCache[path] = c
+	d.webIDCache.webIDPaths[c.WebID] = path
 	backend.Logger.Info("WebID cache", "entry", c)
 	return c, nil
 }
@@ -124,12 +145,10 @@ func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bo
 	}
 	json.Unmarshal(r, &response)
 
-	dataType := getValueType(response.getType())
-
 	return WebIDCacheEntry{
 		Path:         path,
 		WebID:        response.getWebID(),
-		Type:         dataType,
+		Type:         getValueType(response.getType()),
 		DigitalState: response.getDigitalSetName() != "",
 		ExpTime:      time.Now().Add(5 * time.Minute),
 		PointType:    response.getType(),
@@ -168,20 +187,24 @@ func getValueType(Type string) reflect.Type {
 	return dataType
 }
 
-func cleanWebIDCache(webIDCache map[string]WebIDCacheEntry) {
+func cleanWebIDCache(cache WebIDCache) {
 	now := time.Now()
-	log.DefaultLogger.Debug("Scanning WebID cache...")
-	for key, entry := range webIDCache {
-		if now.Sub(entry.ExpTime) > 0*time.Minute {
-			log.DefaultLogger.Debug("Removing aged WebID: ", entry.Path)
-			delete(webIDCache, key)
+	for key, entry := range cache.webIDCache {
+		if now.After(entry.ExpTime) {
+			log.DefaultLogger.Info("Removing aged WebID path: ", entry.Path)
+			delete(cache.webIDCache, key)
+			delete(cache.webIDPaths, entry.Path)
 		}
 	}
 }
 
 func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
-	for _, entry := range d.webIDCache {
-		if entry.WebID == webID {
+	path, exists := d.webIDCache.webIDPaths[webID]
+	if exists {
+		entry, exists := d.webIDCache.webIDCache[path]
+		if exists {
+			entry.ExpTime = time.Now().Add(5 * time.Minute)
+			d.webIDCache.webIDCache[path] = entry
 			return entry.Type
 		}
 	}
@@ -190,8 +213,12 @@ func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
 }
 
 func (d *Datasource) getDigitalStateForWebID(webID string) bool {
-	for _, entry := range d.webIDCache {
-		if entry.WebID == webID {
+	path, exists := d.webIDCache.webIDPaths[webID]
+	if exists {
+		entry, exists := d.webIDCache.webIDCache[path]
+		if exists {
+			entry.ExpTime = time.Now().Add(5 * time.Minute)
+			d.webIDCache.webIDCache[path] = entry
 			return entry.DigitalState
 		}
 	}
@@ -200,8 +227,12 @@ func (d *Datasource) getDigitalStateForWebID(webID string) bool {
 }
 
 func (d *Datasource) getPointTypeForWebID(webID string) string {
-	for _, entry := range d.webIDCache {
-		if entry.WebID == webID {
+	path, exists := d.webIDCache.webIDPaths[webID]
+	if exists {
+		entry, exists := d.webIDCache.webIDCache[path]
+		if exists {
+			entry.ExpTime = time.Now().Add(5 * time.Minute)
+			d.webIDCache.webIDCache[path] = entry
 			return entry.PointType
 		}
 	}
@@ -210,8 +241,12 @@ func (d *Datasource) getPointTypeForWebID(webID string) string {
 }
 
 func (d *Datasource) getUnitsForWebID(webID string) string {
-	for _, entry := range d.webIDCache {
-		if entry.WebID == webID {
+	path, exists := d.webIDCache.webIDPaths[webID]
+	if exists {
+		entry, exists := d.webIDCache.webIDCache[path]
+		if exists {
+			entry.ExpTime = time.Now().Add(5 * time.Minute)
+			d.webIDCache.webIDCache[path] = entry
 			return entry.Units
 		}
 	}
@@ -220,8 +255,12 @@ func (d *Datasource) getUnitsForWebID(webID string) string {
 }
 
 func (d *Datasource) getDescriptionForWebID(webID string) string {
-	for _, entry := range d.webIDCache {
-		if entry.WebID == webID {
+	path, exists := d.webIDCache.webIDPaths[webID]
+	if exists {
+		entry, exists := d.webIDCache.webIDCache[path]
+		if exists {
+			entry.ExpTime = time.Now().Add(5 * time.Minute)
+			d.webIDCache.webIDCache[path] = entry
 			return entry.Description
 		}
 	}

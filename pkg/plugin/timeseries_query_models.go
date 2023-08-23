@@ -79,6 +79,32 @@ func (q *Query) isStreamable() bool {
 	return !q.Pi.isExpression() && q.isstreamingEnabled()
 }
 
+func (q *PiProcessedQuery) isSummary() bool {
+	if q.Summary == nil {
+		return false
+	}
+	if q.Summary.Types == nil {
+		return false
+	}
+	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
+}
+
+func (q *PiProcessedQuery) getSummaryNoDataReplace() (*string, error) {
+	var response = ""
+	if q.Summary == nil {
+		return nil, fmt.Errorf("no summary found in query")
+	}
+	if q.Summary.Types == nil {
+		return nil, fmt.Errorf("no summary type found in query")
+	}
+	if q.Summary.Nodata == nil {
+		response = "Drop"
+		return &response, nil
+	}
+	response = *q.Summary.Nodata
+	return &response, nil
+}
+
 type PIWebAPIQuery struct {
 	Attributes []struct {
 		Label string `json:"label"`
@@ -167,7 +193,8 @@ type PiProcessedQuery struct {
 	Response            PiBatchData     `json:"ResponseData"`
 	UseUnit             bool            `json:"UseUnit"`
 	Error               error
-	Regex               *Regex `json:"Regex"`
+	Regex               *Regex        `json:"Regex"`
+	Summary             *QuerySummary `json:"Summary"`
 }
 
 type Links struct {
