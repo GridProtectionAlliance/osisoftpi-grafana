@@ -72,6 +72,7 @@ func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests inter
 
 // convertSliceToPointers converts a slice of values to a slice of
 // pointers to those values. This is used to create point values that are nullable.
+// TODO: handle bad value processing here
 func convertSliceToPointers(slice interface{}, badValues []int) interface{} {
 	s := reflect.ValueOf(slice)
 	t := reflect.TypeOf(slice).Elem()
@@ -220,7 +221,7 @@ func convertSliceToPointers(slice interface{}, badValues []int) interface{} {
 	}
 }
 
-func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
+func parseTimestampValue(val reflect.Value) (reflect.Value, error) {
 	if val.Kind() != reflect.String {
 		return reflect.Value{}, fmt.Errorf("timestamp value must be a string")
 	}
@@ -239,10 +240,15 @@ func handleTimestampValue(val reflect.Value) (reflect.Value, error) {
 
 // TODO: Code cleanup: handle this directly using slices of pointers.
 // TODO: Missing functionality: Add support for replacing bad data.
-func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Datasource, webID string, summaryQuery bool, includeMetaData bool) (*data.Frame, error) {
-	frame := data.NewFrame(frameName)
+func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Datasource, SummaryType string) (*data.Frame, error) {
+	webID := processedQuery.WebID
+	includeMetaData := processedQuery.UseUnit
+	items := *processedQuery.Response.getItems(SummaryType)
 	SliceType := d.getTypeForWebID(webID)
 	digitalState := d.getDigitalStateForWebID(webID)
+
+	frameName := getDataLabel(d.isUsingNewFormat(), &processedQuery, d.getPointTypeForWebID(webID), SummaryType)
+	frame := data.NewFrame(frameName)
 
 	var timestamps []time.Time
 	badValues := make([]int, 0)
@@ -258,7 +264,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 		// we need to convert it to a time.Time
 		if SliceType == reflect.TypeOf([]time.Time{}) {
 			var err error
-			val, err = handleTimestampValue(val)
+			val, err = parseTimestampValue(val)
 			if err != nil {
 				continue
 			}
@@ -321,7 +327,121 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d Dat
 		values = reflect.Append(reflect.ValueOf(values), val).Interface()
 	}
 
-	backend.Logger.Info("Converting slice to pointers")
+	// Convert the slice of values to a slice of pointers to the values
+	// This is so that we can nullify the values that are "bad"
+	// "Bad" values are values such as system type values that cannot be represented
+	// in the slice type, or values that are not "good"
+	valuepointers := convertSliceToPointers(values, badValues)
+
+	timeField := data.NewField("time", nil, timestamps)
+	valueField := data.NewField(frameName, nil, valuepointers)
+
+	fieldConfig := &data.FieldConfig{}
+
+	if includeMetaData {
+		fieldConfig.Unit = d.getUnitsForWebID(webID)
+		fieldConfig.Description = d.getDescriptionForWebID(webID)
+	}
+
+	valueField.SetConfig(fieldConfig)
+
+	frame.Fields = append(frame.Fields,
+		timeField,
+		valueField,
+	)
+
+	if digitalState {
+		frame.Fields = append(frame.Fields,
+			data.NewField(frameName+".Value", nil, digitalStateValues),
+		)
+	}
+	// create a metadata struct for the frame so we can set it later.
+	frame.Meta = &data.FrameMeta{}
+	return frame, nil
+}
+
+// TODO: FIXME: Remove this function once replaced
+func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d *Datasource, webID string, includeMetaData bool) (*data.Frame, error) {
+	frame := data.NewFrame(frameName)
+	SliceType := d.getTypeForWebID(webID)
+	digitalState := d.getDigitalStateForWebID(webID)
+
+	var timestamps []time.Time
+	badValues := make([]int, 0)
+	var values any
+	values = reflect.MakeSlice(reflect.SliceOf(SliceType.Elem()), 0, 0).Interface()
+	digitalStateValues := make([]int32, 0)
+
+	for i, item := range items {
+		var val reflect.Value
+		val = reflect.ValueOf(item.Value)
+
+		//handle value being a timestamp, the PIWab API returns a timestamp as a string
+		// we need to convert it to a time.Time
+		if SliceType == reflect.TypeOf([]time.Time{}) {
+			var err error
+			val, err = parseTimestampValue(val)
+			if err != nil {
+				continue
+			}
+		}
+
+		// if the value is valid, get the underlying value
+		// we need to complete both checks to prevent a panic on a null value
+		if val.IsValid() && val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+
+		if !val.IsValid() {
+			timestamps = append(timestamps, item.Timestamp)
+			badValues = append(badValues, i)
+			zeroVal := reflect.Zero(SliceType.Elem())
+			valuesValue := reflect.ValueOf(values)
+			values = reflect.Append(valuesValue, zeroVal).Interface()
+			continue
+		}
+
+		// if the value isn't good, or is not the same type as the slice,
+		// add it to the list of bad values and nullify later
+		//TODO we should make this pattern match the query options
+		if val.Type().Kind() != SliceType.Elem().Kind() || digitalState || !item.isGood() {
+
+			timestamps = append(timestamps, item.Timestamp)
+			if digitalState {
+				var pds PointDigitalState
+				if b, err := json.Marshal(item.Value); err == nil {
+					if err := json.Unmarshal(b, &pds); err != nil {
+						backend.Logger.Error("Error unmarshalling digital state", err)
+						badValues = append(badValues, i)
+						zeroVal := reflect.Zero(SliceType.Elem())
+						valuesValue := reflect.ValueOf(values)
+						values = reflect.Append(valuesValue, zeroVal).Interface()
+						continue
+					}
+					pdsValue := reflect.ValueOf(pds.Name)
+					values = reflect.Append(reflect.ValueOf(values), pdsValue).Interface()
+					digitalStateValues = append(digitalStateValues, int32(pds.Value))
+					continue
+				} else {
+					backend.Logger.Error("Error unmarshalling digital state", err)
+					badValues = append(badValues, i)
+					zeroVal := reflect.Zero(SliceType.Elem())
+					valuesValue := reflect.ValueOf(values)
+					values = reflect.Append(valuesValue, zeroVal).Interface()
+					continue
+				}
+			}
+
+			badValues = append(badValues, i)
+			zeroVal := reflect.Zero(SliceType.Elem())
+			valuesValue := reflect.ValueOf(values)
+			values = reflect.Append(valuesValue, zeroVal).Interface()
+			continue
+		}
+
+		timestamps = append(timestamps, item.Timestamp)
+		values = reflect.Append(reflect.ValueOf(values), val).Interface()
+	}
 
 	// Convert the slice of values to a slice of pointers to the values
 	// This is so that we can nullify the values that are "bad"

@@ -3,7 +3,7 @@ import {
   map, 
 } from 'lodash';
 
-import { Observable, of } from 'rxjs';
+import { Observable, of, firstValueFrom } from 'rxjs';
 
 import {
   DataSourceInstanceSettings,
@@ -35,15 +35,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   piPointConfig: boolean;
   newFormatConfig: boolean;
   useUnitConfig: boolean;
-
-  url: string;
-  name: string;
-  isProxy = false;
-
-  piwebapiurl?: string;
-  webidCache: Map<String, any> = new Map();
-
-  error: any;
+  useExperimental: boolean;
+  useStreaming: boolean;
 
   constructor(
     instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>,
@@ -52,18 +45,14 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   ) {
     super(instanceSettings);
 
-    this.url = instanceSettings.url!;
-    this.name = instanceSettings.name;
-
-    this.piwebapiurl = instanceSettings.jsonData.url?.toString();
-    this.isProxy = /^http(s)?:\/\//.test(this.url) || instanceSettings.jsonData.access === 'proxy';
-
     this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: undefined };
     this.afserver = { name: (instanceSettings.jsonData || {}).afserver, webid: undefined };
     this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined };
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
     this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
+    this.useExperimental = instanceSettings.jsonData.useExperimental || false;
+    this.useStreaming = instanceSettings.jsonData.useStreaming || false;
 
     this.annotations = {
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
@@ -197,33 +186,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     return Promise.reject('Bad type');
   }
 
-  /**
-   * Gets the url of summary data from the query configuration.
-   *
-   * @param {any} summary - Query summary configuration.
-   * @returns - URL append string.
-   *
-   * @memberOf PiWebApiDatasource
-   */
-  getSummaryUrl(summary: any) {
-    if (summary.interval.trim() === '') {
-      return (
-        '&summaryType=' +
-        summary.types.map((s: any) => s.value?.value).join('&summaryType=') +
-        '&calculationBasis=' +
-        summary.basis
-      );
-    }
-    return (
-      '&summaryType=' +
-      summary.types.map((s: any) => s.value?.value).join('&summaryType=') +
-      '&calculationBasis=' +
-      summary.basis +
-      '&summaryDuration=' +
-      summary.interval.trim()
-    );
-  }
-
   /** PRIVATE SECTION */
   
     /**
@@ -306,16 +268,17 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @memberOf PiWebApiDatasource
    */
   private restGet(path: string): Promise<PiwebapiInternalRsp> {
-    return this.backendSrv
-      .datasourceRequest({
-        url: this.url + path,
+    const observable = this.backendSrv.fetch({
+        url: `/api/datasources/${this.id}/resources/${path}`,
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-      })
+    });
+
+    return firstValueFrom(observable)
       .then((response: any) => {
         return response as PiwebapiInternalRsp;
       });
-  }
+}
 
   // Get a list of all data (PI) servers
   private getDataServers(): Promise<PiwebapiRsp[]> {

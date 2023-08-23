@@ -929,6 +929,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       query,
       rawQuery,
       digitalStates,
+      enableStreaming,
       recordedValues,
       expression,
       isPiPoint,
@@ -1087,6 +1088,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                     ...metricsQuery,
                     useUnit: { ...useUnit, enable: !useUnit.enable },
                   })
+                }
+              />
+            </InlineField>
+          )}
+          {this.props.datasource.useStreaming && (
+            <InlineField 
+              label="Enable Streaming" 
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Enable streaming data if it is supported for the point type.'}
+            >
+              <InlineSwitch
+                value={enableStreaming.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
                 }
               />
             </InlineField>
