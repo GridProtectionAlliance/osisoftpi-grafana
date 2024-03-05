@@ -124,10 +124,10 @@ func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) 
 func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
 	uri := ""
 	if isPiPoint {
-		uri = "/points?selectedFields=WebId%3BName%3BPath%3BPointType%3BDigitalSetName%3BDescriptor%3BEngineeringUnits&path=\\\\"
-		uri += strings.Replace(strings.Replace(path, "|", "\\", -1), ";", "\\", -1)
+		uri = `/points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=\\`
+		uri += strings.Replace(strings.Replace(path, "|", `\`, -1), ";", `\`, -1)
 	} else {
-		uri = "/attributes?selectedFields=WebId%3BName%3BPath%3BType%3BDigitalSetName%3BDescription%3BDefaultUnitsName&path=\\\\"
+		uri = `/attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=\\`
 		uri += path
 	}
 	log.DefaultLogger.Info("WebID request", "uri", uri)

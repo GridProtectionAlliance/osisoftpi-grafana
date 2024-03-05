@@ -59,6 +59,12 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 			UseUnits = true
 		}
 	}
+	var DigitalStates = false
+	if PiQuery.Pi.DigitalStates != nil && PiQuery.Pi.DigitalStates.Enable != nil {
+		if *PiQuery.Pi.DigitalStates.Enable {
+			DigitalStates = true
+		}
+	}
 
 	// Upon creating a dashboard the initial query will be empty, so we need to check for that to avoid errors
 	// if the query is empty, we'll return a PiProcessedQuery with an error set.
@@ -74,8 +80,10 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 
 	// At this point we expect that the query is valid, so we can start processing it.
 	// the queries are may contain multiple targets, so we need to loop through them
+	backend.Logger.Info("Processing Query", "Target", PiQuery.Pi.Target)
 
 	for _, targetBasePath := range PiQuery.Pi.getTargetBasePaths() {
+		backend.Logger.Info("Processing Query", "targetBasePath", targetBasePath)
 		for _, target := range PiQuery.Pi.getTargets() {
 			fullTargetPath := targetBasePath + PiQuery.Pi.getTargetPathSeparator() + target
 			//create a processed query for the target
@@ -87,6 +95,7 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
 				FullTargetPath:      fullTargetPath,
 				UseUnit:             UseUnits,
+				DigitalStates:       DigitalStates,
 				Regex:               PiQuery.Pi.Regex,
 			}
 
@@ -108,6 +117,8 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 				Resource: d.settings.URL + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
 			}
 
+			backend.Logger.Info("Processing Query", "batchSubRequest", batchSubRequest)
+
 			piQuery.BatchRequest = batchSubRequest
 
 			ProcessedQuery = append(ProcessedQuery, piQuery)
@@ -119,7 +130,7 @@ func (d Datasource) processQuery(ctx context.Context, query backend.DataQuery, d
 func (d Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[string][]PiProcessedQuery) map[string][]PiProcessedQuery {
 	for RefID, processed := range PIWebAPIQueries {
 		batchRequest := make(map[string]BatchSubRequest)
-		backend.Logger.Info("Processing batch request", "RefID", RefID)
+		backend.Logger.Info("Processing batch request", "RefID", RefID, "batchRequest", batchRequest)
 
 		// create a map of the batch requests. This allows us to map the response back to the original query
 		for i, p := range processed {
@@ -165,7 +176,6 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 	response := backend.NewQueryDataResponse()
 
 	for RefID, query := range processedQuery {
-
 		var subResponse backend.DataResponse
 		for i, q := range query {
 			backend.Logger.Info("Processing query", "RefID", RefID, "QueryIndex", i)
@@ -178,8 +188,8 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 			}
 
 			for _, SummaryType := range *q.Response.getSummaryTypes() {
-				tagLabel := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), SummaryType)
-				frame, err := convertItemsToDataFrame(tagLabel, *q.Response.getItems(SummaryType), &d, q.WebID, q.UseUnit)
+				frameName := getDataLabel(d.isUsingNewFormat(), &q, d.getPointTypeForWebID(q.WebID), SummaryType)
+				frame, err := convertItemsToDataFrame(frameName, *q.Response.getItems(SummaryType), &d, q.WebID, q.UseUnit, q.DigitalStates)
 
 				// if there is an error on a single frame we set metadata and continue to the next frame
 				if err != nil {
@@ -203,7 +213,7 @@ func (d Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessed
 					channel := StreamChannelConstruct{
 						WebID:               q.WebID,
 						IntervalNanoSeconds: q.IntervalNanoSeconds,
-						tagLabel:            tagLabel,
+						tagLabel:            frame.Name,
 					}
 					d.channelConstruct[channeluuid.String()] = channel
 					frame.Meta.Channel = channelURI
@@ -227,8 +237,8 @@ func (q *PIWebAPIQuery) isSummary() bool {
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
-func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) string {
-	var tagLabel string
+func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
+	var frameLabel map[string]string
 	summaryNewFormat := ""
 
 	if summaryLabel != "" {
@@ -240,25 +250,29 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 		if q.IsPIPoint {
 			// New format returns the full path with metadata
 			// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
-			targetParts := strings.Split(q.FullTargetPath, "\\")
-			tagLabel = targetParts[len(targetParts)-1]
-			var element = targetParts[0]
-			var name = tagLabel
-			tagLabel = tagLabel + summaryLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + summaryNewFormat + "\"}"
+			targetParts := strings.Split(q.FullTargetPath, `\`)
+			frameLabel = map[string]string{
+				"element": targetParts[0],
+				"name":    targetParts[len(targetParts)-1],
+				"type":    pointType + summaryNewFormat,
+			}
 		} else {
 			// New format returns the full path with metadata
 			// Element|Attribute {element="Element", name="Attribute", type="Single"}
-			targetParts := strings.Split(q.FullTargetPath, "\\")
-			tagLabel = targetParts[len(targetParts)-1]
-			labelParts := strings.SplitN(tagLabel, "|", 2)
-			var element = labelParts[0]
-			var name = labelParts[1]
-			tagLabel = tagLabel + summaryLabel + " {element=\"" + element + "\", name=\"" + name + "\", type=\"" + pointType + summaryNewFormat + "\"}"
+			targetParts := strings.Split(q.FullTargetPath, `\`)
+			labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
+			frameLabel = map[string]string{
+				"element": labelParts[0],
+				"name":    labelParts[1],
+				"type":    pointType + summaryNewFormat,
+			}
 		}
 
 	} else {
 		// Old format returns just the tag/attribute name
-		tagLabel = q.Label + summaryLabel
+		frameLabel = map[string]string{
+			"name": q.Label + summaryLabel,
+		}
 	}
 
 	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
@@ -266,9 +280,9 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 	if q.isRegexQuery() {
 		backend.Logger.Info("Replacing string", "search", *q.Regex.Search, "replace", *q.Regex.Replace)
 		regex := regexp.MustCompile(*q.Regex.Search)
-		tagLabel = regex.ReplaceAllString(tagLabel, *q.Regex.Replace)
+		frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
 	}
-	return tagLabel
+	return frameLabel
 }
 
 // PiProcessedQuery isRegex returns true if the query is a regex query and is enabled
@@ -426,7 +440,7 @@ func (q *PIWebAPIQuery) getTargetBasePaths() []string {
 func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
 	fullTargetPath := q.getBasePath()
 	if q.IsPiPoint {
-		fullTargetPath += "\\" + target
+		fullTargetPath += `\` + target
 	} else {
 		fullTargetPath += "|" + target
 	}
@@ -435,7 +449,7 @@ func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
 
 func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	if q.IsPiPoint {
-		return "\\"
+		return `\`
 	}
 	return "|"
 }
@@ -484,11 +498,10 @@ func (q *PIWebAPIQuery) isUseLastValue() bool {
 }
 
 func (q *Query) getMaxDataPoints() int {
-	maxDataPoints := *q.Pi.MaxDataPoints
-	if maxDataPoints == 0 {
-		maxDataPoints = q.MaxDataPoints
+	if q.Pi.RecordedValues.MaxNumber != nil {
+		return *q.Pi.RecordedValues.MaxNumber
 	}
-	return maxDataPoints
+	return q.MaxDataPoints
 }
 
 func (q Query) getQueryBaseURL() string {
@@ -501,11 +514,11 @@ func (q Query) getQueryBaseURL() string {
 			if q.Pi.isSummary() {
 				uri += "/summary" + q.getTimeRangeURIComponent()
 				if q.Pi.isInterpolated() {
-					uri += fmt.Sprintf("&sampleType=Interval&sampleInterval=%dms", q.getIntervalTime())
+					uri += fmt.Sprintf("&sampleType=Interval&sampleInterval=%s", q.getIntervalTime())
 				}
 			} else if q.Pi.isInterpolated() {
 				uri += "/intervals" + q.getTimeRangeURIComponent()
-				uri += fmt.Sprintf("&sampleInterval=%dms", q.getIntervalTime())
+				uri += fmt.Sprintf("&sampleInterval=%s", q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			} else {
@@ -522,7 +535,7 @@ func (q Query) getQueryBaseURL() string {
 				uri += "/summary" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 				uri += q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
-				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%d", q.getIntervalTime())
+				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints())
 			} else {

@@ -47,16 +47,19 @@ func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests inter
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewBuffer(jsonValue))
 	if err != nil {
+		backend.Logger.Error("Batch request create", "error", err)
 		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Requested-With", "message/http")
 	req.Header.Set("X-PIWEBAPI-HTTP-METHOD", "GET")
 	req.Header.Set("X-PIWEBAPI-RESOURCE-ADDRESS", uri)
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
+		backend.Logger.Error("Batch request do", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -241,6 +244,7 @@ func parseTimestampValue(val reflect.Value) (reflect.Value, error) {
 // TODO: Code cleanup: handle this directly using slices of pointers.
 // TODO: Missing functionality: Add support for replacing bad data.
 func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Datasource, SummaryType string) (*data.Frame, error) {
+	var labels map[string]string
 	webID := processedQuery.WebID
 	includeMetaData := processedQuery.UseUnit
 	items := *processedQuery.Response.getItems(SummaryType)
@@ -248,7 +252,11 @@ func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Dataso
 	digitalState := d.getDigitalStateForWebID(webID)
 
 	frameName := getDataLabel(d.isUsingNewFormat(), &processedQuery, d.getPointTypeForWebID(webID), SummaryType)
-	frame := data.NewFrame(frameName)
+	dataFrameName := frameName["name"]
+	if d.isUsingNewFormat() {
+		labels = frameName
+	}
+	frame := data.NewFrame(dataFrameName)
 
 	var timestamps []time.Time
 	badValues := make([]int, 0)
@@ -334,7 +342,7 @@ func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Dataso
 	valuepointers := convertSliceToPointers(values, badValues)
 
 	timeField := data.NewField("time", nil, timestamps)
-	valueField := data.NewField(frameName, nil, valuepointers)
+	valueField := data.NewField(dataFrameName, labels, valuepointers)
 
 	fieldConfig := &data.FieldConfig{}
 
@@ -352,7 +360,7 @@ func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Dataso
 
 	if digitalState {
 		frame.Fields = append(frame.Fields,
-			data.NewField(frameName+".Value", nil, digitalStateValues),
+			data.NewField(frameName["name"]+".Value", frameName, digitalStateValues),
 		)
 	}
 	// create a metadata struct for the frame so we can set it later.
@@ -361,8 +369,15 @@ func convertProcessedQueryToDataFrame(processedQuery PiProcessedQuery, d *Dataso
 }
 
 // TODO: FIXME: Remove this function once replaced
-func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d *Datasource, webID string, includeMetaData bool) (*data.Frame, error) {
-	frame := data.NewFrame(frameName)
+func convertItemsToDataFrame(frameName map[string]string, items []PiBatchContentItem, d *Datasource, webID string, includeMetaData bool, digitalStates bool) (*data.Frame, error) {
+	var labels map[string]string
+
+	dataFrameName := frameName["name"]
+	if d.isUsingNewFormat() {
+		labels = frameName
+	}
+
+	frame := data.NewFrame(dataFrameName)
 	SliceType := d.getTypeForWebID(webID)
 	digitalState := d.getDigitalStateForWebID(webID)
 
@@ -398,6 +413,7 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d *Da
 			zeroVal := reflect.Zero(SliceType.Elem())
 			valuesValue := reflect.ValueOf(values)
 			values = reflect.Append(valuesValue, zeroVal).Interface()
+			backend.Logger.Warn("Is Not Valid")
 			continue
 		}
 
@@ -405,7 +421,6 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d *Da
 		// add it to the list of bad values and nullify later
 		//TODO we should make this pattern match the query options
 		if val.Type().Kind() != SliceType.Elem().Kind() || digitalState || !item.isGood() {
-
 			timestamps = append(timestamps, item.Timestamp)
 			if digitalState {
 				var pds PointDigitalState
@@ -449,26 +464,25 @@ func convertItemsToDataFrame(frameName string, items []PiBatchContentItem, d *Da
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(values, badValues)
 
-	timeField := data.NewField("time", nil, timestamps)
-	valueField := data.NewField(frameName, nil, valuepointers)
-
 	fieldConfig := &data.FieldConfig{}
-
 	if includeMetaData {
 		fieldConfig.Unit = d.getUnitsForWebID(webID)
 		fieldConfig.Description = d.getDescriptionForWebID(webID)
 	}
 
-	valueField.SetConfig(fieldConfig)
-
-	frame.Fields = append(frame.Fields,
-		timeField,
-		valueField,
-	)
-
-	if digitalState {
+	timeField := data.NewField("time", nil, timestamps)
+	if (digitalState && digitalStates) || !digitalState {
+		valueField := data.NewField(dataFrameName, labels, valuepointers)
 		frame.Fields = append(frame.Fields,
-			data.NewField(frameName+".Value", nil, digitalStateValues),
+			timeField,
+			valueField,
+		)
+	} else {
+		valueField := data.NewField(dataFrameName, labels, digitalStateValues)
+		valueField.SetConfig(fieldConfig)
+		frame.Fields = append(frame.Fields,
+			timeField,
+			valueField,
 		)
 	}
 	// create a metadata struct for the frame so we can set it later.

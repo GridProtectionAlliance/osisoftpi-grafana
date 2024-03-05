@@ -2,7 +2,7 @@ import { each, filter, forOwn, join, reduce, map, slice, remove, defaults } from
 
 import React, { PureComponent, ChangeEvent } from 'react';
 import { Icon, InlineField, InlineFieldRow, InlineSwitch, Input, SegmentAsync, Segment } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue, VariableModel } from '@grafana/data';
+import { QueryEditorProps, SelectableValue, TypedVariableModel } from '@grafana/data';
 
 import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
@@ -399,7 +399,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {
@@ -468,7 +468,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         }
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {

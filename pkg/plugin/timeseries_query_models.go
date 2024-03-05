@@ -32,12 +32,11 @@ func (q *Query) isValidQuery() error {
 	return nil
 }
 
-func (q *Query) getIntervalTime() int {
-	intervalTime := q.Pi.IntervalMs
-	if intervalTime == 0 {
-		intervalTime = int(q.Interval)
+func (q *Query) getIntervalTime() string {
+	if q.Pi.Interpolate.Enable && q.Pi.Interpolate.Interval != "" {
+		return q.Pi.Interpolate.Interval
 	}
-	return intervalTime
+	return fmt.Sprintf("%dms", q.Interval/1e6)
 }
 
 func (q *Query) getWindowedTimeStampURI() string {
@@ -118,8 +117,8 @@ type PIWebAPIQuery struct {
 		UID  string `json:"uid"`
 	} `json:"datasource"`
 	DatasourceID  int `json:"datasourceId"`
-	DigitalStates struct {
-		Enable bool `json:"enable"`
+	DigitalStates *struct {
+		Enable *bool `json:"enable"`
 	} `json:"digitalStates"`
 	UseLastValue *struct {
 		Enable *bool `json:"enable"`
@@ -131,9 +130,9 @@ type PIWebAPIQuery struct {
 	Expression  string `json:"expression"`
 	Hide        bool   `json:"hide"`
 	Interpolate struct {
-		Enable bool `json:"enable"`
+		Enable   bool   `json:"enable"`
+		Interval string `json:"interval"`
 	} `json:"interpolate"`
-	IntervalMs     int  `json:"intervalMs"`
 	IsPiPoint      bool `json:"isPiPoint"`
 	MaxDataPoints  *int `json:"maxDataPoints"`
 	RecordedValues *struct {
@@ -192,6 +191,7 @@ type PiProcessedQuery struct {
 	BatchRequest        BatchSubRequest `json:"BatchRequest"`
 	Response            PiBatchData     `json:"ResponseData"`
 	UseUnit             bool            `json:"UseUnit"`
+	DigitalStates       bool            `json:"DigitalStates"`
 	Error               error
 	Regex               *Regex        `json:"Regex"`
 	Summary             *QuerySummary `json:"Summary"`

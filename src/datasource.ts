@@ -1,7 +1,4 @@
-import { 
-  filter, 
-  map, 
-} from 'lodash';
+import { filter, map } from 'lodash';
 
 import { Observable, of, firstValueFrom } from 'rxjs';
 
@@ -13,18 +10,10 @@ import {
   AnnotationEvent,
   DataFrame,
 } from '@grafana/data';
-import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend} from '@grafana/runtime';
+import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
-import {
-  PIWebAPIQuery,
-  PIWebAPIDataSourceJsonData,
-  PiDataServer,
-  PiwebapiInternalRsp,
-  PiwebapiRsp,
-} from './types';
-import {
-  metricQueryTransform,
-} from 'helper';
+import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiInternalRsp, PiwebapiRsp } from './types';
+import { metricQueryTransform } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -69,7 +58,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       ): Observable<AnnotationEvent[] | undefined> => {
         return of(this.eventFrameToAnnotation(anno, data));
       },
-
     };
 
     Promise.all([
@@ -81,13 +69,12 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     ]);
   }
 
-
   /**
    * This method overrides the applyTemplateVariables() method from the DataSourceWithBackend class.
-   * It is responsible for replacing the template variables in the query configuration prior 
+   * It is responsible for replacing the template variables in the query configuration prior
    * to sending the query to the backend. Templated variables are not able to be used for alerts
    * or public facing dashboards.
-   * 
+   *
    * @param {PIWebAPIQuery} query - The raw query configuration from the frontend as defined in the query editor.
    * @param {ScopedVars} scopedVars - The template variables that are defined in the query editor and dashboard.
    * @returns - PIWebAPIQuery.
@@ -187,75 +174,72 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   }
 
   /** PRIVATE SECTION */
-  
-    /**
-     * Localize the eventFrame dataFrame records to Grafana Annotations.
-     * @param {any} annon - The annotation object.
-     * @param {any} data - The dataframe recrords.
-     * @returns - Grafana Annotation
-     *
-     * @memberOf PiWebApiDatasource
-     */
-    private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
-      const annotationOptions = annon.target!;
-      const events: AnnotationEvent[] = [];
-      const currentLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-    
-      data.forEach((d: DataFrame) => {
-          let values = this.transformDataFrameToMap(d);
-          for (let i = 0; i < values['time'].length; i++) {
 
-            // replace Dataframe name using Regex
-            let title = values['title'][i];
-            if (annotationOptions.regex && annotationOptions.regex.enable) {
-              title = title.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
-            }
-
-            // test if timeEnd is negative and if so, set it to null
-            if (values['timeEnd'][i] < 0) {
-              values['timeEnd'][i] = null;
-            }
-
-            // format the text and localize the dates to browser locale
-            let text = "Tag: " + title;
-            if (annotationOptions.attribute && annotationOptions.attribute.enable) {
-              text += values['attributeText'][i];
-            }
-            text += '<br />Start: ' + 
-              new Date(values['time'][i]).toLocaleString(currentLocale) +
-              '<br />End: '
-
-            if (values['timeEnd'][i]) {
-              text += new Date(values['timeEnd'][i]).toLocaleString(currentLocale) 
-            } else {
-              text += 'Eventframe is open'
-            }
-
-            const event: AnnotationEvent = {
-              time: values['time'][i],
-              timeEnd: !!annotationOptions.showEndTime ? values['timeEnd'][i] : undefined,
-              title: title,
-              id: values['id'][i],
-              text: text,
-              tags: ['OSISoft PI'],
-            };
-
-            events.push(event);
-          }
-        });
-      return events;
-    }
-    
   /**
-   * 
+   * Localize the eventFrame dataFrame records to Grafana Annotations.
+   * @param {any} annon - The annotation object.
+   * @param {any} data - The dataframe recrords.
+   * @returns - Grafana Annotation
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private eventFrameToAnnotation(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): AnnotationEvent[] {
+    const annotationOptions = annon.target!;
+    const events: AnnotationEvent[] = [];
+    const currentLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+
+    data.forEach((d: DataFrame) => {
+      let values = this.transformDataFrameToMap(d);
+      for (let i = 0; i < values['time'].length; i++) {
+        // replace Dataframe name using Regex
+        let title = values['title'][i];
+        if (annotationOptions.regex && annotationOptions.regex.enable) {
+          title = title.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
+        }
+
+        // test if timeEnd is negative and if so, set it to null
+        if (values['timeEnd'][i] < 0) {
+          values['timeEnd'][i] = null;
+        }
+
+        // format the text and localize the dates to browser locale
+        let text = 'Tag: ' + title;
+        if (annotationOptions.attribute && annotationOptions.attribute.enable) {
+          text += values['attributeText'][i];
+        }
+        text += '<br />Start: ' + new Date(values['time'][i]).toLocaleString(currentLocale) + '<br />End: ';
+
+        if (values['timeEnd'][i]) {
+          text += new Date(values['timeEnd'][i]).toLocaleString(currentLocale);
+        } else {
+          text += 'Eventframe is open';
+        }
+
+        const event: AnnotationEvent = {
+          time: values['time'][i],
+          timeEnd: !!annotationOptions.showEndTime ? values['timeEnd'][i] : undefined,
+          title: title,
+          id: values['id'][i],
+          text: text,
+          tags: ['OSISoft PI'],
+        };
+
+        events.push(event);
+      }
+    });
+    return events;
+  }
+
+  /**
+   *
    */
   private transformDataFrameToMap(dataFrame: DataFrame): Record<string, any[]> {
     const map: Record<string, any[]> = {};
-  
+
     dataFrame.fields.forEach((field) => {
       map[field.name] = field.values.toArray();
     });
-  
+
     return map;
   }
 
@@ -269,16 +253,15 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    */
   private restGet(path: string): Promise<PiwebapiInternalRsp> {
     const observable = this.backendSrv.fetch({
-        url: `/api/datasources/${this.id}/resources/${path}`,
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+      url: `/api/datasources/${this.id}/resources/${path}`,
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
     });
 
-    return firstValueFrom(observable)
-      .then((response: any) => {
-        return response as PiwebapiInternalRsp;
-      });
-}
+    return firstValueFrom(observable).then((response: any) => {
+      return response as PiwebapiInternalRsp;
+    });
+  }
 
   // Get a list of all data (PI) servers
   private getDataServers(): Promise<PiwebapiRsp[]> {

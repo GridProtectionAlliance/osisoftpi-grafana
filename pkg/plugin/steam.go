@@ -209,7 +209,10 @@ func (d *Datasource) sendStreamMessagesToSender(ctx context.Context, WebID strin
 			}
 			items := frame.getItems()
 
-			framedata, _ := convertItemsToDataFrame(TagLabel, *items, d, WebID, false)
+			frameName := map[string]string{
+				"name": TagLabel,
+			}
+			framedata, _ := convertItemsToDataFrame(frameName, *items, d, WebID, false, false)
 			d.sendersByWebIDMutex.Lock()
 			specsender := d.sendersByWebID[WebID]
 			for s := range specsender {

@@ -1,4 +1,5 @@
-import { DataQuery, DataSourceJsonData, Labels, QueryResultMeta, TimeSeriesPoints } from '@grafana/data';
+import { DataQuery } from '@grafana/schema';
+import { DataSourceJsonData, Labels, QueryResultMeta, TimeSeriesPoints } from '@grafana/data';
 
 export interface PiwebapiElementPath {
   path: string;

@@ -26,7 +26,6 @@ type PIWebAPIAnnotationQuery struct {
 	Database      AFDatabase          `json:"database"`
 	Datasource    Datasource          `json:"datasource"`
 	DatasourceID  int                 `json:"datasourceId"`
-	IntervalMs    int                 `json:"intervalMs"`
 	IsAnnotation  bool                `json:"isAnnotation"`
 	MaxDataPoints int                 `json:"maxDataPoints"`
 	QueryType     string              `json:"queryType"`
