@@ -2,7 +2,7 @@ import { each, filter, forOwn, join, reduce, map, slice, remove, defaults } from
 
 import React, { PureComponent, ChangeEvent } from 'react';
 import { Icon, InlineField, InlineFieldRow, InlineSwitch, Input, SegmentAsync, Segment } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue, VariableModel } from '@grafana/data';
+import { QueryEditorProps, SelectableValue, TypedVariableModel } from '@grafana/data';
 
 import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
@@ -399,7 +399,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {
@@ -468,7 +468,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         }
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {
@@ -929,6 +929,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       query,
       rawQuery,
       digitalStates,
+      enableStreaming,
       recordedValues,
       expression,
       isPiPoint,
@@ -1087,6 +1088,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                     ...metricsQuery,
                     useUnit: { ...useUnit, enable: !useUnit.enable },
                   })
+                }
+              />
+            </InlineField>
+          )}
+          {this.props.datasource.useStreaming && (
+            <InlineField 
+              label="Enable Streaming" 
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Enable streaming data if it is supported for the point type.'}
+            >
+              <InlineSwitch
+                value={enableStreaming.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
                 }
               />
             </InlineField>
