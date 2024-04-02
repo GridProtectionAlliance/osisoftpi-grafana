@@ -1,5 +1,5 @@
 import { DataQuery } from '@grafana/schema';
-import { DataSourceJsonData, Labels, QueryResultMeta, TimeSeriesPoints } from '@grafana/data';
+import { DataSourceJsonData } from '@grafana/data';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -10,16 +10,6 @@ export interface PiwebapiInternalRsp {
   data: PiwebapiRsp;
   status: number;
   url: string;
-}
-
-export interface PiwebapTargetRsp {
-  refId: string;
-  target: string;
-  tags: Labels;
-  datapoints: TimeSeriesPoints;
-  path?: string;
-  meta?: QueryResultMeta;
-  unit?: string;
 }
 
 export interface PiwebapiRsp {

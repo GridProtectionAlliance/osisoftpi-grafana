@@ -3,6 +3,7 @@ package plugin
 import (
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-co-op/gocron"
 	"github.com/gorilla/websocket"
@@ -17,13 +18,16 @@ type Datasource struct {
 	httpClient                *http.Client
 	webIDCache                WebIDCache
 	channelConstruct          map[string]StreamChannelConstruct
+	datasourceMutex           *sync.Mutex
 	scheduler                 *gocron.Scheduler
 	websocketConnectionsMutex *sync.Mutex
-	sendersByWebIDMutex       *sync.Mutex
 	websocketConnections      map[string]*websocket.Conn
 	sendersByWebID            map[string]map[*backend.StreamSender]bool
 	streamChannels            map[string]chan []byte
 	dataSourceOptions         *PIWebAPIDataSourceJsonData
+	initalTime                time.Time
+	totalCalls                int
+	callRate                  float64
 }
 
 type PIWebAPIDataSourceJsonData struct {

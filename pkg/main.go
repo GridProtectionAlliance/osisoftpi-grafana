@@ -18,7 +18,7 @@ func main() {
 	// ID). When datasource configuration changed Dispose method will be called and
 	// new datasource instance created using NewSampleDatasource factory.
 	if err := datasource.Manage("gridprotectionalliance-osisoftpi-datasource", plugin.NewPIWebAPIDatasource, datasource.ManageOpts{}); err != nil {
-		log.DefaultLogger.Error(err.Error())
+		log.DefaultLogger.Error("Manage", "Plugin", err.Error())
 		os.Exit(1)
 	}
 }

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 )
 
@@ -88,30 +89,18 @@ func (q *PiProcessedQuery) isSummary() bool {
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
-func (q *PiProcessedQuery) getSummaryNoDataReplace() (*string, error) {
-	var response = ""
+func (q *PiProcessedQuery) getSummaryNoDataReplace() string {
 	if q.Summary == nil {
-		return nil, fmt.Errorf("no summary found in query")
-	}
-	if q.Summary.Types == nil {
-		return nil, fmt.Errorf("no summary type found in query")
+		return ""
 	}
 	if q.Summary.Nodata == nil {
-		response = "Drop"
-		return &response, nil
+		return ""
 	}
-	response = *q.Summary.Nodata
-	return &response, nil
+	return *q.Summary.Nodata
 }
 
 type PIWebAPIQuery struct {
-	Attributes []struct {
-		Label string `json:"label"`
-		Value struct {
-			Expandable bool   `json:"expandable"`
-			Value      string `json:"value"`
-		} `json:"value"`
-	} `json:"attributes"`
+	Attributes []string `json:"attributes"`
 	Datasource struct {
 		Type string `json:"type"`
 		UID  string `json:"uid"`
@@ -139,19 +128,13 @@ type PIWebAPIQuery struct {
 		Enable    *bool `json:"enable"`
 		MaxNumber *int  `json:"maxNumber"`
 	} `json:"recordedValues"`
-	RefID    *string `json:"refId"`
-	Regex    *Regex  `json:"regex"`
-	Segments *[]struct {
-		Label *string `json:"label"`
-		Value *struct {
-			Expandable *bool   `json:"expandable"`
-			Value      *string `json:"value"`
-			WebID      *string `json:"webId"`
-		} `json:"value"`
-	} `json:"segments"`
-	Summary *QuerySummary `json:"summary"`
-	Target  *string       `json:"target"`
-	UseUnit *struct {
+	RefID    *string       `json:"refId"`
+	Regex    *Regex        `json:"regex"`
+	Segments *[]string     `json:"segments"`
+	Summary  *QuerySummary `json:"summary"`
+	Target   *string       `json:"target"`
+	Display  *string       `json:"display"`
+	UseUnit  *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 }
@@ -179,20 +162,32 @@ type Regex struct {
 	Replace *string `json:"replace"`
 }
 
+type FrameProcessed struct {
+	val        reflect.Value
+	prevVal    reflect.Value
+	values     any
+	timestamps []time.Time
+	badValues  []int
+	sliceType  reflect.Type
+}
+
 type PiProcessedQuery struct {
-	Label               string          `json:"Label"`
-	WebID               string          `json:"WebID"`
-	UID                 string          `json:"-"`
-	IntervalNanoSeconds int64           `json:"IntervalNanoSeconds"`
-	IsPIPoint           bool            `json:"IsPiPoint"`
-	Streamable          bool            `json:"isStreamable"`
-	FullTargetPath      string          `json:"FullTargetPath"`
-	ResponseUnits       string          `json:"ResponseUnits"`
-	BatchRequest        BatchSubRequest `json:"BatchRequest"`
-	Response            PiBatchData     `json:"ResponseData"`
-	UseUnit             bool            `json:"UseUnit"`
-	DigitalStates       bool            `json:"DigitalStates"`
+	Label               string             `json:"Label"`
+	WebID               string             `json:"WebID"`
+	UID                 string             `json:"-"`
+	IntervalNanoSeconds int64              `json:"IntervalNanoSeconds"`
+	IsPIPoint           bool               `json:"IsPiPoint"`
+	Streamable          bool               `json:"isStreamable"`
+	FullTargetPath      string             `json:"FullTargetPath"`
+	ResponseUnits       string             `json:"ResponseUnits"`
+	BatchRequest        BatchSubRequestMap `json:"BatchRequest"`
+	Response            PiBatchData        `json:"ResponseData"`
+	UseUnit             bool               `json:"UseUnit"`
+	DigitalStates       bool               `json:"DigitalStates"`
+	Display             *string            `json:"Display"`
 	Error               error
+	Index               int
+	Resource            string
 	Regex               *Regex        `json:"Regex"`
 	Summary             *QuerySummary `json:"Summary"`
 }

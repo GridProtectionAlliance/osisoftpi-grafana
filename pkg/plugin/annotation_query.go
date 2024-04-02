@@ -14,7 +14,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
-func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.DataQuery) PiProcessedAnnotationQuery {
+func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.DataQuery) PiProcessedAnnotationQuery {
 	var ProcessedQuery PiProcessedAnnotationQuery
 	var PiAnnotationQuery PIAnnotationQuery
 
@@ -73,7 +73,7 @@ func (d Datasource) processAnnotationQuery(ctx context.Context, query backend.Da
 	return ProcessedQuery
 }
 
-func (q *PiProcessedAnnotationQuery) getTimeRangeURIComponent() string {
+func (q PiProcessedAnnotationQuery) getTimeRangeURIComponent() string {
 	return "&startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
 }
 

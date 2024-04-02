@@ -39,7 +39,7 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 	var dataSourceOptions PIWebAPIDataSourceJsonData
 	err := json.Unmarshal(settings.JSONData, &dataSourceOptions)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("http Unmarshal: %w", err)
 	}
 
 	opts, err := settings.HTTPClientOptions()
@@ -54,9 +54,9 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 
 	webIDCache := newWebIDCache()
 
-	// Create a new scheduler that will be used to clean the webIDCache every 5 minutes.
+	// Create a new scheduler that will be used to clean the webIDCache every 60 minutes.
 	scheduler := gocron.NewScheduler(time.UTC)
-	scheduler.Every(5).Minute().Do(cleanWebIDCache, webIDCache)
+	scheduler.Every(1).Hour().Do(cleanWebIDCache, webIDCache)
 	scheduler.StartAsync()
 
 	ds := &Datasource{
@@ -65,16 +65,22 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 		webIDCache:                webIDCache,
 		scheduler:                 scheduler,
 		websocketConnectionsMutex: &sync.Mutex{},
-		sendersByWebIDMutex:       &sync.Mutex{},
+		datasourceMutex:           &sync.Mutex{},
 		channelConstruct:          make(map[string]StreamChannelConstruct),
 		websocketConnections:      make(map[string]*websocket.Conn),
 		sendersByWebID:            make(map[string]map[*backend.StreamSender]bool),
 		streamChannels:            make(map[string]chan []byte),
 		dataSourceOptions:         &dataSourceOptions,
+		initalTime:                time.Now(),
+		totalCalls:                0,
+		callRate:                  0.0,
 	}
 
 	// Create a new query mux and assign it to the datasource.
 	ds.queryMux = ds.newQueryMux()
+
+	backend.Logger.Info("NewPIWebAPIDatasource Created")
+
 	return ds, nil
 }
 
@@ -83,6 +89,34 @@ func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instanc
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *Datasource) Dispose() {
 	d.httpClient.CloseIdleConnections()
+}
+
+func (d *Datasource) updateRate() {
+	d.datasourceMutex.Lock()
+	/// show stats
+	modCall := d.totalCalls % 50
+	if modCall == 0 {
+		backend.Logger.Info("Processing QueryTSData End", "CallRate", d.callRate)
+	}
+
+	// update data
+	d.totalCalls += 1
+	d.callRate = float64(d.totalCalls) / float64(time.Now().Unix()-d.initalTime.Unix())
+
+	// backpressure
+	if d.callRate > 500 {
+		time.Sleep(time.Duration(d.callRate) * time.Millisecond)
+		backend.Logger.Info("Processing QueryTSData BackPressure", "CallRate", d.callRate)
+	}
+
+	// reset every 5 minutes
+	if time.Since(d.initalTime).Seconds() > 30 {
+		d.initalTime = time.Now()
+		d.totalCalls = 1
+		d.callRate = float64(d.totalCalls) / float64(time.Now().Unix()-d.initalTime.Unix())
+		backend.Logger.Info("Processing QueryTSData ResetTime", "CallRate", d.callRate)
+	}
+	d.datasourceMutex.Unlock()
 }
 
 // newQueryMux creates a new query mux used for routing queries to the correct handler.
@@ -112,23 +146,19 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 // TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-
 	// //TODO: Remove this debug information
 	// jsonReq, err := json.Marshal(req)
 	// if err != nil {
 	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
 	// }
-
-	// backend.Logger.Info("QueryDataRequest: ", string(jsonReq))
+	// backend.Logger.Info("QueryDataRequest: ", "REQUEST", string(jsonReq))
 	// end remove this debug information
-
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
 
 	// Process queries generic query objects and turn them into a suitable format for the PI Web API
 	for _, q := range req.Queries {
-		backend.Logger.Info("Processing Query", "RefID", q.RefID)
-		processedPIWebAPIQueries[q.RefID] = d.processQuery(ctx, q, datasourceUID)
+		processedPIWebAPIQueries[q.RefID] = d.processQuery(q, datasourceUID)
 	}
 
 	// Send the queries to the PI Web API
@@ -136,6 +166,9 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 
 	// Convert the PI Web API response into Grafana frames
 	response := d.processBatchtoFrames(processedQueries_temp)
+
+	// Update rate and do backpressure
+	d.updateRate()
 
 	return response, nil
 }
@@ -162,7 +195,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			),
 		)
 
-		backend.Logger.Info("Processing Annotation Query", "RefID", q.RefID)
+		// backend.Logger.Info("Processing Annotation Query", "RefID", q.RefID)
 		// Process the annotation query request, extracting only the useful information
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		span.AddEvent("Completed processing annotation query request")
@@ -174,7 +207,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		if len(ProcessedAnnotationQuery.Attributes) > 0 {
 			attributeURLs, err := ProcessedAnnotationQuery.getEventFrameAttributeQueryURL()
 			if err != nil {
-				backend.Logger.Error("Error getting attribute URLs", "Error", err)
+				return nil, fmt.Errorf("error getting attribute URLs: %w", err)
 			}
 			batchReq = d.buildAnnotationBatch(url, attributeURLs...)
 		} else {
@@ -192,8 +225,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 
 		annotationFrame, err := convertAnnotationResponseToFrame(ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
 		if err != nil {
-			backend.Logger.Error("error converting response to frame: %w", err)
-			continue
+			return nil, fmt.Errorf("error converting response to frame: %w", err)
 		}
 
 		span.AddEvent("Converted response to Grafana frame")

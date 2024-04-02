@@ -19,6 +19,7 @@ type StreamChannelConstruct struct {
 	WebID               string
 	IntervalNanoSeconds int64
 	tagLabel            string
+	query               *PiProcessedQuery
 }
 
 type StreamingResponse struct {
@@ -71,7 +72,7 @@ func (d *Datasource) PublishStream(ctx context.Context, req *backend.PublishStre
 
 func (d *Datasource) RunStream(ctx context.Context, req *backend.RunStreamRequest, sender *backend.StreamSender) error {
 	errChan := make(chan error)
-	backend.Logger.Info("Streaming: RunStream called", "Path", req.Path)
+	// backend.Logger.Info("Streaming: RunStream called", "Path", req.Path)
 	// run each channel subscription in a goroutine.
 	go d.subscribeToWebsocketChannel(ctx, req.Path, sender, errChan)
 	return <-errChan
@@ -88,6 +89,7 @@ func (d *Datasource) subscribeToWebsocketChannel(ctx context.Context, Path strin
 	}
 	WebID := d.channelConstruct[Path].WebID
 	TagLabel := d.channelConstruct[Path].tagLabel
+	Query := d.channelConstruct[Path].query
 
 	// Get or create a websocket connection for the given WebID
 	// try to reuse an existing connection if one exists, and create a new one if it doesn't
@@ -103,7 +105,7 @@ func (d *Datasource) subscribeToWebsocketChannel(ctx context.Context, Path strin
 
 	// run the send stream messages as a routine, use the context so that the routine
 	// will be cancelled when the context is cancelled
-	go d.sendStreamMessagesToSender(ctx, WebID, sender, Path, errchan, d.streamChannels[WebID], TagLabel)
+	go d.sendStreamMessagesToSender(ctx, WebID, sender, Path, errchan, d.streamChannels[WebID], TagLabel, Query)
 }
 
 func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, WebID string) error {
@@ -129,13 +131,13 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, WebID s
 		go d.readWebsocketMessages(conn, WebID, streamChannel)
 
 	} else {
-		backend.Logger.Info("Streaming: Reusing existing websocket connection", "WebID", WebID)
+		// backend.Logger.Info("Streaming: Reusing existing websocket connection", "WebID", WebID)
 	}
 	return nil
 }
 
 func (d *Datasource) createWebsocketConnection(WebID string) (*websocket.Conn, error) {
-	backend.Logger.Info("Streaming: Creating new websocket connection", "WebID", WebID)
+	// backend.Logger.Info("Streaming: Creating new websocket connection", "WebID", WebID)
 	if WebID == "" {
 		backend.Logger.Error("Streaming: WebID is empty")
 		return nil, errors.New("WebID is empty")
@@ -166,13 +168,13 @@ func (d *Datasource) readWebsocketMessages(conn *websocket.Conn, WebID string, s
 			if !ok {
 				return
 			}
-			backend.Logger.Info("Error reading websocket message, closing all associated streams:", "err", err)
-			d.sendersByWebIDMutex.Lock()
+			// backend.Logger.Info("Error reading websocket message, closing all associated streams:", "err", err)
+			d.datasourceMutex.Lock()
 			delete(d.websocketConnections, WebID)
 			for s := range d.sendersByWebID[WebID] {
 				delete(d.sendersByWebID[WebID], s)
 			}
-			d.sendersByWebIDMutex.Unlock()
+			d.datasourceMutex.Unlock()
 			conn.Close()
 			return
 		}
@@ -182,11 +184,11 @@ func (d *Datasource) readWebsocketMessages(conn *websocket.Conn, WebID string, s
 
 // FIXME there is a bug here that causes the stream sender to not pick up all events
 func (d *Datasource) sendStreamMessagesToSender(ctx context.Context, WebID string, senders *backend.StreamSender,
-	Path string, errchan chan error, streamChannel chan []byte, TagLabel string) {
+	Path string, errchan chan error, streamChannel chan []byte, TagLabel string, query *PiProcessedQuery) {
 	for {
 		select {
 		case <-ctx.Done():
-			backend.Logger.Info("Streaming: sendStreamMessagesToSenders: Context done, checking for orphaned web sockets", "Path", Path)
+			// backend.Logger.Info("Streaming: sendStreamMessagesToSenders: Context done, checking for orphaned web sockets", "Path", Path)
 			d.removeStreamSender(WebID, senders)
 			d.checkForOrphanedWebSockets(WebID)
 			// FIXME: this needs to be re-added. Removed for testing other bug fixes.
@@ -195,7 +197,7 @@ func (d *Datasource) sendStreamMessagesToSender(ctx context.Context, WebID strin
 			return
 		case message, ok := <-streamChannel:
 			if !ok {
-				backend.Logger.Info("Streaming: Channel closed, checking for orphaned web sockets")
+				// backend.Logger.Info("Streaming: Channel closed, checking for orphaned web sockets")
 				errchan <- errors.New("streaming: Channel closed")
 				d.removeStreamSender(WebID, senders)
 				d.checkForOrphanedWebSockets(WebID)
@@ -204,44 +206,39 @@ func (d *Datasource) sendStreamMessagesToSender(ctx context.Context, WebID strin
 			frame := StreamingResponse{}
 			err := json.Unmarshal(message, &frame)
 			if err != nil {
-				backend.Logger.Info("Error unmarshalling message:", err)
+				// backend.Logger.Info("Error unmarshalling message:", err)
 				continue
 			}
-			items := frame.getItems()
-
-			frameName := map[string]string{
-				"name": TagLabel,
-			}
-			framedata, _ := convertItemsToDataFrame(frameName, *items, d, WebID, false, false)
-			d.sendersByWebIDMutex.Lock()
+			framedata, _ := convertItemsToDataFrame(query, d, "")
+			d.datasourceMutex.Lock()
 			specsender := d.sendersByWebID[WebID]
 			for s := range specsender {
 				err := s.SendFrame(framedata, data.IncludeDataOnly)
 				if err != nil {
-					backend.Logger.Info("Error sending frame:", err)
-					backend.Logger.Info("Streaming: Removing sender for closed channel")
+					// backend.Logger.Info("Error sending frame:", err)
+					// backend.Logger.Info("Streaming: Removing sender for closed channel")
 					d.removeStreamSender(WebID, senders)
 					remainingSenders := d.hasSendersForWebID(WebID)
-					backend.Logger.Info("Streaming: Checking if there are additional senders for WebID", "WebID", WebID, "remainingSenders", remainingSenders)
+					// backend.Logger.Info("Streaming: Checking if there are additional senders for WebID", "WebID", WebID, "remainingSenders", remainingSenders)
 					if !remainingSenders {
-						backend.Logger.Info("Streaming: Closing websocket connection for WebID", "WebID", WebID)
+						// backend.Logger.Info("Streaming: Closing websocket connection for WebID", "WebID", WebID)
 						d.checkForOrphanedWebSockets(WebID)
 					}
 					errchan <- errors.New("streaming: Channel closed")
 					return
 				}
 			}
-			d.sendersByWebIDMutex.Unlock()
+			d.datasourceMutex.Unlock()
 		}
 	}
 }
 
 func (d *Datasource) checkForOrphanedWebSockets(WebID string) {
-	d.sendersByWebIDMutex.Lock()
+	d.datasourceMutex.Lock()
 	d.websocketConnectionsMutex.Lock()
 	// Check if the WebID has any senders
 	if len(d.sendersByWebID[WebID]) == 0 {
-		backend.Logger.Info("Streaming: Closing orphaned web socket for WebID", "WebID", WebID)
+		// backend.Logger.Info("Streaming: Closing orphaned web socket for WebID", "WebID", WebID)
 		// we remove the websocket connection and then close it
 		// this allows us to gracefully handle the error in the readWebsocketMessages function
 		ws := d.websocketConnections[WebID]
@@ -249,23 +246,23 @@ func (d *Datasource) checkForOrphanedWebSockets(WebID string) {
 		delete(d.streamChannels, WebID)
 		ws.Close()
 	}
-	d.sendersByWebIDMutex.Unlock()
+	d.datasourceMutex.Unlock()
 	d.websocketConnectionsMutex.Unlock()
 }
 
 func (d *Datasource) addStreamSender(WebID string, sender *backend.StreamSender) {
-	d.sendersByWebIDMutex.Lock()
+	d.datasourceMutex.Lock()
 	if _, ok := d.sendersByWebID[WebID]; !ok {
 		d.sendersByWebID[WebID] = make(map[*backend.StreamSender]bool)
 	}
 	d.sendersByWebID[WebID][sender] = true
-	d.sendersByWebIDMutex.Unlock()
+	d.datasourceMutex.Unlock()
 }
 
 func (d *Datasource) removeStreamSender(WebID string, sender *backend.StreamSender) {
-	d.sendersByWebIDMutex.Lock()
+	d.datasourceMutex.Lock()
 	delete(d.sendersByWebID[WebID], sender)
-	d.sendersByWebIDMutex.Unlock()
+	d.datasourceMutex.Unlock()
 }
 
 func (d *Datasource) hasSendersForWebID(WebID string) bool {

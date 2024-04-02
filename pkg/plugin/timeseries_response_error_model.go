@@ -1,5 +1,7 @@
 package plugin
 
+import "encoding/json"
+
 type ErrorResponse struct {
 	Errors []string `json:"Errors"`
 }
@@ -21,6 +23,19 @@ func (p PiBatchDataError) getSummaryTypes() *[]string {
 	typeValues := make([]string, 1)
 	typeValues[0] = ""
 	return &typeValues
+}
+
+func convertError(data interface{}) (*[]string, error) {
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	var errors ErrorResponse
+	err = json.Unmarshal(raw, &errors)
+	if err != nil {
+		return nil, err
+	}
+	return &errors.Errors, nil
 }
 
 func createPiBatchDataError(errorMessage *[]string) *PiBatchDataError {

@@ -12,7 +12,7 @@ import (
 type PIBatchResponse struct {
 	Status  int               `json:"Status"`
 	Headers map[string]string `json:"Headers"`
-	Content PiBatchData       `json:"Content"`
+	Content interface{}       `json:"Content"`
 }
 
 type PIBatchResponseBase struct {
@@ -58,11 +58,26 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	var rawData map[string]interface{}
 	err := json.Unmarshal(data, &rawData)
 	if err != nil {
-		backend.Logger.Error("Error unmarshalling batch response", err)
+		backend.Logger.Error("Error unmarshalling raw data", "error", err.Error())
 		return err
 	}
 
 	Content, ok := rawData["Content"].(map[string]interface{})
+
+	if p.Status != http.StatusOK {
+		var errors *[]string
+		if ok {
+			errors, err = convertError(Content)
+			if err != nil {
+				return err
+			}
+		} else {
+			errors = &[]string{rawData["Content"].(string)}
+		}
+		p.Content = createPiBatchDataError(errors)
+		return nil
+	}
+
 	if !ok {
 		backend.Logger.Error("key 'Content' not found in raw JSON", "rawData", rawData)
 		return fmt.Errorf("key 'Content' not found in raw JSON")
@@ -70,14 +85,9 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 
 	rawContent, _ := json.Marshal(Content)
 
-	if p.Status != http.StatusOK {
-		temp_error := &ErrorResponse{}
-		err = json.Unmarshal(rawContent, temp_error)
-		if err != nil {
-			backend.Logger.Error("Error Batch Error Response", "Error", err)
-			return err
-		}
-		p.Content = createPiBatchDataError(&temp_error.Errors)
+	_, ok = Content["WebId"]
+	if ok {
+		p.Content = Content
 		return nil
 	}
 
@@ -100,18 +110,32 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	}
 
 	// Check if the response contained a value or a subitems array of values
-	_, ok = parentItem["Value"]
-	if ok {
-		ResContent := PiBatchDataWithSingleItem{}
-		err = json.Unmarshal(rawContent, &ResContent)
-		if err != nil {
-			backend.Logger.Error("Error unmarshalling batch response", err)
-			//Return an error Batch Data Response to the user is notified
-			errMessages := &[]string{"Could not process response from PI Web API"}
-			p.Content = createPiBatchDataError(errMessages)
-			return nil
+	value, exists := parentItem["Value"]
+	if exists {
+		_, isFloat := value.(float64)
+		if isFloat {
+			ResContent := PiBatchDataWithFloatItem{}
+			err = json.Unmarshal(rawContent, &ResContent)
+			if err != nil {
+				backend.Logger.Error("Error unmarshalling batch response 3", "error", err.Error(), "data", parentItem["Value"])
+				//Return an error Batch Data Response to the user is notified
+				errMessages := &[]string{"Could not process response from PI Web API"}
+				p.Content = createPiBatchDataError(errMessages)
+				return nil
+			}
+			p.Content = ResContent
+		} else {
+			ResContent := PiBatchDataWithSingleItem{}
+			err = json.Unmarshal(rawContent, &ResContent)
+			if err != nil {
+				backend.Logger.Error("Error unmarshalling batch response 3", "error", err.Error(), "data", parentItem["Value"])
+				//Return an error Batch Data Response to the user is notified
+				errMessages := &[]string{"Could not process response from PI Web API"}
+				p.Content = createPiBatchDataError(errMessages)
+				return nil
+			}
+			p.Content = ResContent
 		}
-		p.Content = ResContent
 		return nil
 	}
 
@@ -119,7 +143,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	itemsSlice, ok := parentItem["Items"].([]interface{})
 	if !ok {
 		backend.Logger.Error("key 'Items' not found in 'Items'", "Items", parentItem)
-		backend.Logger.Error("Error unmarshalling batch response", err)
+		backend.Logger.Error("Error unmarshalling batch response 4")
 		//Return an error Batch Data Response to the user is notified
 		errMessages := &[]string{"Could not process response from PI Web API"}
 		p.Content = createPiBatchDataError(errMessages)
@@ -143,7 +167,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 			ResContent := PiBatchDataSummaryItems{}
 			err = json.Unmarshal(rawContent, &ResContent)
 			if err != nil {
-				backend.Logger.Error("Error unmarshalling batch response", err)
+				backend.Logger.Error("Error unmarshalling batch response 5", "error", err.Error())
 				//Return an error Batch Data Response to the user is notified
 				errMessages := &[]string{"Could not process response from PI Web API"}
 				p.Content = createPiBatchDataError(errMessages)
@@ -162,7 +186,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		ResContent := PiBatchDataWithoutSubItems{}
 		err = json.Unmarshal(rawContent, &ResContent)
 		if err != nil {
-			backend.Logger.Error("Error unmarshalling batch response", err)
+			backend.Logger.Error("Error unmarshalling batch response 6", "error", err.Error())
 			//Return an error Batch Data Response so the user is notified
 			errMessages := &[]string{"Could not process response from PI Web API"}
 			p.Content = createPiBatchDataError(errMessages)
@@ -176,7 +200,7 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	ResContent := PiBatchDataWithSubItems{}
 	err = json.Unmarshal(rawContent, &ResContent)
 	if err != nil {
-		backend.Logger.Error("Error unmarshalling batch response", err)
+		backend.Logger.Error("Error unmarshalling batch response 7", "error", err.Error())
 		//Return an error Batch Data Response to the user is notified
 		errMessages := &[]string{"Could not process response from PI Web API"}
 		p.Content = createPiBatchDataError(errMessages)

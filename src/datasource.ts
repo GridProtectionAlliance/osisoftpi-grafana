@@ -9,11 +9,13 @@ import {
   ScopedVars,
   AnnotationEvent,
   DataFrame,
+  DataQueryRequest,
+  DataQueryResponse,
 } from '@grafana/data';
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiInternalRsp, PiwebapiRsp } from './types';
-import { metricQueryTransform } from 'helper';
+import { metricQueryTransform, parseRawQuery } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -86,6 +88,19 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       ...query,
       target: query.target ? this.templateSrv.replace(query.target, scopedVars) : '',
     };
+  }
+
+  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
+    if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
+      return super.query(options);
+    }
+
+    const query = this.buildQueryParameters(options);
+    if (query.targets.length <= 0) {
+      return of({ data: [] });
+    }
+  
+    return super.query(query);
   }
 
   /**
@@ -176,6 +191,72 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   /** PRIVATE SECTION */
 
   /**
+   * Builds the PIWebAPI query parameters.
+   *
+   * @param {any} options - Grafana query and panel options.
+   * @returns - PIWebAPI query parameters.
+   *
+   * @memberOf PiWebApiDatasource
+   */
+  private buildQueryParameters(options: DataQueryRequest<PIWebAPIQuery>) {
+    options.targets = filter(options.targets, (target) => {
+      if (!target  || !target.target || target.attributes?.length === 0 || target.target === ';' || !!target.hide) {
+        return false;
+      }
+      return !target.target.startsWith('Select AF');
+    });
+
+    options.targets = map(options.targets, (target) => {
+      if (!!target.rawQuery && !!target.target) {
+        const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
+        target.attributes = attributes;
+        target.elementPath = elementPath;
+      }
+      const tar = {
+        enableStreaming: target.enableStreaming,
+        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        attributes: map(target.attributes, (att) =>
+          this.templateSrv.replace(att.value?.value || att, options.scopedVars)
+        ),
+        isAnnotation: !!target.isAnnotation,
+        segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
+        display: !!target.display ? this.templateSrv.replace(target.display, options.scopedVars) : undefined,
+        refId: target.refId,
+        hide: target.hide,
+        interpolate: target.interpolate || { enable: false },
+        useLastValue: target.useLastValue || { enable: false },
+        useUnit: target.useUnit || { enable: false },
+        recordedValues: target.recordedValues || { enable: false },
+        digitalStates: target.digitalStates || { enable: false },
+        webid: target.webid ?? '',
+        webids: target.webids || [],
+        regex: target.regex || { enable: false },
+        expression: target.expression || '',
+        summary: target.summary || { types: [] },
+        startTime: options.range.from,
+        endTime: options.range.to,
+        isPiPoint: !!target.isPiPoint,
+        scopedVars: options.scopedVars,
+      };
+
+      if (tar.expression) {
+        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
+      }
+
+      if (tar.summary.types !== undefined) {
+        tar.summary.types = filter(tar.summary.types, (item) => {
+          return item !== undefined && item !== null && item !== '';
+        });
+      }
+    
+      return tar;
+    });
+
+    return options;
+  }
+
+  /**
    * Localize the eventFrame dataFrame records to Grafana Annotations.
    * @param {any} annon - The annotation object.
    * @param {any} data - The dataframe recrords.
@@ -253,7 +334,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    */
   private restGet(path: string): Promise<PiwebapiInternalRsp> {
     const observable = this.backendSrv.fetch({
-      url: `/api/datasources/${this.id}/resources/${path}`,
+      url: `/api/datasources/${this.id}/resources${path}`,
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });

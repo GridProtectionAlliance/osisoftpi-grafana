@@ -3,13 +3,6 @@ import { each, map } from 'lodash';
 import {
   AnnotationQuery,
   DataFrame,
-  FieldConfig,
-  TimeSeries,
-  FieldType,
-  TimeSeriesValue,
-  TIME_SERIES_VALUE_FIELD_NAME,
-  TIME_SERIES_TIME_FIELD_NAME,
-  ArrayVector,
   TableData,
   MetricFindValue,
   Field,
@@ -48,48 +41,6 @@ export function parseRawQuery(tr: string): any {
 
 export function lowerCaseFirstLetter(string: string): string {
   return string.charAt(0).toLocaleLowerCase() + string.slice(1);
-}
-
-export function convertTimeSeriesToDataFrame(timeSeries: TimeSeries): DataFrame {
-  const times: number[] = [];
-  const values: TimeSeriesValue[] = [];
-
-  // Sometimes the points are sent as datapoints
-  const points = timeSeries.datapoints;
-  for (const point of points) {
-    values.push(point[0]);
-    times.push(point[1] as number);
-  }
-
-  const fields = [
-    {
-      name: TIME_SERIES_TIME_FIELD_NAME,
-      type: FieldType.time,
-      config: {},
-      values: new ArrayVector<number>(times),
-    },
-    {
-      name: timeSeries.target ?? TIME_SERIES_VALUE_FIELD_NAME,
-      type: FieldType.number,
-      config: {
-        unit: timeSeries.unit,
-      },
-      values: new ArrayVector<TimeSeriesValue>(values),
-      labels: timeSeries.tags,
-    },
-  ];
-
-  if (timeSeries.title) {
-    (fields[1].config as FieldConfig).displayNameFromDS = timeSeries.title;
-  }
-
-  return {
-    name: '',
-    refId: timeSeries.refId,
-    meta: timeSeries.meta,
-    fields,
-    length: values.length,
-  };
 }
 
 /**
@@ -150,7 +101,6 @@ export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,dat
       // Check whether f.values is an array or not to allow for each.
       // Check whether f.values is an array or not to allow for each.
       if (Array.isArray(f.values)) {
-        console.log(f.values)
         f.values.forEach((value: any) => {
 
           if (attribute) {
@@ -177,9 +127,7 @@ export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,dat
 }
 
 export function convertToTableData(items: any[], valueData?: any[]): TableData[] {
-  console.log("items",items)
   const response: TableData[] = items.map((item: any, index: number) => {
-    console.log("item",item)
     const columns = [{ text: 'StartTime' }, { text: 'EndTime' }];
     const rows = [item.StartTime, item.EndTime];
     if (valueData) {
@@ -199,7 +147,6 @@ export function convertToTableData(items: any[], valueData?: any[]): TableData[]
       rows: [rows],
     };
   });
-  console.log("response",response)
   return response;
 }
 

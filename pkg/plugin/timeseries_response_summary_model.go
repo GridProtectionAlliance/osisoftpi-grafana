@@ -1,7 +1,5 @@
 package plugin
 
-import "github.com/grafana/grafana-plugin-sdk-go/backend"
-
 type PiBatchDataSummaryItems struct {
 	Links map[string]interface{} `json:"Links"`
 	Items []struct {
@@ -36,7 +34,6 @@ func (p PiBatchDataSummaryItems) getUnits(typeFilter string) string {
 
 func (p PiBatchDataSummaryItems) getItems(typeFilter string) *[]PiBatchContentItem {
 	var items []PiBatchContentItem
-	backend.Logger.Info("summary, getItems", "typeFilter", typeFilter)
 	for _, item := range p.Items[0].Items {
 		if item.Type == typeFilter {
 			items = append(items, item.Value)
