@@ -251,7 +251,7 @@ func getValueType(Type string) reflect.Type {
 	case "Timestamp":
 		dataType = reflect.TypeOf([]time.Time{})
 	case "Digital":
-		dataType = reflect.TypeOf([]string{})
+		dataType = reflect.TypeOf([]int32{})
 	case "Blob":
 		dataType = reflect.TypeOf([]byte{})
 	default:

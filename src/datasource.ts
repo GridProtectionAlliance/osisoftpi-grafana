@@ -90,6 +90,13 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     };
   }
 
+  /**
+   * This method makes the query to the backend.
+   * 
+   * @param {DataQueryRequest<PIWebAPIQuery>}  options
+   *
+   * @memberOf PiWebApiDatasource
+   */
   query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
     if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
       return super.query(options);
@@ -214,7 +221,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       }
       const tar = {
         enableStreaming: target.enableStreaming,
-        target: this.templateSrv.replace(target.elementPath, options.scopedVars),
+        target: this.templateSrv.replace(target.target, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         attributes: map(target.attributes, (att) =>
           this.templateSrv.replace(att.value?.value || att, options.scopedVars)
@@ -230,7 +237,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid ?? '',
-        webids: target.webids || [],
         regex: target.regex || { enable: false },
         expression: target.expression || '',
         summary: target.summary || { types: [] },

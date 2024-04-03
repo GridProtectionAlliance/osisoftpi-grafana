@@ -66,13 +66,21 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 
 	if p.Status != http.StatusOK {
 		var errors *[]string
-		if ok {
-			errors, err = convertError(Content)
-			if err != nil {
-				return err
-			}
-		} else {
+		_, ok := rawData["Content"].(map[string]string)
+		if ok { // error is a string inside content
 			errors = &[]string{rawData["Content"].(string)}
+		} else {
+			_, ok := Content["Message"].(string)
+			if ok {
+				// error is a string inside Message object
+				errors = &[]string{Content["Message"].(string)}
+			} else {
+				// error is a string inside Error object
+				errors, err = convertError(Content)
+				if err != nil {
+					return err
+				}
+			}
 		}
 		p.Content = createPiBatchDataError(errors)
 		return nil

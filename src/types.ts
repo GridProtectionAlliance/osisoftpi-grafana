@@ -48,7 +48,6 @@ export interface PIWebAPIQuery extends DataQuery {
   isPiPoint?: boolean;
   isAnnotation?: boolean;
   webid?: string;
-  webids?: string[];
   display?: any;
   interpolate?: any;
   recordedValues?: any;
@@ -57,7 +56,7 @@ export interface PIWebAPIQuery extends DataQuery {
   useLastValue?: any;
   useUnit?: any;
   regex?: any;
-  summary?: any;
+  summary?: {nodata?: string, types?: any[], basis?: string, interval?: string};
   expression?: string;
   rawQuery?: boolean;
   query?: string;

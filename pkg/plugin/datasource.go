@@ -139,13 +139,6 @@ func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	// Pass the query to the query muxer.
-	return d.queryMux.QueryData(ctx, req)
-}
-
-// TODO: Missing functionality: Add Replace Bad Values
-// QueryTSData is called by Grafana when a user executes a time series data query.
-func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	// //TODO: Remove this debug information
 	// jsonReq, err := json.Marshal(req)
 	// if err != nil {
@@ -153,6 +146,13 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	// }
 	// backend.Logger.Info("QueryDataRequest: ", "REQUEST", string(jsonReq))
 	// end remove this debug information
+	// Pass the query to the query muxer.
+	return d.queryMux.QueryData(ctx, req)
+}
+
+// TODO: Missing functionality: Add Replace Bad Values
+// QueryTSData is called by Grafana when a user executes a time series data query.
+func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
 

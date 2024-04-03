@@ -42,7 +42,7 @@ func (q *Query) getIntervalTime() string {
 
 func (q *Query) getWindowedTimeStampURI() string {
 	// Potential Improvement: Make windowWidth a user input
-	const windowWidth = 40
+	windowWidth := q.getMaxDataPoints()
 	fromTime := q.TimeRange.From
 	toTime := q.TimeRange.To
 
@@ -188,6 +188,7 @@ type PiProcessedQuery struct {
 	Error               error
 	Index               int
 	Resource            string
+	Elements            []string
 	Regex               *Regex        `json:"Regex"`
 	Summary             *QuerySummary `json:"Summary"`
 }

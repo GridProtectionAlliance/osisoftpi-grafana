@@ -356,6 +356,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	webID := processedQuery.WebID
 	includeMetaData := processedQuery.UseUnit
 	digitalStates := processedQuery.DigitalStates
+	lenElements := len(processedQuery.Elements)
 	noDataReplace := processedQuery.getSummaryNoDataReplace()
 
 	digitalStateValues := make([]string, 0)
@@ -371,16 +372,26 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 
 	// get frame name
 	frameName := getDataLabel(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID), SummaryType)
+	dataFrameName := frameName["name"]
 
 	var labels map[string]string
 	var digitalState = d.getDigitalStateForWebID(webID)
 
-	dataFrameName := frameName["name"]
-	frame := data.NewFrame(dataFrameName)
+	var frame *data.Frame
+
+	if lenElements > 1 {
+		frame = data.NewFrame(processedQuery.Elements[lenElements-2] + "." + processedQuery.Elements[lenElements-1])
+	} else if lenElements > 0 {
+		frame = data.NewFrame(processedQuery.Elements[lenElements-1])
+	} else {
+		frame = data.NewFrame(dataFrameName)
+	}
 
 	if d.isUsingNewFormat() {
 		labels = frameName
 	}
+
+	backend.Logger.Debug("Convert", "frame", dataFrameName, "labels", labels, "type", sliceType.Elem().String())
 
 	for i, item := range items {
 		if item.Value == nil {
@@ -443,8 +454,9 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			}
 		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() {
-			backend.Logger.Warn("Mismatch type", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(), "SliceKind", fP.sliceType.Elem().String(), "item", item)
-			if compatible(fP.val.Type(), fP.sliceType.Elem()) {
+			backend.Logger.Warn("Mismatch type", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
+				"SliceKind", fP.sliceType.Elem().String(), "item", item)
+			if compatible(fP.val.Type(), fP.sliceType.Elem()) { // try to convert if numeric values
 				fP.timestamps = append(fP.timestamps, item.Timestamp)
 				fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val.Convert(fP.sliceType.Elem())).Interface()
 				fP.prevVal = fP.val

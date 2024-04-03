@@ -47,7 +47,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 
 	err = json.Unmarshal(tempJson, &PiQuery)
 	if err != nil {
-		log.DefaultLogger.Error("Error unmarshalling query", "error", err)
+		log.DefaultLogger.Error("Error unmarshalling query", "error", err, "json", string(tempJson))
 		piQuery := PiProcessedQuery{
 			Error: fmt.Errorf("error while processing the query"),
 		}
@@ -95,6 +95,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				IsPIPoint:           PiQuery.Pi.IsPiPoint,
 				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
 				FullTargetPath:      fullTargetPath,
+				Elements:            strings.Split(targetBasePath, `\`),
 				UseUnit:             UseUnits,
 				DigitalStates:       DigitalStates,
 				Display:             PiQuery.Pi.Display,
@@ -118,27 +119,30 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				// DATA FETCH
 				batchSubRequest := BatchSubRequest{
 					Method:   "GET",
-					Resource: baseUrl + PiQuery.getQueryBaseURL() + "&webid=" + WebID.WebID,
+					Resource: baseUrl + PiQuery.getQueryBaseURL() + WebID.WebID,
 					Headers: map[string]string{
 						"Asset-Path": fullTargetPath,
 					},
 				}
+				piQuery.Resource = batchSubRequest.Resource
 				piQuery.BatchRequest[dataId] = batchSubRequest
 			} else {
 				parentId := fmt.Sprintf("%s_Req%d", query.RefID, piQuery.Index)
 				parameter := "$." + parentId + ".Content.WebId"
 				// WEBID FETCH
-				var batchSubRequest = BatchSubRequest{
-					Method:   "GET",
+				piQuery.BatchRequest[parentId] = BatchSubRequest{
+					Method: "GET",
+					Headers: map[string]string{
+						"Cache-Control": "no-cache",
+					},
 					Resource: baseUrl + d.getRequestWebId(fullTargetPath, piQuery.IsPIPoint),
 				}
-				piQuery.BatchRequest[parentId] = batchSubRequest
 				// DATA FETCH
-				batchSubRequest = BatchSubRequest{
+				batchSubRequest := BatchSubRequest{
 					Method:     "GET",
 					ParentIds:  []string{parentId},
 					Parameters: []string{parameter},
-					Resource:   baseUrl + PiQuery.getQueryBaseURL() + "&webId={0}",
+					Resource:   baseUrl + PiQuery.getQueryBaseURL() + "{0}",
 				}
 				piQuery.Resource = batchSubRequest.Resource
 				piQuery.BatchRequest[dataId] = batchSubRequest
@@ -205,6 +209,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 				if WebIdData.Status == http.StatusOK {
 					PIWebAPIQueries[RefID][i].WebID = d.saveWebID(WebIdData.Content, query.FullTargetPath, query.IsPIPoint)
 				} else {
+					backend.Logger.Error("Batch request bad", "Content", WebIdData.Content)
 					jWebIdData, err := json.Marshal(WebIdData.Content)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
@@ -227,6 +232,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 				if ResponseData.Status == http.StatusOK {
 					PIWebAPIQueries[RefID][i].Response = ResponseData.Content.(PiBatchData)
 				} else {
+					backend.Logger.Error("Batch request bad", "Content", ResponseData.Content)
 					jResponseData, err := json.Marshal(ResponseData.Content)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
@@ -274,7 +280,7 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 				}
 
 				frame.RefID = RefID
-				frame.Meta.ExecutedQueryString = q.Resource
+				frame.Meta.ExecutedQueryString = strings.ReplaceAll(q.Resource, "{0}", q.WebID)
 
 				// TODO: enable streaming
 				// If the query is streamable, then we need to set the channel URI
@@ -597,11 +603,15 @@ func (q Query) getQueryBaseURL() string {
 				uri += "/times?" + q.getWindowedTimeStampURI()
 			}
 		}
-		uri += "&expression=" + url.QueryEscape(q.Pi.Expression)
+		uri += "&expression=" + url.QueryEscape(q.Pi.Expression) + "&"
 	} else {
 		uri += "streamsets"
 		if q.Pi.isUseLastValue() {
-			uri += "/value?time=" + q.getTimeRangeURIToComponent()
+			if q.Pi.isRecordedValues() {
+				uri += "/end?webId="
+			} else {
+				uri += "/value?time=" + q.getTimeRangeURIToComponent() + "&webId="
+			}
 		} else {
 			if q.Pi.isSummary() {
 				uri += "/summary" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
@@ -609,10 +619,11 @@ func (q Query) getQueryBaseURL() string {
 			} else if q.Pi.isInterpolated() {
 				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
-				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints())
+				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=Interpolated"
 			} else {
 				uri += "/plot" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 			}
+			uri += "&webId="
 		}
 	}
 	return uri
