@@ -1,6 +1,8 @@
 module github.com/GridProtectionAlliance/osisoftpi-grafana
 
-go 1.22
+go 1.21
+
+toolchain go1.22.0
 
 require (
 	github.com/go-co-op/gocron v1.37.0
