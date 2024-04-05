@@ -35,14 +35,14 @@ var (
 )
 
 // NewDatasource creates a new PIWebAPI datasource instance.
-func NewPIWebAPIDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	var dataSourceOptions PIWebAPIDataSourceJsonData
 	err := json.Unmarshal(settings.JSONData, &dataSourceOptions)
 	if err != nil {
 		return nil, fmt.Errorf("http Unmarshal: %w", err)
 	}
 
-	opts, err := settings.HTTPClientOptions()
+	opts, err := settings.HTTPClientOptions(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("http client options: %w", err)
 	}

@@ -425,8 +425,6 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 			}
 		}
 
-		backend.Logger.Debug("Converting Items to Data frame", "item", item)
-
 		// if the value isn't good, or is not the same type as the slice,
 		// add it to the list of bad values and nullify later
 		//TODO we should make this pattern match the query options

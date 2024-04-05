@@ -42,7 +42,7 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 		return ProcessedQuery
 	}
 
-	var attributes []string
+	var attributes []QueryProperties
 
 	if PiAnnotationQuery.JSON.Attribute.Name != "" && PiAnnotationQuery.JSON.Attribute.Enable {
 		// Splitting by comma
@@ -54,7 +54,13 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 			if name == "" {
 				continue
 			}
-			attributes = append(attributes, strings.TrimSpace(name))
+			attribute := QueryProperties{
+				Label: strings.TrimSpace(name),
+				Value: QueryPropertiesValue{
+					Value: strings.TrimSpace(name),
+				},
+			}
+			attributes = append(attributes, attribute)
 		}
 	}
 
@@ -148,7 +154,7 @@ func (q PiProcessedAnnotationQuery) getEventFrameAttributeQueryURL() ([]string, 
 
 	for _, attribute := range q.Attributes {
 		var uri string
-		uri += "streamsets/{0}/value?selectedFields=Items.Value%3BItems.Name&nameFilter=" + attribute
+		uri += "streamsets/{0}/value?selectedFields=Items.Value%3BItems.Name&nameFilter=" + attribute.Value.Value
 		URIs = append(URIs, uri)
 	}
 	return URIs, nil

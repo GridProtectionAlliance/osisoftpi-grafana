@@ -98,6 +98,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @memberOf PiWebApiDatasource
    */
   query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
+    console.log('OSISOFT QUERY');
+  
     if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
       return super.query(options);
     }
@@ -106,7 +108,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (query.targets.length <= 0) {
       return of({ data: [] });
     }
-  
+
+    console.log('OSISOFT QUERY', query);
+
     return super.query(query);
   }
 
@@ -213,6 +217,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       return !target.target.startsWith('Select AF');
     });
 
+    if (options.maxDataPoints) {
+      options.maxDataPoints = options.maxDataPoints > 30000 ? 30000 : options.maxDataPoints;
+    }
     options.targets = map(options.targets, (target) => {
       if (!!target.rawQuery && !!target.target) {
         const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
@@ -223,11 +230,19 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         enableStreaming: target.enableStreaming,
         target: this.templateSrv.replace(target.target, options.scopedVars),
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        attributes: map(target.attributes, (att) =>
-          this.templateSrv.replace(att.value?.value || att, options.scopedVars)
-        ),
+        attributes: map(target.attributes, (att) => {
+          if (att.value) {
+            this.templateSrv.replace(att.value.value, options.scopedVars)
+          }
+          return att;
+        }),
+        segments: map(target.segments, (att) => {
+          if (att.value) {
+            this.templateSrv.replace(att.value.value, options.scopedVars)
+          }
+          return att;
+        }),
         isAnnotation: !!target.isAnnotation,
-        segments: map(target.segments, (att) => this.templateSrv.replace(att.value?.value, options.scopedVars)),
         display: !!target.display ? this.templateSrv.replace(target.display, options.scopedVars) : undefined,
         refId: target.refId,
         hide: target.hide,

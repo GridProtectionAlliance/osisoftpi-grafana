@@ -92,7 +92,7 @@ type PiProcessedAnnotationQuery struct {
 	Template          EventFrameTemplate `json:"Template"`
 	CategoryName      string             `json:"categoryName"`
 	NameFilter        string             `json:"nameFilter"`
-	Attributes        []string           `json:"attributes"`
+	Attributes        []QueryProperties  `json:"attributes"`
 	AttributesEnabled bool               `json:"attributesEnabled"`
 	Error             error              `json:"Error"`
 }

@@ -100,7 +100,7 @@ func (q *PiProcessedQuery) getSummaryNoDataReplace() string {
 }
 
 type PIWebAPIQuery struct {
-	Attributes []string `json:"attributes"`
+	Attributes []QueryProperties `json:"attributes"`
 	Datasource struct {
 		Type string `json:"type"`
 		UID  string `json:"uid"`
@@ -128,13 +128,13 @@ type PIWebAPIQuery struct {
 		Enable    *bool `json:"enable"`
 		MaxNumber *int  `json:"maxNumber"`
 	} `json:"recordedValues"`
-	RefID    *string       `json:"refId"`
-	Regex    *Regex        `json:"regex"`
-	Segments *[]string     `json:"segments"`
-	Summary  *QuerySummary `json:"summary"`
-	Target   *string       `json:"target"`
-	Display  *string       `json:"display"`
-	UseUnit  *struct {
+	RefID *string `json:"refId"`
+	Regex *Regex  `json:"regex"`
+	// Segments *[]string     `json:"segments"`
+	Summary *QuerySummary `json:"summary"`
+	Target  *string       `json:"target"`
+	Display *string       `json:"display"`
+	UseUnit *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 }
@@ -144,6 +144,15 @@ type QuerySummary struct {
 	Interval *string        `json:"interval"`
 	Nodata   *string        `json:"nodata"`
 	Types    *[]SummaryType `json:"types"`
+}
+
+type QueryPropertiesValue struct {
+	Value string `json:"value"`
+}
+
+type QueryProperties struct {
+	Label string               `json:"label"`
+	Value QueryPropertiesValue `json:"value"`
 }
 
 type SummaryType struct {
