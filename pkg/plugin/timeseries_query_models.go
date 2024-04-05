@@ -197,7 +197,7 @@ type PiProcessedQuery struct {
 	Error               error
 	Index               int
 	Resource            string
-	Elements            []string
+	TargetPath          string
 	Regex               *Regex        `json:"Regex"`
 	Summary             *QuerySummary `json:"Summary"`
 }

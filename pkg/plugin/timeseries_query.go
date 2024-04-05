@@ -95,7 +95,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				IsPIPoint:           PiQuery.Pi.IsPiPoint,
 				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
 				FullTargetPath:      fullTargetPath,
-				Elements:            strings.Split(targetBasePath, `\`),
+				TargetPath:          targetBasePath,
 				UseUnit:             UseUnits,
 				DigitalStates:       DigitalStates,
 				Display:             PiQuery.Pi.Display,
@@ -320,7 +320,7 @@ func (q *PIWebAPIQuery) isSummary() bool {
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
-func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
+func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
 	var frameLabel map[string]string
 	summaryNewFormat := ""
 
@@ -336,7 +336,7 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 			targetParts := strings.Split(q.FullTargetPath, `\`)
 			frameLabel = map[string]string{
 				"element": targetParts[0],
-				"name":    targetParts[len(targetParts)-1],
+				"name":    q.Label,
 				"type":    pointType + summaryNewFormat,
 			}
 		} else {
@@ -346,14 +346,15 @@ func getDataLabel(useNewFormat bool, q *PiProcessedQuery, pointType string, summ
 			labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
 			frameLabel = map[string]string{
 				"element": labelParts[0],
-				"name":    labelParts[1],
+				"name":    q.Label,
 				"type":    pointType + summaryNewFormat,
 			}
 		}
 	} else {
 		// Old format returns just the tag/attribute name
 		frameLabel = map[string]string{
-			"name": q.Label + summaryLabel,
+			"element": q.TargetPath,
+			"name":    q.Label + summaryLabel,
 		}
 	}
 

@@ -356,7 +356,6 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	webID := processedQuery.WebID
 	includeMetaData := processedQuery.UseUnit
 	digitalStates := processedQuery.DigitalStates
-	lenElements := len(processedQuery.Elements)
 	noDataReplace := processedQuery.getSummaryNoDataReplace()
 
 	digitalStateValues := make([]string, 0)
@@ -371,24 +370,15 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	}
 
 	// get frame name
-	frameName := getDataLabel(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID), SummaryType)
-	dataFrameName := frameName["name"]
+	frameLabel := getDataLabels(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID), SummaryType)
+	dataFrameName := frameLabel["name"]
 
 	var labels map[string]string
 	var digitalState = d.getDigitalStateForWebID(webID)
 
-	var frame *data.Frame
-
-	if lenElements > 1 {
-		frame = data.NewFrame(processedQuery.Elements[lenElements-2] + "." + processedQuery.Elements[lenElements-1])
-	} else if lenElements > 0 {
-		frame = data.NewFrame(processedQuery.Elements[lenElements-1])
-	} else {
-		frame = data.NewFrame(dataFrameName)
-	}
-
+	frame := data.NewFrame(processedQuery.TargetPath)
 	if d.isUsingNewFormat() {
-		labels = frameName
+		labels = frameLabel
 	}
 
 	backend.Logger.Debug("Convert", "frame", dataFrameName, "labels", labels, "type", sliceType.Elem().String())
