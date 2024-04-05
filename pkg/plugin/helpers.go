@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -351,6 +352,55 @@ func compatible(actual reflect.Type, expected reflect.Type) bool {
 		a == reflect.Float64)
 }
 
+func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
+	var frameLabel map[string]string
+	summaryNewFormat := ""
+
+	if summaryLabel != "" {
+		summaryNewFormat = "\" summaryType=\"" + summaryLabel
+		summaryLabel = "[" + summaryLabel + "]"
+	}
+
+	var label string
+	if useNewFormat {
+		label = q.Label
+	} else {
+		label = q.Label + summaryLabel
+	}
+
+	if q.IsPIPoint {
+		// New format returns the full path with metadata
+		// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
+		targetParts := strings.Split(q.FullTargetPath, `\`)
+		frameLabel = map[string]string{
+			"element": targetParts[0],
+			"name":    label,
+			"type":    pointType + summaryNewFormat,
+		}
+	} else {
+		// New format returns the full path with metadata
+		// Element|Attribute {element="Element", name="Attribute", type="Single"}
+		targetParts := strings.Split(q.FullTargetPath, `\`)
+		labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
+		frameLabel = map[string]string{
+			"element": labelParts[0],
+			"name":    label,
+			"type":    pointType + summaryNewFormat,
+		}
+	}
+
+	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
+	// FIXME: This is working, but graph panels seem to not render the trend.
+	if q.isRegexQuery() {
+		regex := regexp.MustCompile(*q.Regex.Search)
+		frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
+	} else if q.Display != nil && strings.TrimSpace(*q.Display) != "" {
+		// Old format with display name
+		frameLabel["name"] = strings.TrimSpace(*q.Display)
+	}
+	return frameLabel
+}
+
 func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) (*data.Frame, error) {
 	items := *processedQuery.Response.getItems(SummaryType)
 	webID := processedQuery.WebID
@@ -371,17 +421,14 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 
 	// get frame name
 	frameLabel := getDataLabels(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID), SummaryType)
-	dataFrameName := frameLabel["name"]
 
 	var labels map[string]string
 	var digitalState = d.getDigitalStateForWebID(webID)
 
-	frame := data.NewFrame(frameLabel["element"])
+	frame := data.NewFrame("")
 	if d.isUsingNewFormat() {
 		labels = frameLabel
 	}
-
-	backend.Logger.Debug("Convert", "frame", dataFrameName, "labels", labels, "type", sliceType.Elem().String())
 
 	for i, item := range items {
 		if item.Value == nil {
@@ -464,21 +511,20 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
 
-	fieldConfig := &data.FieldConfig{}
-	if includeMetaData {
-		fieldConfig.Unit = d.getUnitsForWebID(webID)
-		fieldConfig.Description = d.getDescriptionForWebID(webID)
-	}
-
 	timeField := data.NewField("time", nil, fP.timestamps)
 	if !digitalState || !digitalStates {
-		valueField := data.NewField(dataFrameName, labels, valuepointers)
+		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
 		frame.Fields = append(frame.Fields,
 			timeField,
 			valueField,
 		)
 	} else {
-		valueField := data.NewField(dataFrameName, labels, digitalStateValues)
+		fieldConfig := &data.FieldConfig{}
+		if includeMetaData {
+			fieldConfig.Unit = d.getUnitsForWebID(webID)
+			fieldConfig.Description = d.getDescriptionForWebID(webID)
+		}
+		valueField := data.NewField(frameLabel["name"], labels, digitalStateValues)
 		valueField.SetConfig(fieldConfig)
 		frame.Fields = append(frame.Fields,
 			timeField,

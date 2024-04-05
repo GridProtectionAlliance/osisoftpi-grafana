@@ -319,56 +319,6 @@ func (q *PIWebAPIQuery) isSummary() bool {
 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
-func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
-	var frameLabel map[string]string
-	summaryNewFormat := ""
-
-	if summaryLabel != "" {
-		summaryNewFormat = "\" summaryType=\"" + summaryLabel
-		summaryLabel = "[" + summaryLabel + "]"
-	}
-
-	if useNewFormat {
-		if q.IsPIPoint {
-			// New format returns the full path with metadata
-			// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
-			targetParts := strings.Split(q.FullTargetPath, `\`)
-			frameLabel = map[string]string{
-				"element": targetParts[0],
-				"name":    q.Label,
-				"type":    pointType + summaryNewFormat,
-			}
-		} else {
-			// New format returns the full path with metadata
-			// Element|Attribute {element="Element", name="Attribute", type="Single"}
-			targetParts := strings.Split(q.FullTargetPath, `\`)
-			labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
-			frameLabel = map[string]string{
-				"element": labelParts[0],
-				"name":    q.Label,
-				"type":    pointType + summaryNewFormat,
-			}
-		}
-	} else {
-		// Old format returns just the tag/attribute name
-		frameLabel = map[string]string{
-			"element": q.Label,
-			"name":    q.Label + summaryLabel,
-		}
-	}
-
-	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
-	// FIXME: This is working, but graph panels seem to not render the trend.
-	if q.isRegexQuery() {
-		regex := regexp.MustCompile(*q.Regex.Search)
-		frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
-	} else if q.Display != nil && strings.TrimSpace(*q.Display) != "" {
-		// Old format with display name
-		frameLabel["name"] = strings.TrimSpace(*q.Display)
-	}
-	return frameLabel
-}
-
 // PiProcessedQuery isRegex returns true if the query is a regex query and is enabled
 func (q *PiProcessedQuery) isRegex() bool {
 	if q.Regex == nil {
