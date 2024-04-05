@@ -168,7 +168,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 	}
 
 	// request the data from the PI Web API
-	batchRequestResponse, err := d.apiBatchRequest(ctx, batchRequest)
+	batchRequestResponse, err := apiBatchRequest(ctx, d, batchRequest)
 
 	// process response
 	if err != nil {

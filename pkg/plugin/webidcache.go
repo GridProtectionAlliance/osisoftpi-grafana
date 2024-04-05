@@ -173,62 +173,6 @@ func (d *Datasource) _saveWebID(data interface{}, path string, isPiPoint bool) s
 	return entry.WebID
 }
 
-// func (d *Datasource) getWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
-// 	entry, ok := d.webIDCache.webIDCache[path]
-
-// 	if ok && time.Now().Before(entry.ExpTime) {
-// 		log.DefaultLogger.Debug("WebID cache hit", "path", path)
-// 		d.webIDCache.webIDPaths[entry.WebID] = path
-// 		return entry, nil
-// 	}
-// 	entry = WebIDCacheEntry{}
-// 	c, err := d.requestWebID(ctx, path, isPiPoint)
-// 	if err != nil {
-// 		log.DefaultLogger.Error("WebID cache error", "path", path, "error", err)
-// 		return entry, err
-// 	}
-// 	if c.WebID == "" {
-// 		err = errors.New("WebID not found")
-// 		log.DefaultLogger.Error("WebID cache error", "path", path, "error", err)
-// 		return entry, err
-// 	}
-// 	d.webIDCache.webIDCache[path] = c
-// 	d.webIDCache.webIDPaths[c.WebID] = path
-// 	return c, nil
-// }
-
-// func (d *Datasource) requestWebID(ctx context.Context, path string, isPiPoint bool) (WebIDCacheEntry, error) {
-// 	uri := ""
-// 	if isPiPoint {
-// 		uri = `points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=\\`
-// 		uri += strings.Replace(strings.Replace(path, "|", `\`, -1), ";", `\`, -1)
-// 	} else {
-// 		uri = `attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=\\`
-// 		uri += path
-// 	}
-// 	r, e := d.apiGet(ctx, uri)
-// 	if e != nil {
-// 		return WebIDCacheEntry{}, e
-// 	}
-// 	var response WebIDResponse
-// 	if isPiPoint {
-// 		response = &WebIDResponsePiPoint{}
-// 	} else {
-// 		response = &WebIDResponseAttribute{}
-// 	}
-// 	json.Unmarshal(r, &response)
-
-// 	return WebIDCacheEntry{
-// 		Path:         path,
-// 		WebID:        response.getWebID(),
-// 		Type:         getValueType(response.getType()),
-// 		DigitalState: response.getDigitalSetName() != "",
-// 		ExpTime:      time.Now().Add(d.webIDCache.duration),
-// 		PointType:    response.getType(),
-// 		Units:        response.getUnits(),
-// 	}, nil
-// }
-
 func getValueType(Type string) reflect.Type {
 	var dataType reflect.Type
 	switch Type {

@@ -216,7 +216,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 
 		span.AddEvent("Generated PI API URL for annotation query")
 
-		r, err := d.apiBatchRequest(ctx, batchReq)
+		r, err := apiBatchRequest(ctx, d, batchReq)
 		if err != nil {
 			return nil, fmt.Errorf("error getting data from PI Web API: %w", err)
 		}
@@ -280,7 +280,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 		})
 	}
 
-	r, err := d.apiGet(ctx, req.URL)
+	r, err := apiGet(ctx, d, req.URL)
 	if err != nil {
 		return err
 	}

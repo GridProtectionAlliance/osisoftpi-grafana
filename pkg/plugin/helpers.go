@@ -54,7 +54,7 @@ func replaceAccentsWithEscape(s string) string {
 
 // apiGet performs a GET request against the PI Web API. It returns the response body as a byte slice.
 // If the request fails, an error is returned.
-func (d Datasource) apiGet(ctx context.Context, path string) ([]byte, error) {
+func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
 	var uri = d.settings.URL
 	var pathEscaped = replaceAccentsWithEscape(path)
 	if strings.HasSuffix(uri, "/") {
@@ -86,7 +86,7 @@ func (d Datasource) apiGet(ctx context.Context, path string) ([]byte, error) {
 
 // apiBatchRequest performs a batch request against the PI Web API. It returns the response body as a byte slice.
 // If the request fails, an error is returned.
-func (d *Datasource) apiBatchRequest(ctx context.Context, BatchSubRequests interface{}) ([]byte, error) {
+func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interface{}) ([]byte, error) {
 	var uri = d.settings.URL
 	if strings.HasSuffix(uri, "/") {
 		uri = uri + "batch"
