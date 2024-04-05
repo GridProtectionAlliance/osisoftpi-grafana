@@ -515,15 +515,15 @@ func (q *PIWebAPIQuery) getTargetBasePaths() []string {
 	return []string{basePath}
 }
 
-func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
-	fullTargetPath := q.getBasePath()
-	if q.IsPiPoint {
-		fullTargetPath += `\` + target
-	} else {
-		fullTargetPath += "|" + target
-	}
-	return fullTargetPath
-}
+// func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
+// 	fullTargetPath := q.getBasePath()
+// 	if q.IsPiPoint {
+// 		fullTargetPath += `\` + target
+// 	} else {
+// 		fullTargetPath += "|" + target
+// 	}
+// 	return fullTargetPath
+// }
 
 func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	if q.IsPiPoint {
@@ -532,17 +532,17 @@ func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	return "|"
 }
 
-func (q *PIWebAPIQuery) getTargets() []string {
-	if q.Target == nil {
-		return nil
-	}
+// func (q *PIWebAPIQuery) getTargets() []string {
+// 	if q.Target == nil {
+// 		return nil
+// 	}
 
-	semiIndex := strings.Index(*q.Target, ";")
-	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
-		return nil
-	}
-	return strings.Split((*q.Target)[semiIndex+1:], ";")
-}
+// 	semiIndex := strings.Index(*q.Target, ";")
+// 	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
+// 		return nil
+// 	}
+// 	return strings.Split((*q.Target)[semiIndex+1:], ";")
+// }
 
 func (q *PIWebAPIQuery) checkNilSegments() bool {
 	return q.Target == nil

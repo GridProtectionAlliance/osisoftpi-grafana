@@ -79,15 +79,15 @@ func (q *Query) isStreamable() bool {
 	return !q.Pi.isExpression() && q.isstreamingEnabled()
 }
 
-func (q *PiProcessedQuery) isSummary() bool {
-	if q.Summary == nil {
-		return false
-	}
-	if q.Summary.Types == nil {
-		return false
-	}
-	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
-}
+// func (q *PiProcessedQuery) isSummary() bool {
+// 	if q.Summary == nil {
+// 		return false
+// 	}
+// 	if q.Summary.Types == nil {
+// 		return false
+// 	}
+// 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
+// }
 
 func (q *PiProcessedQuery) getSummaryNoDataReplace() string {
 	if q.Summary == nil {
