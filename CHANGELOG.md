@@ -39,7 +39,7 @@
 - Fixed issue that only odd attributes were been shown
 - Fixed issue when fetching afServerWebId
 
-## 5.0.0-alpha
+## 5.0.0-beta
 
-- Migrated backend to Go language (still alpha)
+- Migrated backend to Go language (still beta)
 - Changed the query editor layout
