@@ -1,6 +1,6 @@
 {
   "name": "grid-protection-alliance-osisoftpi-grafana",
-  "version": "5.0.0-alpha",
+  "version": "5.0.0-beta",
   "description": "OSISoft PI Grafana Plugin",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
