@@ -1,5 +1,5 @@
 import { DataQuery } from '@grafana/schema';
-import { DataSourceJsonData } from '@grafana/data';
+import { DataSourceJsonData, SelectableValue } from '@grafana/data';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -43,7 +43,7 @@ export interface PIWebAPIAnnotationsQuery extends DataQuery {
 export interface PIWebAPIQuery extends DataQuery {
   target?: string;
   elementPath?: string;
-  attributes?: any[];
+  attributes?: Array<SelectableValue<PIWebAPISelectableValue>>;
   segments?: any[];
   isPiPoint?: boolean;
   isAnnotation?: boolean;

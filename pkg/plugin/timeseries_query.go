@@ -86,7 +86,6 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 	for i, targetBasePath := range PiQuery.Pi.getTargetBasePaths() {
 		for j, attribute := range PiQuery.Pi.Attributes {
 			fullTargetPath := targetBasePath + PiQuery.Pi.getTargetPathSeparator() + attribute.Value.Value
-			backend.Logger.Debug("Process Query", "Summary", PiQuery.Pi.Summary)
 			// Create a processed query for the target
 			piQuery := PiProcessedQuery{
 				Label:               attribute.Value.Value,

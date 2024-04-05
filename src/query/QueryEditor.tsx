@@ -8,6 +8,7 @@ import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
 import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
+import { parseRawQuery } from 'helper';
 
 const LABEL_WIDTH = 24;
 const MIN_ELEM_INPUT_WIDTH = 200;
@@ -887,6 +888,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
     if (query.rawQuery) {
       query.target = query.query ?? '';
+      if (!!query.query) {
+        const { attributes, elementPath } = parseRawQuery(query.target);
+        query.attributes = attributes;
+        query.elementPath = elementPath;
+      }
     } else {
       query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
       query.target =
@@ -903,6 +909,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     }
 
     onChange({...query, summary});
+
+    console.log('QUERY', query.elementPath, query.attributes, query.target);
 
     if (this.isValidQuery(query)) {
       onRunQuery();

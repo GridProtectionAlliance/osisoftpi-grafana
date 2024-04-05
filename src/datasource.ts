@@ -97,9 +97,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    *
    * @memberOf PiWebApiDatasource
    */
-  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
-    console.log('OSISOFT QUERY');
-  
+  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> { 
     if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
       return super.query(options);
     }
@@ -108,8 +106,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (query.targets.length <= 0) {
       return of({ data: [] });
     }
-
-    console.log('OSISOFT QUERY', query);
 
     return super.query(query);
   }
@@ -221,11 +217,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       options.maxDataPoints = options.maxDataPoints > 30000 ? 30000 : options.maxDataPoints;
     }
     options.targets = map(options.targets, (target) => {
-      if (!!target.rawQuery && !!target.target) {
-        const { attributes, elementPath } = parseRawQuery(this.templateSrv.replace(target.target, options.scopedVars));
-        target.attributes = attributes;
-        target.elementPath = elementPath;
-      }
       const tar = {
         enableStreaming: target.enableStreaming,
         target: this.templateSrv.replace(target.target, options.scopedVars),
