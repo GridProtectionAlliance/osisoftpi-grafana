@@ -376,7 +376,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	var labels map[string]string
 	var digitalState = d.getDigitalStateForWebID(webID)
 
-	frame := data.NewFrame(processedQuery.TargetPath)
+	frame := data.NewFrame(frameLabel["element"])
 	if d.isUsingNewFormat() {
 		labels = frameLabel
 	}

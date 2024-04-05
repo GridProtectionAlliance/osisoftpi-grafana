@@ -352,7 +352,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 	} else {
 		// Old format returns just the tag/attribute name
 		frameLabel = map[string]string{
-			"element": q.TargetPath,
+			"element": q.Label,
 			"name":    q.Label + summaryLabel,
 		}
 	}
