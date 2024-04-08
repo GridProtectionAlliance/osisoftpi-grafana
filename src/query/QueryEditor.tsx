@@ -2,12 +2,13 @@ import { each, filter, forOwn, join, reduce, map, slice, remove, defaults } from
 
 import React, { PureComponent, ChangeEvent } from 'react';
 import { Icon, InlineField, InlineFieldRow, InlineSwitch, Input, SegmentAsync, Segment } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue, VariableModel } from '@grafana/data';
+import { QueryEditorProps, SelectableValue, TypedVariableModel } from '@grafana/data';
 
 import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
 import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
+import { parseRawQuery } from 'helper';
 
 const LABEL_WIDTH = 24;
 const MIN_ELEM_INPUT_WIDTH = 200;
@@ -115,16 +116,21 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     this.setState({ segments }, () => this.onChange({ ...query, segments }));
   };
 
-  attributeChangeValue = (attributes: Array<SelectableValue<PIWebAPISelectableValue>>) => {
+  attributeChangeValue = (attributes: Array<SelectableValue<PIWebAPISelectableValue>>): Promise<void> => {
     const query = this.props.query;
-    this.setState({ attributes }, () => this.onChange({ ...query, attributes }));
+    return new Promise((resolve) => this.setState({ attributes }, () => {
+      this.onChange({ ...query, attributes })
+      resolve();
+    }));
   };
 
   // summary calculation basis change event
   calcBasisValueChanged(segment: SelectableValue<PIWebAPISelectableValue>) {
     const metricsQuery = this.props.query as PIWebAPIQuery;
     const summary = metricsQuery.summary;
-    summary.basis = segment.value?.value;
+    if (summary) {
+      summary.basis = segment.value?.value;
+    }
     this.onChange({ ...metricsQuery, summary });
   }
   // get summary calculation basis user interface segments
@@ -146,7 +152,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   calcNoDataValueChanged(segment: SelectableValue<PIWebAPISelectableValue>) {
     const metricsQuery = this.props.query as PIWebAPIQuery;
     const summary = metricsQuery.summary;
-    summary.nodata = segment.value?.value;
+    if (summary) {
+      summary.nodata = segment.value?.value;
+    }
     this.onChange({ ...metricsQuery, summary });
   }
   // get no data user interface segments
@@ -399,7 +407,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {
@@ -468,7 +476,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         }
         // add template variables
         const variables = datasource.templateSrv.getVariables();
-        each(variables, (variable: VariableModel) => {
+        each(variables, (variable: TypedVariableModel) => {
           let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
             label: '${' + variable.name + '}',
             value: {
@@ -621,11 +629,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         });
 
         ctrl.availableAttributes = validAttributes;
-        this.attributeChangeValue(filteredAttributes);
+        return this.attributeChangeValue(filteredAttributes);
       })
       .catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query';
-        this.attributeChangeValue(attributes);
+        return this.attributeChangeValue(attributes);
       });
   }
 
@@ -651,11 +659,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: true }))
       .then(() => {
-        ctrl.attributeChangeValue(attributes);
+        return ctrl.attributeChangeValue(attributes);
       })
       .catch((err: any) => {
         ctrl.error = err.message || 'Failed to issue metric query';
-        ctrl.attributeChangeValue([]);
+        return ctrl.attributeChangeValue([]);
       });
   }
 
@@ -685,7 +693,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PIWebAPIQueryEditor
    */
   textEditorChanged() {
-    const { query, onChange } = this.props;
+    const { query } = this.props;
     const splitAttributes = query.target!.split(';');
     const splitElements = splitAttributes.length > 0 ? splitAttributes[0].split('\\') : [];
 
@@ -730,7 +738,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         })
         .then(() => {
           this.updateArray(segments, attributes, this.state.summaries, query.isPiPoint!, () => {
-            onChange({ ...query, query: undefined, rawQuery: false });
+            this.onChange({
+              ...query,
+              query: undefined,
+              rawQuery: false,
+              attributes: this.state.attributes,
+              segments: this.state.segments,
+            });
           });
         });
     } else {
@@ -872,9 +886,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   onChange = (query: PIWebAPIQuery) => {
     const { onChange, onRunQuery } = this.props;
 
-    query.summary.types = this.state.summaries;
     if (query.rawQuery) {
       query.target = query.query ?? '';
+      if (!!query.query) {
+        const { attributes, elementPath } = parseRawQuery(query.target);
+        query.attributes = attributes;
+        query.elementPath = elementPath;
+      }
     } else {
       query.elementPath = this.getSegmentPathUpTo(this.state.segments, this.state.segments.length);
       query.target =
@@ -885,13 +903,28 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           ';'
         );
     }
+    const summary = query.summary;
+    if (summary) {
+      summary.types = this.state.summaries;
+    }
 
-    onChange(query);
+    onChange({...query, summary});
 
-    if (query.target && query.target.length > 0) {
+    console.log('QUERY', query.elementPath, query.attributes, query.target);
+
+    if (this.isValidQuery(query)) {
       onRunQuery();
     }
   };
+
+  isValidQuery = (query: PIWebAPIQuery): boolean => {
+    if (query.target && query.target.length > 0 && query.target !== ";") {
+      query.target = query.target.trim();
+      const targetSplit = query.target.split(";", 2);
+      return targetSplit.length === 2 && targetSplit[0].length > 0 && targetSplit[1].length > 0;
+    }
+    return false;
+  }
 
   stateCallback = () => {
     const query = this.props.query as PIWebAPIQuery;
@@ -929,6 +962,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       query,
       rawQuery,
       digitalStates,
+      enableStreaming,
       recordedValues,
       expression,
       isPiPoint,
@@ -1060,6 +1094,26 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         <InlineFieldRow>
           <InlineField
+            label="Calculation"
+            grow={true}
+            labelWidth={LABEL_WIDTH}
+            tooltip={
+              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+            }
+          >
+            <Input
+              onBlur={onRunQuery}
+              value={expression}
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                onChange({ ...metricsQuery, expression: event.target.value })
+              }
+              placeholder="'.'*2"
+            />
+          </InlineField>
+        </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField
             label="Use Last Value"
             tooltip={"Fetch only last value from time range"}
             labelWidth={LABEL_WIDTH}
@@ -1072,6 +1126,29 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   useLastValue: { ...useLastValue, enable: !useLastValue.enable },
                 })
               }
+            />
+          </InlineField>
+          <InlineField label="Digital States" labelWidth={LABEL_WIDTH}>
+            <InlineSwitch
+              value={digitalStates.enable}
+              onChange={() =>
+                this.onChange({
+                  ...metricsQuery,
+                  digitalStates: { ...digitalStates, enable: !digitalStates.enable },
+                })
+              }
+            />
+          </InlineField>
+          <InlineField
+            label="Replace Bad Data"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Replacement for bad quality values.'}
+          >
+            <Segment
+              Component={<CustomLabelComponent value={{ value: summary?.nodata }} label={summary?.nodata} />}
+              onChange={this.calcNoDataValueChanged}
+              options={this.getNoDataSegments()}
+              allowCustomValue
             />
           </InlineField>
           {this.props.datasource.useUnitConfig && (
@@ -1091,168 +1168,142 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               />
             </InlineField>
           )}
+          {this.props.datasource.useStreaming && (
+            <InlineField 
+              label="Enable Streaming" 
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Enable streaming data if it is supported for the point type.'}
+            >
+              <InlineSwitch
+                value={enableStreaming.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
+                }
+              />
+            </InlineField>
+          )}
         </InlineFieldRow>
 
         <InlineFieldRow>
-          <InlineField
-            label="Calculation"
+          {!useLastValue.enable && (
+            <InlineField
+            label="Max Recorded Values"
             labelWidth={LABEL_WIDTH}
             tooltip={
-              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
+              'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
             }
           >
-            <Input
-              onBlur={onRunQuery}
-              value={expression}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                onChange({ ...metricsQuery, expression: event.target.value })
+              <Input
+                onBlur={onRunQuery}
+                value={recordedValues.maxNumber}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({
+                    ...metricsQuery,
+                    recordedValues: { ...recordedValues, maxNumber: parseInt(event.target.value, 10) },
+                  })
+                }
+                type="number"
+                placeholder="1000"
+              />
+            </InlineField>
+          )}
+          <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
+            <InlineSwitch
+              value={recordedValues.enable}
+              onChange={() =>
+                this.onChange({
+                  ...metricsQuery,
+                  recordedValues: { ...recordedValues, enable: !recordedValues.enable },
+                })
               }
-              placeholder="'.'*2"
             />
           </InlineField>
         </InlineFieldRow>
 
         {!useLastValue.enable && (
-          <>
-            <InlineFieldRow>
-              <InlineField
-                label="Max Recorded Values"
-                labelWidth={LABEL_WIDTH}
-                tooltip={
-                  'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
+          <InlineFieldRow>
+            <InlineField
+              label={!!expression ? "Interval Period" : "Interpolate Period"}
+              labelWidth={LABEL_WIDTH}
+              tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
+            >
+              <Input
+                onBlur={onRunQuery}
+                value={interpolate.interval}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
                 }
-              >
-                <Input
-                  onBlur={onRunQuery}
-                  value={recordedValues.maxNumber}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    onChange({
-                      ...metricsQuery,
-                      recordedValues: { ...recordedValues, maxNumber: parseInt(event.target.value, 10) },
-                    })
-                  }
-                  type="number"
-                  placeholder="1000"
-                />
-              </InlineField>
-              <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
-                <InlineSwitch
-                  value={recordedValues.enable}
-                  onChange={() =>
-                    this.onChange({
-                      ...metricsQuery,
-                      recordedValues: { ...recordedValues, enable: !recordedValues.enable },
-                    })
-                  }
-                />
-              </InlineField>
-              <InlineField label="Digital States" labelWidth={LABEL_WIDTH}>
-                <InlineSwitch
-                  value={digitalStates.enable}
-                  onChange={() =>
-                    this.onChange({
-                      ...metricsQuery,
-                      digitalStates: { ...digitalStates, enable: !digitalStates.enable },
-                    })
-                  }
-                />
-              </InlineField>
-            </InlineFieldRow>
+                placeholder="30s"
+              />
+            </InlineField>
+            <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
+              <InlineSwitch
+                value={interpolate.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable } })
+                }
+              />
+            </InlineField>
+          </InlineFieldRow>
+        )}
 
-            <InlineFieldRow>
-              <InlineField
-                label={!!expression ? "Interval Period" : "Interpolate Period"}
-                labelWidth={LABEL_WIDTH}
-                tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
-              >
-                <Input
-                  onBlur={onRunQuery}
-                  value={interpolate.interval}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
-                  }
-                  placeholder="30s"
-                />
-              </InlineField>
-              <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
-                <InlineSwitch
-                  value={interpolate.enable}
-                  onChange={() =>
-                    this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable } })
-                  }
-                />
-              </InlineField>
-              <InlineField
-                label="Replace Bad Data"
-                labelWidth={LABEL_WIDTH}
-                tooltip={'Replacement for bad quality values.'}
-              >
+        {!useLastValue.enable && (
+          <InlineFieldRow>
+            <InlineField
+              label="Summary Period"
+              labelWidth={LABEL_WIDTH}
+              tooltip={"Define the summary period, e.g. '30s'."}
+            >
+              <Input
+                onBlur={onRunQuery}
+                value={summary?.interval}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, summary: { ...summary, interval: event.target.value } })
+                }
+                placeholder="30s"
+              />
+            </InlineField>
+            <InlineField
+              label="Basis"
+              labelWidth={LABEL_WIDTH}
+              tooltip={
+                'Defines the possible calculation options when performing summary calculations over time-series data.'
+              }
+            >
+              <Segment
+                Component={<CustomLabelComponent value={{ value: summary?.basis }} label={summary?.basis} />}
+                onChange={this.calcBasisValueChanged}
+                options={this.getCalcBasisSegments()}
+                allowCustomValue
+              />
+            </InlineField>
+            <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'PI Web API summary options.'}>
+              <InlineFieldRow>
+                {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
+                  return (
+                    <Segment
+                      key={'summaries-' + index}
+                      Component={<CustomLabelComponent value={s.value} label={s.label} />}
+                      onChange={(item) => this.onSummaryValueChanged(item, index)}
+                      options={this.getSummarySegments()}
+                      allowCustomValue
+                    />
+                  );
+                })}
                 <Segment
-                  Component={<CustomLabelComponent value={{ value: summary.nodata }} label={summary.nodata} />}
-                  onChange={this.calcNoDataValueChanged}
-                  options={this.getNoDataSegments()}
+                  Component={
+                    <CustomLabelComponent
+                      value={this.state.summarySegment.value}
+                      label={this.state.summarySegment.label}
+                    />
+                  }
+                  onChange={this.onSummaryAction}
+                  options={this.getSummarySegments()}
                   allowCustomValue
                 />
-              </InlineField>
-            </InlineFieldRow>
-
-            <InlineFieldRow>
-              <InlineField
-                label="Summary Period"
-                labelWidth={LABEL_WIDTH}
-                tooltip={"Define the summary period, e.g. '30s'."}
-              >
-                <Input
-                  onBlur={onRunQuery}
-                  value={summary.interval}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                    onChange({ ...metricsQuery, summary: { ...summary, interval: event.target.value } })
-                  }
-                  placeholder="30s"
-                />
-              </InlineField>
-              <InlineField
-                label="Basis"
-                labelWidth={LABEL_WIDTH}
-                tooltip={
-                  'Defines the possible calculation options when performing summary calculations over time-series data.'
-                }
-              >
-                <Segment
-                  Component={<CustomLabelComponent value={{ value: summary.basis }} label={summary.basis} />}
-                  onChange={this.calcBasisValueChanged}
-                  options={this.getCalcBasisSegments()}
-                  allowCustomValue
-                />
-              </InlineField>
-              <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'PI Web API summary options.'}>
-                <InlineFieldRow>
-                  {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
-                    return (
-                      <Segment
-                        key={'summaries-' + index}
-                        Component={<CustomLabelComponent value={s.value} label={s.label} />}
-                        onChange={(item) => this.onSummaryValueChanged(item, index)}
-                        options={this.getSummarySegments()}
-                        allowCustomValue
-                      />
-                    );
-                  })}
-                  <Segment
-                    Component={
-                      <CustomLabelComponent
-                        value={this.state.summarySegment.value}
-                        label={this.state.summarySegment.label}
-                      />
-                    }
-                    onChange={this.onSummaryAction}
-                    options={this.getSummarySegments()}
-                    allowCustomValue
-                  />
-                </InlineFieldRow>
-              </InlineField>
-            </InlineFieldRow>
-          </>
+              </InlineFieldRow>
+            </InlineField>
+          </InlineFieldRow>
         )}
 
         <InlineFieldRow>
