@@ -217,7 +217,11 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 						PIWebAPIQueries[RefID][i].Error = err
 						continue
 					}
-					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", WebIdData.Status, errorResponse.Error.Errors[0])
+					if errorResponse.Error != nil && len(errorResponse.Error.Errors) > 0 {
+						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", WebIdData.Status, errorResponse.Error.Errors[0])
+					} else {
+						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("unknown api error")
+					}
 					continue
 				}
 			}
@@ -240,7 +244,11 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 						PIWebAPIQueries[RefID][i].Error = err
 						continue
 					}
-					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", ResponseData.Status, errorResponse.Error.Errors[0])
+					if errorResponse.Error != nil && len(errorResponse.Error.Errors) > 0 {
+						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", WebIdData.Status, errorResponse.Error.Errors[0])
+					} else {
+						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("unknown api error")
+					}
 				}
 			} else {
 				PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error finding key %s in response", key)
