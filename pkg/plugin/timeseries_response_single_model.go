@@ -42,7 +42,7 @@ func (p PiBatchDataWithFloatItem) getItems(typeFilter string) *[]PiBatchContentI
 	return &p.Items
 }
 
-func (p *PiBatchDataWithFloatItem) getSummaryTypes() *[]string {
+func (p PiBatchDataWithFloatItem) getSummaryTypes() *[]string {
 	typeValues := make([]string, 1)
 	typeValues[0] = ""
 	return &typeValues

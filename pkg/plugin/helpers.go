@@ -364,8 +364,15 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 	var label string
 	if useNewFormat {
 		label = q.Label
-	} else {
+	} else if q.IsPIPoint {
 		label = q.Label + summaryLabel
+	} else {
+		targetParts := strings.Split(q.FullTargetPath, `\`)
+		if q.Variable != "" {
+			label = q.Variable + "|" + targetParts[len(targetParts)-1]
+		} else {
+			label = targetParts[len(targetParts)-1]
+		}
 	}
 
 	if q.IsPIPoint {

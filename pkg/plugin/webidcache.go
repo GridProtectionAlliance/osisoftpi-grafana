@@ -130,6 +130,7 @@ func (d *Datasource) getRequestWebId(path string, isPiPoint bool) string {
 	}
 	return uri
 }
+
 func (d *Datasource) saveWebID(data interface{}, path string, isPiPoint bool) string {
 	d.datasourceMutex.Lock()
 	savedWebID := d._saveWebID(data, path, isPiPoint)
@@ -208,7 +209,7 @@ func cleanWebIDCache(cache WebIDCache) {
 	now := time.Now()
 	for key, entry := range cache.webIDCache {
 		if now.After(entry.ExpTime) {
-			log.DefaultLogger.Info("Removing aged WebID path: ", entry.Path)
+			log.DefaultLogger.Debug("Removing aged WebID path: ", entry.Path)
 			delete(cache.webIDCache, key)
 			delete(cache.webIDPaths, entry.Path)
 		}

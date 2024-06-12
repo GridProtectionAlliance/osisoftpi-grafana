@@ -198,6 +198,7 @@ type PiProcessedQuery struct {
 	Index               int
 	Resource            string
 	TargetPath          string
+	Variable            string
 	Regex               *Regex        `json:"Regex"`
 	Summary             *QuerySummary `json:"Summary"`
 }

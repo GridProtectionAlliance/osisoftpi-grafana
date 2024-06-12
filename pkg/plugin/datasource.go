@@ -91,14 +91,9 @@ func (d *Datasource) Dispose() {
 	d.httpClient.CloseIdleConnections()
 }
 
+// update call rate - enforce max call rate of 500 req/s
 func (d *Datasource) updateRate() {
 	d.datasourceMutex.Lock()
-	/// show stats
-	modCall := d.totalCalls % 50
-	if modCall == 0 {
-		backend.Logger.Info("Processing QueryTSData End", "CallRate", d.callRate)
-	}
-
 	// update data
 	d.totalCalls += 1
 	d.callRate = float64(d.totalCalls) / float64(time.Now().Unix()-d.initalTime.Unix())
@@ -106,15 +101,13 @@ func (d *Datasource) updateRate() {
 	// backpressure
 	if d.callRate > 500 {
 		time.Sleep(time.Duration(d.callRate) * time.Millisecond)
-		backend.Logger.Info("Processing QueryTSData BackPressure", "CallRate", d.callRate)
 	}
 
-	// reset every 5 minutes
-	if time.Since(d.initalTime).Seconds() > 30 {
+	// reset every 5 minutes (300 s)
+	if time.Since(d.initalTime).Seconds() > 300 {
 		d.initalTime = time.Now()
 		d.totalCalls = 1
 		d.callRate = float64(d.totalCalls) / float64(time.Now().Unix()-d.initalTime.Unix())
-		backend.Logger.Info("Processing QueryTSData ResetTime", "CallRate", d.callRate)
 	}
 	d.datasourceMutex.Unlock()
 }

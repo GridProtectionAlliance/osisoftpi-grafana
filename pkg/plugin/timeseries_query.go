@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -100,6 +99,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				Display:             PiQuery.Pi.Display,
 				Regex:               PiQuery.Pi.Regex,
 				Summary:             PiQuery.Pi.Summary,
+				Variable:            PiQuery.Pi.getVariable(i),
 				Index:               (j + 1) + 100*(i+1),
 			}
 
@@ -112,7 +112,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 			if !strings.HasSuffix(baseUrl, "/") {
 				baseUrl = baseUrl + "/"
 			}
-			dataId := fmt.Sprintf("%s_Req%d", query.RefID, 1000+piQuery.Index)
+			dataId := fmt.Sprintf("%s_Req%d_Data", query.RefID, piQuery.Index)
 			if WebID != nil && WebID.WebID != "" {
 				piQuery.WebID = WebID.WebID
 				// DATA FETCH
@@ -130,10 +130,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				parameter := "$." + parentId + ".Content.WebId"
 				// WEBID FETCH
 				piQuery.BatchRequest[parentId] = BatchSubRequest{
-					Method: "GET",
-					Headers: map[string]string{
-						"Cache-Control": "no-cache",
-					},
+					Method:   "GET",
 					Resource: baseUrl + d.getRequestWebId(fullTargetPath, piQuery.IsPIPoint),
 				}
 				// DATA FETCH
@@ -225,7 +222,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueries map[strin
 				}
 			}
 			// DATA
-			key = fmt.Sprintf("%s_Req%d", RefID, 1000+query.Index)
+			key = fmt.Sprintf("%s_Req%d_Data", RefID, query.Index)
 			ResponseData, ok := tempresponse[key]
 			if ok {
 				if ResponseData.Status == http.StatusOK {
@@ -465,6 +462,23 @@ func (q *PIWebAPIQuery) getTargetBasePaths() []string {
 	return []string{basePath}
 }
 
+func (q *PIWebAPIQuery) getVariable(index int) string {
+	basePath := q.getBasePath()
+
+	// Find and process a pattern like {<variable1>,< variable2>,..., <variable20>}
+	startIndex := strings.Index(basePath, "{")
+	endIndex := strings.Index(basePath, "}")
+
+	if startIndex != -1 && endIndex != -1 && startIndex < endIndex {
+		suffixes := basePath[startIndex+1 : endIndex]
+		suffixList := strings.Split(suffixes, ",")
+		if index < len(suffixList) {
+			return suffixList[index]
+		}
+	}
+	return ""
+}
+
 // func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
 // 	fullTargetPath := q.getBasePath()
 // 	if q.IsPiPoint {
@@ -550,10 +564,11 @@ func (q Query) getQueryBaseURL() string {
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			} else {
-				uri += "/times?" + q.getWindowedTimeStampURI()
+				// uri += "/times?" + q.getWindowedTimeStampURI()
+				uri += "/recorded" + q.getTimeRangeURIComponent()
 			}
 		}
-		uri += "&expression=" + url.QueryEscape(q.Pi.Expression) + "&"
+		uri += "&expression=" + q.Pi.Expression + "&webId="
 	} else {
 		uri += "streamsets"
 		if q.Pi.isUseLastValue() {

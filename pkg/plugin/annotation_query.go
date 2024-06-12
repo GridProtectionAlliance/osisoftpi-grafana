@@ -164,8 +164,8 @@ func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte
 	var annotationResponse map[string]AnnotationBatchResponse
 	var attributeDataItems []string
 
-	//log attributesEnabled
-	log.DefaultLogger.Info("Attributes Enabled", "attributesEnabled", attributesEnabled)
+	// log attributesEnabled
+	// log.DefaultLogger.Debug("Attributes Enabled", "attributesEnabled", attributesEnabled)
 
 	err := json.Unmarshal(rawAnnotationResponse, &annotationResponse)
 	if err != nil {
