@@ -272,6 +272,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         tar.summary.types = filter(tar.summary.types, (item) => {
           return item !== undefined && item !== null && item !== '';
         });
+        tar.summary.interval = !!tar.summary.interval
+          ? this.templateSrv.replace(tar.summary.interval, options.scopedVars)
+          : tar.summary.interval;
       }
 
       return tar;
