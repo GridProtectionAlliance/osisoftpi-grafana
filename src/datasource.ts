@@ -15,7 +15,7 @@ import {
 import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiInternalRsp, PiwebapiRsp } from './types';
-import { metricQueryTransform, parseRawQuery } from 'helper';
+import { metricQueryTransform } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -92,12 +92,12 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
 
   /**
    * This method makes the query to the backend.
-   * 
+   *
    * @param {DataQueryRequest<PIWebAPIQuery>}  options
    *
    * @memberOf PiWebApiDatasource
    */
-  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> { 
+  query(options: DataQueryRequest<PIWebAPIQuery>): Observable<DataQueryResponse> {
     if (options.targets.length === 1 && !!options.targets[0].isAnnotation) {
       return super.query(options);
     }
@@ -140,6 +140,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     }
 
     query.filter = query.filter ?? '*';
+    query.max = query.max ?? 10000;
 
     if (query.type === 'servers') {
       return ds.afserver?.name
@@ -184,6 +185,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
             selectedFields:
               'Items.Type%3BItems.DefaultUnitsName%3BItems.Description%3BItems.WebId%3BItems.Name%3BItems.Path',
             nameFilter: query.filter,
+            maxCount: query.max,
           })
         )
         .then(metricQueryTransform);
@@ -207,7 +209,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    */
   private buildQueryParameters(options: DataQueryRequest<PIWebAPIQuery>) {
     options.targets = filter(options.targets, (target) => {
-      if (!target  || !target.target || target.attributes?.length === 0 || target.target === ';' || !!target.hide) {
+      if (!target || !target.target || target.attributes?.length === 0 || target.target === ';' || !!target.hide) {
         return false;
       }
       return !target.target.startsWith('Select AF');
@@ -223,13 +225,13 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         attributes: map(target.attributes, (att) => {
           if (att.value) {
-            this.templateSrv.replace(att.value.value, options.scopedVars)
+            this.templateSrv.replace(att.value.value, options.scopedVars);
           }
           return att;
         }),
         segments: map(target.segments, (att) => {
           if (att.value) {
-            this.templateSrv.replace(att.value.value, options.scopedVars)
+            this.templateSrv.replace(att.value.value, options.scopedVars);
           }
           return att;
         }),
@@ -237,10 +239,20 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         display: !!target.display ? this.templateSrv.replace(target.display, options.scopedVars) : undefined,
         refId: target.refId,
         hide: target.hide,
-        interpolate: target.interpolate || { enable: false },
+        interpolate: !!target.interpolate
+          ? {
+              ...target.interpolate,
+              interval: this.templateSrv.replace(target.interpolate.interval, options.scopedVars),
+            }
+          : { enable: false },
         useLastValue: target.useLastValue || { enable: false },
         useUnit: target.useUnit || { enable: false },
-        recordedValues: target.recordedValues || { enable: false },
+        recordedValues: !!target.recordedValues
+          ? {
+              ...target.recordedValues,
+              interval: this.templateSrv.replace(target.recordedValues.maxNumber, options.scopedVars),
+            }
+          : { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid ?? '',
         regex: target.regex || { enable: false },
@@ -260,8 +272,11 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         tar.summary.types = filter(tar.summary.types, (item) => {
           return item !== undefined && item !== null && item !== '';
         });
+        tar.summary.interval = !!tar.summary.interval
+          ? this.templateSrv.replace(tar.summary.interval, options.scopedVars)
+          : tar.summary.interval;
       }
-    
+
       return tar;
     });
 

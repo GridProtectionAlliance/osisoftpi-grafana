@@ -333,9 +333,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       if (index < segments.length - 1) {
         segments = slice(segments, 0, index + 1);
       }
-      this.checkAttributeSegments([], segments).then(() => {
+      this.checkAttributeSegments([], segments).then((): Promise<Array<SelectableValue<PIWebAPISelectableValue>>> => {
         // add new options
-        if (!!item.value?.expandable) {
+        if (item.value?.type === 'template') { // if it's a variable we need to check for new elements\
+          return this.getElementSegments(segments.length + 1, segments).then((elements) => {
+            if (elements.length > 0) {
+              segments.push({
+                label: 'Select Element',
+                value: {
+                  value: '-Select Element-',
+                },
+              });
+            }
+            this.segmentChangeValue(segments);
+            return segments;
+          });
+        } else if (!!item.value?.expandable) {
           segments.push({
             label: 'Select Element',
             value: {
@@ -343,7 +356,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             },
           });
         }
-        this.segmentChangeValue(segments);
+        return new Promise((resolve) => {
+          this.segmentChangeValue(segments);
+          resolve(segments);
+        });
       });
     });
   };
@@ -419,6 +435,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           altSegments.unshift(selectableValue);
         });
 
+        // add remove label
         altSegments.unshift({
           label: REMOVE_LABEL,
           value: {
@@ -445,12 +462,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       type: 'pipoint',
     };
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
-    segments.push({
-      label: REMOVE_LABEL,
-      value: {
-        value: REMOVE_LABEL,
-      },
-    });
     return datasource
       .metricFindQuery(findQuery, Object.assign(data?.request?.scopedVars ?? {}, { isPiPoint: query.isPiPoint }))
       .then((items: any[]) => {
@@ -487,6 +498,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           };
           segments.unshift(selectableValue);
         });
+
+        // add remove label
+        segments.unshift({
+          label: REMOVE_LABEL,
+          value: {
+            value: REMOVE_LABEL,
+          },
+        });
+
         return segments;
       })
       .catch((err: any) => {
@@ -909,8 +929,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     }
 
     onChange({...query, summary});
-
-    console.log('QUERY', query.elementPath, query.attributes, query.target);
 
     if (this.isValidQuery(query)) {
       onRunQuery();

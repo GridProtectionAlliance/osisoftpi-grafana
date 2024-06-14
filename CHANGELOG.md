@@ -39,7 +39,9 @@
 - Fixed issue that only odd attributes were been shown
 - Fixed issue when fetching afServerWebId
 
-## 5.0.0-beta
+## 5.0.0
 
-- Migrated backend to Go language (still beta)
+- Migrated backend to Go language
 - Changed the query editor layout
+- Support Grafana version 11
+- Drop support for Grafana 8.x and 9.x
