@@ -247,12 +247,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           : { enable: false },
         useLastValue: target.useLastValue || { enable: false },
         useUnit: target.useUnit || { enable: false },
-        recordedValues: !!target.recordedValues
-          ? {
-              ...target.recordedValues,
-              interval: this.templateSrv.replace(target.recordedValues.maxNumber, options.scopedVars),
-            }
-          : { enable: false },
+        recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid ?? '',
         regex: target.regex || { enable: false },
