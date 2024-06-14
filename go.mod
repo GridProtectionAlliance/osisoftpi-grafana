@@ -7,8 +7,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.2
 	github.com/grafana/grafana-plugin-sdk-go v0.231.0
-	go.opentelemetry.io/otel v1.25.0
-	go.opentelemetry.io/otel/trace v1.25.0
+	go.opentelemetry.io/otel v1.26.0
+	go.opentelemetry.io/otel/trace v1.26.0
 )
 
 require (
