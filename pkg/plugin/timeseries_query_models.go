@@ -123,10 +123,12 @@ type PIWebAPIQuery struct {
 		Interval string `json:"interval"`
 	} `json:"interpolate"`
 	IsPiPoint      bool `json:"isPiPoint"`
+	HideError      bool `json:"hideError"`
 	MaxDataPoints  *int `json:"maxDataPoints"`
 	RecordedValues *struct {
-		Enable    *bool `json:"enable"`
-		MaxNumber *int  `json:"maxNumber"`
+		Enable       *bool   `json:"enable"`
+		MaxNumber    *int    `json:"maxNumber"`
+		BoundaryType *string `json:"boundaryType"`
 	} `json:"recordedValues"`
 	RefID *string `json:"refId"`
 	Regex *Regex  `json:"regex"`
@@ -186,6 +188,7 @@ type PiProcessedQuery struct {
 	UID                 string             `json:"-"`
 	IntervalNanoSeconds int64              `json:"IntervalNanoSeconds"`
 	IsPIPoint           bool               `json:"IsPiPoint"`
+	HideError           bool               `json:"HideError"`
 	Streamable          bool               `json:"isStreamable"`
 	FullTargetPath      string             `json:"FullTargetPath"`
 	ResponseUnits       string             `json:"ResponseUnits"`

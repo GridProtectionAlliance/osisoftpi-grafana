@@ -11,11 +11,13 @@ import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
 import { parseRawQuery } from 'helper';
 
 const LABEL_WIDTH = 24;
+const LABEL_SWITCH_WIDTH = 49.067 / 8.0;
 const MIN_ELEM_INPUT_WIDTH = 200;
 const MIN_ATTR_INPUT_WIDTH = 250;
 
 interface State {
   isPiPoint: boolean;
+  hideError: boolean;
   segments: Array<SelectableValue<PIWebAPISelectableValue>>;
   attributes: Array<SelectableValue<PIWebAPISelectableValue>>;
   summaries: Array<SelectableValue<PIWebAPISelectableValue>>;
@@ -32,7 +34,9 @@ const REMOVE_LABEL = '-REMOVE-';
 const CustomLabelComponent = (props: any) => {
   if (props.value) {
     return (
-      <div className={`gf-form-label ${props.value.type === 'template' ? 'query-keyword' : ''}`}>
+      <div 
+        style={{width: props.width, marginRight: props.marginRight}} 
+        className={`gf-form-label ${props.value.type === 'template' ? 'query-keyword' : ''}`}>
         {props.label ?? '--no label--'}
       </div>
     );
@@ -50,9 +54,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   availableAttributes: any = {};
   summaryTypes: string[];
   calculationBasis: string[];
+  recordedBoundaryTypes: string [];
   noDataReplacement: string[];
   state: State = {
     isPiPoint: false,
+    hideError: false,
     segments: [],
     attributes: [],
     summaries: [],
@@ -66,6 +72,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     super(props);
     this.onSegmentChange = this.onSegmentChange.bind(this);
     this.calcBasisValueChanged = this.calcBasisValueChanged.bind(this);
+    this.recordedBoundaryTypeValueChanged = this.recordedBoundaryTypeValueChanged.bind(this);
     this.calcNoDataValueChanged = this.calcNoDataValueChanged.bind(this);
     this.onSummaryAction = this.onSummaryAction.bind(this);
     this.onSummaryValueChanged = this.onSummaryValueChanged.bind(this);
@@ -96,6 +103,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       'EventWeightedExcludeEarliestEvent', // Similar to the option _EventWeightedExcludeMostRecentEvent_. Events at the start time(earliest time) of an interval is not used in that interval.
       'EventWeightedIncludeBothEnds', // Events at both ends of the interval boundaries are included in the event weighted calculation.
     ];
+
+    this.recordedBoundaryTypes = [
+      'Inside', // Default. Specifies to return the recorded values on the inside of the requested time range as the first and last values. 
+      'Outside', // Specifies to return the recorded values on the outside of the requested time range as the first and last values.
+      'Interpolated', //Specifies to create an interpolated value at the end points of the requested time range if a recorded value does not exist at that time.
+    ]
 
     this.noDataReplacement = [
       'Null', // replace with nulls
@@ -136,6 +149,30 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   // get summary calculation basis user interface segments
   getCalcBasisSegments() {
     const segments = map(this.calculationBasis, (item: string) => {
+      let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
+        label: item,
+        value: {
+          value: item,
+          expandable: true,
+        },
+      };
+      return selectableValue;
+    });
+    return segments;
+  }
+
+  // recorded boundary type change event
+  recordedBoundaryTypeValueChanged(segment: SelectableValue<PIWebAPISelectableValue>) {
+    const metricsQuery = this.props.query as PIWebAPIQuery;
+    const recordedValues = metricsQuery.recordedValues;
+    if (recordedValues) {
+      recordedValues.boundaryType = segment.value?.value;
+    }
+    this.onChange({ ...metricsQuery, recordedValues });
+  }
+  // get recorded boundary type user interface segments
+  getRecordedBoundaryTypeSegments() {
+    const segments = map(this.recordedBoundaryTypes, (item: string) => {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: item,
         value: {
@@ -243,11 +280,21 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   onAttributeAction(item: SelectableValue<PIWebAPISelectableValue>) {
     const { query } = this.props;
     const attributes = this.state.attributes.slice(0);
+    // partial variable
+    if (item.value !== null && typeof item.value !== 'object' && !Array.isArray(item.value)) {
+      const value = String(item.value! as string);
+      item.value = {
+        type: value.match(/\${\w+}/gi) ? 'template' : undefined,
+        value: value,
+      }
+    }
+
     // if value is not empty, add new attribute segment
     if (!this.isValueEmpty(item.value)) {
       let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
         label: item.label,
         value: {
+          type: item.value?.value && item.value?.value.match(/\${\w+}/gi) ? 'template' : undefined,
           value: item.value?.value,
           expandable: !query.isPiPoint,
         },
@@ -262,7 +309,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     let attributes = this.state.attributes.slice(0);
 
     if (item.label === REMOVE_LABEL) {
-      remove(attributes, (value, n) => n === index);
+      remove(attributes, (_, n) => n === index);
     } else {
       // set current value
       attributes[index] = item;
@@ -288,6 +335,15 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   onSegmentChange = (item: SelectableValue<PIWebAPISelectableValue>, index: number) => {
     const { query } = this.props;
     let segments = this.state.segments.slice(0);
+
+    // partial variable
+    if (item.value !== null && typeof item.value !== 'object' && !Array.isArray(item.value)) {
+      const value = String(item.value! as string);
+      item.value = {
+        type: value.match(/\${\w+}/gi) ? 'template' : undefined,
+        value: value,
+      }
+    }
 
     // ignore if no change
     if (segments[index].label === item.value?.value) {
@@ -338,6 +394,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         if (item.value?.type === 'template') { // if it's a variable we need to check for new elements\
           return this.getElementSegments(segments.length + 1, segments).then((elements) => {
             if (elements.length > 0) {
+              segments[index].value!.expandable = true;
               segments.push({
                 label: 'Select Element',
                 value: {
@@ -517,6 +574,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   // get the list of attributes for the user interface - AF
   getAttributeSegmentsAF = (attributeText?: string): Array<SelectableValue<PIWebAPISelectableValue>> => {
+    const { datasource } = this.props;
     const ctrl = this;
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
 
@@ -525,6 +583,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       value: {
         value: REMOVE_LABEL,
       },
+    });
+
+    // add template variables
+    const variables = datasource.templateSrv.getVariables();
+    each(variables, (variable: TypedVariableModel) => {
+      let selectableValue: SelectableValue<PIWebAPISelectableValue> = {
+        label: '${' + variable.name + '}',
+        value: {
+          type: 'template',
+          value: '${' + variable.name + '}',
+          expandable: false,
+        },
+      };
+      segments.push(selectableValue);
     });
 
     forOwn(ctrl.availableAttributes, (val: any, key: string) => {
@@ -570,6 +642,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           attributesArray.push({
             label: item,
             value: {
+              type: item.match(/\${\w+}/gi) ? 'template' : undefined,
               value: item,
               expandable: false,
             },
@@ -739,6 +812,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           attributes.push({
             label: item,
             value: {
+              type: item.match(/\${\w+}/gi) ? 'template' : undefined,
               value: item,
               expandable: false,
             },
@@ -970,6 +1044,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     );
   };
 
+  onHideErrorChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
+    const { query: queryChange } = this.props;
+    const hideError = !queryChange.hideError;
+    this.setState(
+      {
+        hideError,
+      },
+      () => {
+        this.onChange({
+          ...queryChange,
+          hideError,
+        });
+      }
+    );
+  };
+
   render() {
     const { query: queryProps, onChange, onRunQuery } = this.props;
     const metricsQuery = defaults(queryProps, defaultQuery) as PIWebAPIQuery;
@@ -984,6 +1074,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       recordedValues,
       expression,
       isPiPoint,
+      hideError,
       summary,
       display,
       regex,
@@ -1163,11 +1254,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             tooltip={'Replacement for bad quality values.'}
           >
             <Segment
-              Component={<CustomLabelComponent value={{ value: summary?.nodata }} label={summary?.nodata} />}
+              Component={
+                <CustomLabelComponent
+                  width={LABEL_WIDTH * 4}
+                  value={{ value: summary?.nodata }}
+                  label={summary?.nodata}
+                />
+              }
               onChange={this.calcNoDataValueChanged}
               options={this.getNoDataSegments()}
               allowCustomValue
             />
+          </InlineField>
+          <InlineField label="Ignore API Error?" labelWidth={LABEL_WIDTH}>
+            <InlineSwitch value={hideError} onChange={this.onHideErrorChange} />
           </InlineField>
           {this.props.datasource.useUnitConfig && (
             <InlineField
@@ -1201,18 +1301,60 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             </InlineField>
           )}
         </InlineFieldRow>
-
-        <InlineFieldRow>
-          {!useLastValue.enable && (
+        
+        {!useLastValue.enable && !recordedValues.enable && (
+          <InlineFieldRow>
+            <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
+              <InlineSwitch
+                value={interpolate.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable, interval: null } })
+                }
+              />
+            </InlineField>
             <InlineField
-            label="Max Recorded Values"
-            labelWidth={LABEL_WIDTH}
-            tooltip={
-              'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
-            }
-          >
+              disabled={!interpolate.enable}
+              label={!!expression ? "Interval Period" : "Interpolate Period"}
+              labelWidth={LABEL_WIDTH}
+              tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
+            >
               <Input
                 onBlur={onRunQuery}
+                width={LABEL_WIDTH + LABEL_SWITCH_WIDTH + 0.5}
+                value={interpolate.interval}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
+                }
+                placeholder="30s"
+              />
+            </InlineField>
+          </InlineFieldRow>
+        )}
+
+        {!useLastValue.enable && !interpolate.enable && (
+          <InlineFieldRow>
+            <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
+              <InlineSwitch
+                value={recordedValues.enable}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    recordedValues: { ...recordedValues, enable: !recordedValues.enable, maxNumber: null, boundaryType: 'Inside' },
+                  })
+                }
+              />
+            </InlineField>
+            <InlineField
+              disabled={!recordedValues?.enable}
+              label="Max Recorded Values"
+              labelWidth={LABEL_WIDTH}
+              tooltip={
+                'Maximum number of recorded value to retrive from the data archive, without using interpolation.'
+              }
+            >
+              <Input
+                onBlur={onRunQuery}
+                width={LABEL_WIDTH + LABEL_SWITCH_WIDTH + 0.5}
                 value={recordedValues.maxNumber}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   onChange({
@@ -1224,43 +1366,26 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 placeholder="1000"
               />
             </InlineField>
-          )}
-          <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
-            <InlineSwitch
-              value={recordedValues.enable}
-              onChange={() =>
-                this.onChange({
-                  ...metricsQuery,
-                  recordedValues: { ...recordedValues, enable: !recordedValues.enable },
-                })
-              }
-            />
-          </InlineField>
-        </InlineFieldRow>
-
-        {!useLastValue.enable && (
-          <InlineFieldRow>
             <InlineField
-              label={!!expression ? "Interval Period" : "Interpolate Period"}
+              disabled={!recordedValues?.enable}
+              label="Boundary Type"
               labelWidth={LABEL_WIDTH}
-              tooltip={"Override time between sampling, e.g. '30s'. Defaults to timespan/chart width."}
-            >
-              <Input
-                onBlur={onRunQuery}
-                value={interpolate.interval}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  onChange({ ...metricsQuery, interpolate: { ...interpolate, interval: event.target.value } })
-                }
-                placeholder="30s"
-              />
-            </InlineField>
-            <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
-              <InlineSwitch
-                value={interpolate.enable}
-                onChange={() =>
-                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable } })
-                }
-              />
+              tooltip={
+                'Defines the behavior of data retrieval at the end points of a specified time range.'
+              }
+              >
+                <Segment
+                  Component={
+                    <CustomLabelComponent
+                      width={LABEL_WIDTH * 4}
+                      value={{ value: recordedValues?.boundaryType }}
+                      label={recordedValues?.boundaryType}
+                    />
+                  }
+                  onChange={this.recordedBoundaryTypeValueChanged}
+                  options={this.getRecordedBoundaryTypeSegments()}
+                  allowCustomValue
+                />
             </InlineField>
           </InlineFieldRow>
         )}
@@ -1274,6 +1399,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             >
               <Input
                 onBlur={onRunQuery}
+                width={LABEL_WIDTH + (LABEL_SWITCH_WIDTH + 0.5)}
                 value={summary?.interval}
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   onChange({ ...metricsQuery, summary: { ...summary, interval: event.target.value } })
@@ -1283,13 +1409,20 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
             </InlineField>
             <InlineField
               label="Basis"
-              labelWidth={LABEL_WIDTH}
+              labelWidth={LABEL_WIDTH + LABEL_SWITCH_WIDTH + 0.5}
               tooltip={
                 'Defines the possible calculation options when performing summary calculations over time-series data.'
               }
             >
               <Segment
-                Component={<CustomLabelComponent value={{ value: summary?.basis }} label={summary?.basis} />}
+                Component={
+                  <CustomLabelComponent
+                    width={LABEL_WIDTH * 8}
+                    marginRight="0"
+                    value={{ value: summary?.basis }}
+                    label={summary?.basis}
+                  />
+                }
                 onChange={this.calcBasisValueChanged}
                 options={this.getCalcBasisSegments()}
                 allowCustomValue
@@ -1332,6 +1465,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           >
             <Input
               onBlur={onRunQuery}
+              width={LABEL_WIDTH + (LABEL_SWITCH_WIDTH + 0.5)}
               value={display}
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
                 onChange({ ...metricsQuery, display: event.target.value })
@@ -1347,9 +1481,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }}
             />
           </InlineField>
-          <InlineField label="Search" labelWidth={LABEL_WIDTH - 8}>
+          <InlineField label="Search" labelWidth={LABEL_WIDTH}>
             <Input
               onBlur={onRunQuery}
+              width={LABEL_WIDTH}
               value={regex.search}
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
                 onChange({ ...metricsQuery, regex: { ...regex, search: event.target.value } })
@@ -1357,9 +1492,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               placeholder="(.*)"
             />
           </InlineField>
-          <InlineField label="Replace" labelWidth={LABEL_WIDTH - 8}>
+          <InlineField label="Replace" labelWidth={LABEL_WIDTH}>
             <Input
               onBlur={onRunQuery}
+              width={LABEL_WIDTH}
               value={regex.replace}
               onChange={(event: ChangeEvent<HTMLInputElement>) =>
                 onChange({ ...metricsQuery, regex: { ...regex, replace: event.target.value } })

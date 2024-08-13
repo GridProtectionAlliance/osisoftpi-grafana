@@ -91,6 +91,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				UID:                 datasourceUID,
 				IntervalNanoSeconds: PiQuery.Interval,
 				IsPIPoint:           PiQuery.Pi.IsPiPoint,
+				HideError:           PiQuery.Pi.HideError,
 				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
 				FullTargetPath:      fullTargetPath,
 				TargetPath:          targetBasePath,
@@ -268,8 +269,10 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 		for _, q := range query {
 			// if there is an error in the query, we set the error in the subresponse and break out of the loop returning the error.
 			if q.Error != nil {
-				backend.Logger.Error("Error processing query", "RefID", RefID, "query", q)
-				subResponse.Error = q.Error
+				backend.Logger.Error("Error processing query", "RefID", RefID, "query", q, "hide", q.HideError)
+				if !q.HideError && strings.Contains(q.Error.Error(), "api error") {
+					subResponse.Error = q.Error
+				}
 				break
 			}
 
@@ -554,6 +557,13 @@ func (q *Query) getMaxDataPoints() int {
 	return q.MaxDataPoints
 }
 
+func (q *Query) getBoundaryType() string {
+	if q.Pi.RecordedValues.BoundaryType != nil {
+		return *q.Pi.RecordedValues.BoundaryType
+	}
+	return "Inside"
+}
+
 func (q Query) getQueryBaseURL() string {
 	var uri string
 	if q.Pi.isExpression() {
@@ -592,7 +602,7 @@ func (q Query) getQueryBaseURL() string {
 			} else if q.Pi.isInterpolated() {
 				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
-				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=Interpolated"
+				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=" + q.getBoundaryType()
 			} else {
 				uri += "/plot" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 			}

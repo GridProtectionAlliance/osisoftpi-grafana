@@ -45,3 +45,11 @@
 - Changed the query editor layout
 - Support Grafana version 11
 - Drop support for Grafana 8.x and 9.x
+
+## 5.1.0
+
+- Fixed an error in recorded max number of points
+- Updated the query editor layout
+- Added boundary type support in recorded values
+- Recognize partial usage of variables in elements
+- Added configuration to hide API errors in panel
