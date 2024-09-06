@@ -251,7 +251,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         webid: target.webid ?? '',
         regex: target.regex || { enable: false },
         expression: target.expression || '',
-        summary: target.summary || { types: [] },
+        summary: target.summary || { enable: false, types: [] },
+        nodata: target.nodata,
         startTime: options.range.from,
         endTime: options.range.to,
         isPiPoint: !!target.isPiPoint,
@@ -263,13 +264,17 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
       }
 
-      if (tar.summary.types !== undefined) {
+      if (tar.summary.enable && tar.summary.types !== undefined) {
         tar.summary.types = filter(tar.summary.types, (item) => {
           return item !== undefined && item !== null && item !== '';
         });
-        tar.summary.interval = !!tar.summary.interval
-          ? this.templateSrv.replace(tar.summary.interval, options.scopedVars)
-          : tar.summary.interval;
+        tar.summary.duration = !!tar.summary.duration
+          ? this.templateSrv.replace(tar.summary.duration, options.scopedVars)
+          : tar.summary.duration;
+        tar.summary.sampleTypeInterval = !!tar.summary.sampleTypeInterval;
+        tar.summary.sampleInterval = !!tar.summary.sampleInterval
+          ? this.templateSrv.replace(tar.summary.sampleInterval, options.scopedVars)
+          : tar.summary.sampleInterval;
       }
 
       return tar;

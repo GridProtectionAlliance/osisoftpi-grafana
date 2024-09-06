@@ -183,8 +183,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			trace.WithAttributes(
 				attribute.String("query.ref_id", q.RefID),
 				attribute.String("query.type", q.QueryType),
-				attribute.Int64("query.time_range.from", q.TimeRange.From.Unix()),
-				attribute.Int64("query.time_range.to", q.TimeRange.To.Unix()),
+				attribute.Int64("query.time_range.from", q.TimeRange.From.Truncate(time.Second).Unix()),
+				attribute.Int64("query.time_range.to", q.TimeRange.To.Truncate(time.Second).Unix()),
 			),
 		)
 

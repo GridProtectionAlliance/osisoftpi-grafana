@@ -57,11 +57,14 @@ export interface PIWebAPIQuery extends DataQuery {
   useLastValue?: any;
   useUnit?: any;
   regex?: any;
+  nodata?: string,
   summary?: {
-    nodata?: string,
+    enable?: boolean,
     types?: any[],
     basis?: string,
-    interval?: string
+    duration?: string,
+    sampleTypeInterval?: boolean,
+    sampleInterval?: string
   };
   expression?: string;
   rawQuery?: boolean;
@@ -80,7 +83,15 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   attributes: [],
   segments: [],
   regex: { enable: false },
-  summary: { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' },
+  nodata: 'Null',
+  summary: {
+    enable: false,
+    types: [],
+    basis: 'EventWeighted',
+    duration: '',
+    sampleTypeInterval: false,
+    sampleInterval: ''
+  },
   expression: '',
   interpolate: { enable: false },
   useLastValue: { enable: false },

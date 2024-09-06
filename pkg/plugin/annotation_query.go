@@ -80,7 +80,8 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 }
 
 func (q PiProcessedAnnotationQuery) getTimeRangeURIComponent() string {
-	return "&startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
+	return "&startTime=" + q.TimeRange.From.UTC().Truncate(time.Second).Format(time.RFC3339) +
+		"&endTime=" + q.TimeRange.To.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
 // getEventFrameQueryURL returns the URI for the event frame query

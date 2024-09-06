@@ -373,6 +373,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 		} else {
 			label = targetParts[len(targetParts)-1]
 		}
+		label += summaryLabel
 	}
 
 	if q.IsPIPoint {
@@ -413,7 +414,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	webID := processedQuery.WebID
 	includeMetaData := processedQuery.UseUnit
 	digitalStates := processedQuery.DigitalStates
-	noDataReplace := processedQuery.getSummaryNoDataReplace()
+	noDataReplace := processedQuery.getNoDataReplace()
 
 	digitalStateValues := make([]string, 0)
 	sliceType := d.getTypeForWebID(webID)
@@ -518,7 +519,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
 
-	timeField := data.NewField("time", nil, fP.timestamps)
+	timeField := data.NewField("Time", nil, fP.timestamps)
 	if !digitalState || !digitalStates {
 		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
 		frame.Fields = append(frame.Fields,

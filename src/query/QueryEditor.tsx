@@ -9,6 +9,7 @@ import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../co
 import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
 import { parseRawQuery } from 'helper';
+import { types } from '@babel/core';
 
 const LABEL_WIDTH = 24;
 const LABEL_SWITCH_WIDTH = 49.067 / 8.0;
@@ -188,11 +189,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   // no data change event
   calcNoDataValueChanged(segment: SelectableValue<PIWebAPISelectableValue>) {
     const metricsQuery = this.props.query as PIWebAPIQuery;
-    const summary = metricsQuery.summary;
-    if (summary) {
-      summary.nodata = segment.value?.value;
-    }
-    this.onChange({ ...metricsQuery, summary });
+    const nodata = segment.value?.value;
+    this.onChange({ ...metricsQuery, nodata });
   }
   // get no data user interface segments
   getNoDataSegments() {
@@ -1076,6 +1074,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       isPiPoint,
       hideError,
       summary,
+      nodata,
       display,
       regex,
     } = metricsQuery;
@@ -1257,8 +1256,8 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               Component={
                 <CustomLabelComponent
                   width={LABEL_WIDTH * 4}
-                  value={{ value: summary?.nodata }}
-                  label={summary?.nodata}
+                  value={{ value: nodata }}
+                  label={nodata}
                 />
               }
               onChange={this.calcNoDataValueChanged}
@@ -1302,7 +1301,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           )}
         </InlineFieldRow>
         
-        {!useLastValue.enable && !recordedValues.enable && (
+        {(interpolate.enable || (!useLastValue.enable && !recordedValues.enable)) && (
           <InlineFieldRow>
             <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
               <InlineSwitch
@@ -1331,7 +1330,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </InlineFieldRow>
         )}
 
-        {!useLastValue.enable && !interpolate.enable && (
+        {(recordedValues.enable || (!useLastValue.enable && !interpolate.enable)) && (
           <InlineFieldRow>
             <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
               <InlineSwitch
@@ -1392,24 +1391,21 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         {!useLastValue.enable && (
           <InlineFieldRow>
-            <InlineField
-              label="Summary Period"
-              labelWidth={LABEL_WIDTH}
-              tooltip={"Define the summary period, e.g. '30s'."}
-            >
-              <Input
-                onBlur={onRunQuery}
-                width={LABEL_WIDTH + (LABEL_SWITCH_WIDTH + 0.5)}
-                value={summary?.interval}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  onChange({ ...metricsQuery, summary: { ...summary, interval: event.target.value } })
+            <InlineField label="Summary Enable" labelWidth={LABEL_WIDTH}>
+              <InlineSwitch
+                value={summary?.enable}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    summary: { ...summary, enable: !(summary?.enable) },
+                  })
                 }
-                placeholder="30s"
               />
             </InlineField>
             <InlineField
-              label="Basis"
-              labelWidth={LABEL_WIDTH + LABEL_SWITCH_WIDTH + 0.5}
+              disabled={!summary?.enable}
+              label="Summary Basis"
+              labelWidth={LABEL_WIDTH}
               tooltip={
                 'Defines the possible calculation options when performing summary calculations over time-series data.'
               }
@@ -1417,7 +1413,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               <Segment
                 Component={
                   <CustomLabelComponent
-                    width={LABEL_WIDTH * 8}
+                    width={(LABEL_WIDTH + LABEL_SWITCH_WIDTH + 0.5) * 8}
                     marginRight="0"
                     value={{ value: summary?.basis }}
                     label={summary?.basis}
@@ -1428,7 +1424,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 allowCustomValue
               />
             </InlineField>
-            <InlineField label="Summaries" labelWidth={LABEL_WIDTH} tooltip={'PI Web API summary options.'}>
+            <InlineField 
+              disabled={!summary?.enable}
+              label="Summaries Types" 
+              labelWidth={LABEL_WIDTH} 
+              tooltip={'PI Web API summary options.'}
+            >
               <InlineFieldRow>
                 {this.state.summaries.map((s: SelectableValue<PIWebAPISelectableValue>, index: number) => {
                   return (
@@ -1453,6 +1454,53 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   allowCustomValue
                 />
               </InlineFieldRow>
+            </InlineField>
+          </InlineFieldRow>
+        )}
+        {summary?.enable && (
+          <InlineFieldRow>
+            <InlineField 
+              label="Enable interval" 
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Enable summary type interval.'}
+            >
+              <InlineSwitch
+                value={!!summary?.sampleTypeInterval}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, summary: { ...summary, sampleTypeInterval: !(summary?.sampleTypeInterval) } })
+                }
+              />
+            </InlineField>
+            <InlineField
+              disabled={!summary.sampleTypeInterval}
+              label="Sample Interval"
+              labelWidth={LABEL_WIDTH}
+              tooltip={"A time span specifies how often the filter expression is evaluated when computing the summary for an interval, if the sampleType is enable."}
+            >
+              <Input
+                onBlur={onRunQuery}
+                width={LABEL_WIDTH + (LABEL_SWITCH_WIDTH + 0.5)}
+                value={summary?.sampleInterval}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, summary: { ...summary, sampleInterval: event.target.value } })
+                }
+                placeholder="30s"
+              />
+            </InlineField>
+            <InlineField
+              label="Summary Period"
+              labelWidth={LABEL_WIDTH}
+              tooltip={"The duration of each summary interval, e.g. '30s'."}
+            >
+              <Input
+                onBlur={onRunQuery}
+                width={LABEL_WIDTH + (LABEL_SWITCH_WIDTH + 0.5)}
+                value={summary?.duration}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, summary: { ...summary, duration: event.target.value } })
+                }
+                placeholder="30s"
+              />
             </InlineField>
           </InlineFieldRow>
         )}
