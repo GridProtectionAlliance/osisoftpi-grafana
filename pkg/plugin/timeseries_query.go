@@ -623,6 +623,5 @@ func (q Query) getQueryBaseURL() string {
 			uri += "&webId="
 		}
 	}
-	backend.Logger.Debug("Base url", "uri", uri)
 	return uri
 }
