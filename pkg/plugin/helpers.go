@@ -522,7 +522,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
 
-	timeField := data.NewField("Time", nil, fP.timestamps)
+	timeField := data.NewField(data.TimeSeriesTimeFieldName, nil, fP.timestamps)
 	if !digitalState || !digitalStates {
 		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
 		frame.Fields = append(frame.Fields,
