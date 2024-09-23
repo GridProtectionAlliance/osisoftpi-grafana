@@ -91,6 +91,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				UID:                 datasourceUID,
 				IntervalNanoSeconds: PiQuery.Interval,
 				IsPIPoint:           PiQuery.Pi.IsPiPoint,
+				HideError:           PiQuery.Pi.HideError,
 				Streamable:          PiQuery.isStreamable() && *d.dataSourceOptions.UseExperimental && *d.dataSourceOptions.UseStreaming,
 				FullTargetPath:      fullTargetPath,
 				TargetPath:          targetBasePath,
@@ -98,6 +99,7 @@ func (d *Datasource) processQuery(query backend.DataQuery, datasourceUID string)
 				DigitalStates:       DigitalStates,
 				Display:             PiQuery.Pi.Display,
 				Regex:               PiQuery.Pi.Regex,
+				Nodata:              PiQuery.Pi.Nodata,
 				Summary:             PiQuery.Pi.Summary,
 				Variable:            PiQuery.Pi.getVariable(i),
 				Index:               (j + 1) + 100*(i+1),
@@ -268,8 +270,10 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 		for _, q := range query {
 			// if there is an error in the query, we set the error in the subresponse and break out of the loop returning the error.
 			if q.Error != nil {
-				backend.Logger.Error("Error processing query", "RefID", RefID, "query", q)
-				subResponse.Error = q.Error
+				backend.Logger.Error("Error processing query", "RefID", RefID, "query", q, "hide", q.HideError)
+				if !q.HideError && strings.Contains(q.Error.Error(), "api error") {
+					subResponse.Error = q.Error
+				}
 				break
 			}
 
@@ -318,10 +322,10 @@ func (q *PIWebAPIQuery) isSummary() bool {
 	if q.Summary == nil {
 		return false
 	}
-	if q.Summary.Types == nil {
+	if q.Summary.Enable == nil {
 		return false
 	}
-	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
+	return *q.Summary.Enable && *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 }
 
 // PiProcessedQuery isRegex returns true if the query is a regex query and is enabled
@@ -361,17 +365,28 @@ func (q *PiProcessedQuery) isRegexQuery() bool {
 // A default of 30s is returned if the summary duration is not provided by the frontend
 // or if the format is invalid
 func (q *PIWebAPIQuery) getSummaryDuration() string {
+	backend.Logger.Debug("Summary duration", "summary", q.Summary)
 	// Return the default value if the summary is not provided by the frontend
-	if q.Summary == nil || *q.Summary.Interval == "" {
+	if q.Summary == nil || q.Summary.Duration == nil || *q.Summary.Duration == "" {
 		return "30s"
 	}
+	return _getDurationBase(*q.Summary.Duration)
+}
 
+func (q *PIWebAPIQuery) getSampleInterval() string {
+	// Return the default value if the summary is not provided by the frontend
+	if q.Summary == nil || q.Summary.SampleInterval == nil || *q.Summary.SampleInterval == "" {
+		return "30s"
+	}
+	return _getDurationBase(*q.Summary.SampleInterval)
+}
+
+func _getDurationBase(duration string) string {
 	// If the summary duration is provided, then validate the format piwebapi expects
-
 	// Regular expression to match the format: <number><short_name>
 	pattern := `^(\d+(\.\d+)?)\s*(ms|s|m|h|d|mo|w|wd|yd)$`
 	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(*q.Summary.Interval)
+	matches := re.FindStringSubmatch(duration)
 
 	if len(matches) != 4 {
 		return "30s" // Return the default value if the format is invalid
@@ -391,11 +406,11 @@ func (q *PIWebAPIQuery) getSummaryDuration() string {
 	switch shortName {
 	case "ms", "s", "m", "h":
 		// Fractions allowed for millisecond, second, minute, and hour
-		return *q.Summary.Interval
+		return duration
 	case "d", "mo", "w", "wd", "yd":
 		// No fractions allowed for day, month, week, weekday, yearday
 		if numericPart == float64(int64(numericPart)) {
-			return *q.Summary.Interval
+			return duration
 		}
 	default:
 		return "30s" // Return the default value if the short name or fractions are not allowed
@@ -410,7 +425,13 @@ func (q *PIWebAPIQuery) getSummaryURIComponent() string {
 		uri += "&summaryType=" + t.Value.Value
 	}
 	uri += "&summaryBasis=" + *q.Summary.Basis
-	uri += "&summaryDuration=" + q.getSummaryDuration()
+	if q.Summary.Duration != nil && *q.Summary.Duration != "" {
+		uri += "&summaryDuration=" + q.getSummaryDuration()
+	}
+	if q.Summary.SampleTypeInterval != nil && *q.Summary.SampleTypeInterval &&
+		q.Summary.SampleInterval != nil && *q.Summary.SampleInterval != "" {
+		uri += "&sampleType=Interval&sampleInterval=" + q.getSampleInterval()
+	}
 	return uri
 }
 
@@ -554,6 +575,13 @@ func (q *Query) getMaxDataPoints() int {
 	return q.MaxDataPoints
 }
 
+func (q *Query) getBoundaryType() string {
+	if q.Pi.RecordedValues.BoundaryType != nil {
+		return *q.Pi.RecordedValues.BoundaryType
+	}
+	return "Inside"
+}
+
 func (q Query) getQueryBaseURL() string {
 	var uri string
 	if q.Pi.isExpression() {
@@ -562,10 +590,7 @@ func (q Query) getQueryBaseURL() string {
 			uri += "/times?time=" + q.getTimeRangeURIToComponent()
 		} else {
 			if q.Pi.isSummary() {
-				uri += "/summary" + q.getTimeRangeURIComponent()
-				if q.Pi.isInterpolated() {
-					uri += fmt.Sprintf("&sampleType=Interval&sampleInterval=%s", q.getIntervalTime())
-				}
+				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
 				uri += "/intervals" + q.getTimeRangeURIComponent()
 				uri += fmt.Sprintf("&sampleInterval=%s", q.getIntervalTime())
@@ -587,12 +612,11 @@ func (q Query) getQueryBaseURL() string {
 			}
 		} else {
 			if q.Pi.isSummary() {
-				uri += "/summary" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
-				uri += q.Pi.getSummaryURIComponent()
+				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
 				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
-				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=Interpolated"
+				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=" + q.getBoundaryType()
 			} else {
 				uri += "/plot" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 			}

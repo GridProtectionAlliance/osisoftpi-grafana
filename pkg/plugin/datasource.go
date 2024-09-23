@@ -183,8 +183,8 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			trace.WithAttributes(
 				attribute.String("query.ref_id", q.RefID),
 				attribute.String("query.type", q.QueryType),
-				attribute.Int64("query.time_range.from", q.TimeRange.From.Unix()),
-				attribute.Int64("query.time_range.to", q.TimeRange.To.Unix()),
+				attribute.Int64("query.time_range.from", q.TimeRange.From.Truncate(time.Second).Unix()),
+				attribute.Int64("query.time_range.to", q.TimeRange.To.Truncate(time.Second).Unix()),
 			),
 		)
 
@@ -232,7 +232,7 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	return response, nil
 }
 
-// This function provides a way to proxy requests to the PI Web API. It is used to limit access fromt he frontend to the PI Web API.
+// This function provides a way to proxy requests to the PI Web API. It is used to limit access from the frontend to the PI Web API.
 // These endpoints are called by the front end while configuring the datasource, query, and annotations.
 func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// Create spans for this function.
@@ -275,7 +275,10 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 
 	r, err := apiGet(ctx, d, req.URL)
 	if err != nil {
-		return err
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusNotFound,
+			Body:   []byte(`{}`),
+		})
 	}
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,

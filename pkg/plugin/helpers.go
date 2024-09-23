@@ -352,7 +352,8 @@ func compatible(actual reflect.Type, expected reflect.Type) bool {
 		a == reflect.Float64)
 }
 
-func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, summaryLabel string) map[string]string {
+func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, description string,
+	units string, summaryLabel string) map[string]string {
 	var frameLabel map[string]string
 	summaryNewFormat := ""
 
@@ -373,6 +374,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 		} else {
 			label = targetParts[len(targetParts)-1]
 		}
+		label += summaryLabel
 	}
 
 	if q.IsPIPoint {
@@ -380,9 +382,11 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 		// PiPoint {element="PISERVER", name="Attribute", type="Float32"}
 		targetParts := strings.Split(q.FullTargetPath, `\`)
 		frameLabel = map[string]string{
-			"element": targetParts[0],
-			"name":    label,
-			"type":    pointType + summaryNewFormat,
+			"element":     targetParts[0],
+			"name":        label,
+			"type":        pointType + summaryNewFormat,
+			"description": description,
+			"units":       units,
 		}
 	} else {
 		// New format returns the full path with metadata
@@ -390,9 +394,11 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, sum
 		targetParts := strings.Split(q.FullTargetPath, `\`)
 		labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
 		frameLabel = map[string]string{
-			"element": labelParts[0],
-			"name":    label,
-			"type":    pointType + summaryNewFormat,
+			"element":     labelParts[0],
+			"name":        label,
+			"type":        pointType + summaryNewFormat,
+			"description": description,
+			"units":       units,
 		}
 	}
 
@@ -413,7 +419,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	webID := processedQuery.WebID
 	includeMetaData := processedQuery.UseUnit
 	digitalStates := processedQuery.DigitalStates
-	noDataReplace := processedQuery.getSummaryNoDataReplace()
+	noDataReplace := processedQuery.getNoDataReplace()
 
 	digitalStateValues := make([]string, 0)
 	sliceType := d.getTypeForWebID(webID)
@@ -427,7 +433,8 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	}
 
 	// get frame name
-	frameLabel := getDataLabels(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID), SummaryType)
+	frameLabel := getDataLabels(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID),
+		d.getDescriptionForWebID(webID), d.getUnitsForWebID(webID), SummaryType)
 
 	var labels map[string]string
 	var digitalState = d.getDigitalStateForWebID(webID)
@@ -469,13 +476,10 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 			}
 		}
 
-		// if the value isn't good, or is not the same type as the slice,
-		// add it to the list of bad values and nullify later
-		//TODO we should make this pattern match the query options
-		_, digitalState := item.Value.(map[string]interface{})
+		_, digitalState = item.Value.(map[string]interface{})
 		if !item.isGood() {
 			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-		} else if digitalState {
+		} else if digitalState { // digital state
 			var pds PointDigitalState
 			if b, err := json.Marshal(item.Value); err == nil {
 				if err := json.Unmarshal(b, &pds); err == nil {
@@ -495,7 +499,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 				backend.Logger.Error("Error unmarshalling digital state", err)
 				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			}
-		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() {
+		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() { // mismatch - try conversion
 			backend.Logger.Warn("Mismatch type", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
 				"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			if compatible(fP.val.Type(), fP.sliceType.Elem()) { // try to convert if numeric values
@@ -505,7 +509,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 			} else {
 				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			}
-		} else {
+		} else { // normal
 			fP.timestamps = append(fP.timestamps, item.Timestamp)
 			fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val).Interface()
 			fP.prevVal = fP.val
@@ -518,7 +522,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	// in the slice type, or values that are not "good"
 	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
 
-	timeField := data.NewField("time", nil, fP.timestamps)
+	timeField := data.NewField(data.TimeSeriesTimeFieldName, nil, fP.timestamps)
 	if !digitalState || !digitalStates {
 		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
 		frame.Fields = append(frame.Fields,

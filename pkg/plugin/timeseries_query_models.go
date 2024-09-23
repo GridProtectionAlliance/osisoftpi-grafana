@@ -43,8 +43,8 @@ func (q *Query) getIntervalTime() string {
 func (q *Query) getWindowedTimeStampURI() string {
 	// Potential Improvement: Make windowWidth a user input
 	windowWidth := q.getMaxDataPoints()
-	fromTime := q.TimeRange.From
-	toTime := q.TimeRange.To
+	fromTime := q.TimeRange.From.Truncate(time.Second)
+	toTime := q.TimeRange.To.Truncate(time.Second)
 
 	diff := toTime.Sub(fromTime).Nanoseconds() / int64(windowWidth)
 	timeQuery := "time=" + fromTime.Format(time.RFC3339)
@@ -60,11 +60,12 @@ func (q *Query) getWindowedTimeStampURI() string {
 }
 
 func (q *Query) getTimeRangeURIComponent() string {
-	return "?startTime=" + q.TimeRange.From.UTC().Format(time.RFC3339) + "&endTime=" + q.TimeRange.To.UTC().Format(time.RFC3339)
+	return "?startTime=" + q.TimeRange.From.UTC().Truncate(time.Second).Format(time.RFC3339) +
+		"&endTime=" + q.TimeRange.To.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
 func (q *Query) getTimeRangeURIToComponent() string {
-	return q.TimeRange.To.UTC().Format(time.RFC3339)
+	return q.TimeRange.To.UTC().Truncate(time.Second).Format(time.RFC3339)
 }
 
 func (q *Query) isstreamingEnabled() bool {
@@ -89,14 +90,11 @@ func (q *Query) isStreamable() bool {
 // 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
 // }
 
-func (q *PiProcessedQuery) getSummaryNoDataReplace() string {
-	if q.Summary == nil {
+func (q *PiProcessedQuery) getNoDataReplace() string {
+	if q.Nodata == nil {
 		return ""
 	}
-	if q.Summary.Nodata == nil {
-		return ""
-	}
-	return *q.Summary.Nodata
+	return *q.Nodata
 }
 
 type PIWebAPIQuery struct {
@@ -123,13 +121,16 @@ type PIWebAPIQuery struct {
 		Interval string `json:"interval"`
 	} `json:"interpolate"`
 	IsPiPoint      bool `json:"isPiPoint"`
+	HideError      bool `json:"hideError"`
 	MaxDataPoints  *int `json:"maxDataPoints"`
 	RecordedValues *struct {
-		Enable    *bool `json:"enable"`
-		MaxNumber *int  `json:"maxNumber"`
+		Enable       *bool   `json:"enable"`
+		MaxNumber    *int    `json:"maxNumber"`
+		BoundaryType *string `json:"boundaryType"`
 	} `json:"recordedValues"`
-	RefID *string `json:"refId"`
-	Regex *Regex  `json:"regex"`
+	RefID  *string `json:"refId"`
+	Regex  *Regex  `json:"regex"`
+	Nodata *string `json:"nodata"`
 	// Segments *[]string     `json:"segments"`
 	Summary *QuerySummary `json:"summary"`
 	Target  *string       `json:"target"`
@@ -140,10 +141,12 @@ type PIWebAPIQuery struct {
 }
 
 type QuerySummary struct {
-	Basis    *string        `json:"basis"`
-	Interval *string        `json:"interval"`
-	Nodata   *string        `json:"nodata"`
-	Types    *[]SummaryType `json:"types"`
+	Enable             *bool          `json:"enable"`
+	Basis              *string        `json:"basis"`
+	Duration           *string        `json:"duration"`
+	Types              *[]SummaryType `json:"types"`
+	SampleTypeInterval *bool          `json:"sampleTypeInterval"`
+	SampleInterval     *string        `json:"sampleInterval"`
 }
 
 type QueryPropertiesValue struct {
@@ -186,6 +189,7 @@ type PiProcessedQuery struct {
 	UID                 string             `json:"-"`
 	IntervalNanoSeconds int64              `json:"IntervalNanoSeconds"`
 	IsPIPoint           bool               `json:"IsPiPoint"`
+	HideError           bool               `json:"HideError"`
 	Streamable          bool               `json:"isStreamable"`
 	FullTargetPath      string             `json:"FullTargetPath"`
 	ResponseUnits       string             `json:"ResponseUnits"`
@@ -194,6 +198,7 @@ type PiProcessedQuery struct {
 	UseUnit             bool               `json:"UseUnit"`
 	DigitalStates       bool               `json:"DigitalStates"`
 	Display             *string            `json:"Display"`
+	Nodata              *string            `json:"Nodata"`
 	Error               error
 	Index               int
 	Resource            string

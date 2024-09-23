@@ -66,6 +66,10 @@ func (w *WebIDResponsePiPoint) getUnits() string {
 	return w.EngieeringUnits
 }
 
+func (w *WebIDResponsePiPoint) getDescription() string {
+	return w.Description
+}
+
 // WebIDResponseAttribute is the response from the PI Web API when requesting an attribute.
 type WebIDResponseAttribute struct {
 	WebID            string `json:"WebId"`
@@ -93,12 +97,17 @@ func (w *WebIDResponseAttribute) getUnits() string {
 	return w.DefaultUnitsName
 }
 
+func (w *WebIDResponseAttribute) getDescription() string {
+	return w.Description
+}
+
 // WebIDResponse is an interface for the WebID responses.
 type WebIDResponse interface {
 	getType() string
 	getWebID() string
 	getDigitalSetName() string
 	getUnits() string
+	getDescription() string
 }
 
 func (d *Datasource) getCachedWebID(path string) *WebIDCacheEntry {
@@ -166,6 +175,7 @@ func (d *Datasource) _saveWebID(data interface{}, path string, isPiPoint bool) s
 		ExpTime:      time.Now().Add(d.webIDCache.duration),
 		PointType:    response.getType(),
 		Units:        response.getUnits(),
+		Description:  response.getDescription(),
 	}
 
 	d.webIDCache.webIDCache[path] = entry

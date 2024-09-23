@@ -46,6 +46,7 @@ export interface PIWebAPIQuery extends DataQuery {
   attributes?: Array<SelectableValue<PIWebAPISelectableValue>>;
   segments?: any[];
   isPiPoint?: boolean;
+  hideError?: boolean;
   isAnnotation?: boolean;
   webid?: string;
   display?: any;
@@ -56,7 +57,15 @@ export interface PIWebAPIQuery extends DataQuery {
   useLastValue?: any;
   useUnit?: any;
   regex?: any;
-  summary?: {nodata?: string, types?: any[], basis?: string, interval?: string};
+  nodata?: string,
+  summary?: {
+    enable?: boolean,
+    types?: any[],
+    basis?: string,
+    duration?: string,
+    sampleTypeInterval?: boolean,
+    sampleInterval?: string
+  };
   expression?: string;
   rawQuery?: boolean;
   query?: string;
@@ -74,11 +83,19 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   attributes: [],
   segments: [],
   regex: { enable: false },
-  summary: { types: [], basis: 'EventWeighted', interval: '', nodata: 'Null' },
+  nodata: 'Null',
+  summary: {
+    enable: false,
+    types: [],
+    basis: 'EventWeighted',
+    duration: '',
+    sampleTypeInterval: false,
+    sampleInterval: ''
+  },
   expression: '',
   interpolate: { enable: false },
   useLastValue: { enable: false },
-  recordedValues: { enable: false },
+  recordedValues: { enable: false, boundaryType: 'Inside' },
   digitalStates: { enable: false },
   enableStreaming: { enable: false },
   useUnit: { enable: false },

@@ -1,6 +1,6 @@
 import { filter, map } from 'lodash';
 
-import { Observable, of, firstValueFrom } from 'rxjs';
+import { Observable, of } from 'rxjs';
 
 import {
   DataSourceInstanceSettings,
@@ -12,9 +12,9 @@ import {
   DataQueryRequest,
   DataQueryResponse,
 } from '@grafana/data';
-import { BackendSrv, getBackendSrv, getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
+import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
-import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiInternalRsp, PiwebapiRsp } from './types';
+import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiRsp } from './types';
 import { metricQueryTransform } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
@@ -31,8 +31,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
 
   constructor(
     instanceSettings: DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>,
-    readonly templateSrv: TemplateSrv = getTemplateSrv(),
-    private readonly backendSrv: BackendSrv = getBackendSrv()
+    readonly templateSrv: TemplateSrv = getTemplateSrv()
   ) {
     super(instanceSettings);
 
@@ -225,13 +224,13 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
         attributes: map(target.attributes, (att) => {
           if (att.value) {
-            this.templateSrv.replace(att.value.value, options.scopedVars);
+            att.value.value = this.templateSrv.replace(att.value.value, options.scopedVars);
           }
           return att;
         }),
         segments: map(target.segments, (att) => {
           if (att.value) {
-            this.templateSrv.replace(att.value.value, options.scopedVars);
+            att.value.value = this.templateSrv.replace(att.value.value, options.scopedVars);
           }
           return att;
         }),
@@ -247,20 +246,17 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           : { enable: false },
         useLastValue: target.useLastValue || { enable: false },
         useUnit: target.useUnit || { enable: false },
-        recordedValues: !!target.recordedValues
-          ? {
-              ...target.recordedValues,
-              interval: this.templateSrv.replace(target.recordedValues.maxNumber, options.scopedVars),
-            }
-          : { enable: false },
+        recordedValues: target.recordedValues || { enable: false },
         digitalStates: target.digitalStates || { enable: false },
         webid: target.webid ?? '',
         regex: target.regex || { enable: false },
         expression: target.expression || '',
-        summary: target.summary || { types: [] },
+        summary: target.summary || { enable: false, types: [] },
+        nodata: target.nodata,
         startTime: options.range.from,
         endTime: options.range.to,
         isPiPoint: !!target.isPiPoint,
+        hideError: !!target.hideError,
         scopedVars: options.scopedVars,
       };
 
@@ -268,13 +264,17 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
       }
 
-      if (tar.summary.types !== undefined) {
+      if (tar.summary.enable && tar.summary.types !== undefined) {
         tar.summary.types = filter(tar.summary.types, (item) => {
           return item !== undefined && item !== null && item !== '';
         });
-        tar.summary.interval = !!tar.summary.interval
-          ? this.templateSrv.replace(tar.summary.interval, options.scopedVars)
-          : tar.summary.interval;
+        tar.summary.duration = !!tar.summary.duration
+          ? this.templateSrv.replace(tar.summary.duration, options.scopedVars)
+          : tar.summary.duration;
+        tar.summary.sampleTypeInterval = !!tar.summary.sampleTypeInterval;
+        tar.summary.sampleInterval = !!tar.summary.sampleInterval
+          ? this.templateSrv.replace(tar.summary.sampleInterval, options.scopedVars)
+          : tar.summary.sampleInterval;
       }
 
       return tar;
@@ -359,55 +359,49 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    *
    * @memberOf PiWebApiDatasource
    */
-  private restGet(path: string): Promise<PiwebapiInternalRsp> {
-    const observable = this.backendSrv.fetch({
-      url: `/api/datasources/${this.id}/resources${path}`,
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    return firstValueFrom(observable).then((response: any) => {
-      return response as PiwebapiInternalRsp;
+  private restGet(path: string): Promise<PiwebapiRsp> {
+    return this.getResource(`${path}`).then((response: any) => {
+      return response as PiwebapiRsp;
     });
   }
 
   // Get a list of all data (PI) servers
   private getDataServers(): Promise<PiwebapiRsp[]> {
-    return this.restGet('/dataservers').then((response) => response.data.Items ?? []);
+    return this.restGet('/dataservers').then((response) => response.Items ?? []);
   }
   private getDataServer(name: string | undefined): Promise<PiwebapiRsp> {
     if (!name) {
       return Promise.resolve({});
     }
-    return this.restGet('/dataservers?name=' + name).then((response) => response.data);
+    return this.restGet('/dataservers?name=' + name).then((response) => response);
   }
   // Get a list of all asset (AF) servers
   private getAssetServers(): Promise<PiwebapiRsp[]> {
-    return this.restGet('/assetservers').then((response) => response.data.Items ?? []);
+    return this.restGet('/assetservers').then((response) => response.Items ?? []);
   }
   getAssetServer(name: string | undefined): Promise<PiwebapiRsp> {
     if (!name) {
       return Promise.resolve({});
     }
-    return this.restGet('/assetservers?path=\\\\' + name).then((response) => response.data);
+    return this.restGet('/assetservers?path=\\\\' + name).then((response) => response);
   }
   getDatabase(path: string | undefined): Promise<PiwebapiRsp> {
     if (!path) {
       return Promise.resolve({});
     }
-    return this.restGet('/assetdatabases?path=\\\\' + path).then((response) => response.data);
+    return this.restGet('/assetdatabases?path=\\\\' + path).then((response) => response);
   }
   getDatabases(serverId: string, options?: any): Promise<PiwebapiRsp[]> {
     if (!serverId) {
       return Promise.resolve([]);
     }
-    return this.restGet('/assetservers/' + serverId + '/assetdatabases').then((response) => response.data.Items ?? []);
+    return this.restGet('/assetservers/' + serverId + '/assetdatabases').then((response) => response.Items ?? []);
   }
   getElement(path: string): Promise<PiwebapiRsp> {
     if (!path) {
       return Promise.resolve({});
     }
-    return this.restGet('/elements?path=\\\\' + path).then((response) => response.data);
+    return this.restGet('/elements?path=\\\\' + path).then((response) => response);
   }
   getEventFrameTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
     if (!databaseId) {
@@ -416,7 +410,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     return this.restGet(
       '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
     ).then((response) => {
-      return filter(response.data.Items ?? [], (item) => item.InstanceType === 'EventFrame');
+      return filter(response.Items ?? [], (item) => item.InstanceType === 'EventFrame');
     });
   }
   getElementTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
@@ -426,7 +420,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     return this.restGet(
       '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
     ).then((response) => {
-      return filter(response.data.Items ?? [], (item) => item.InstanceType === 'Element');
+      return filter(response.Items ?? [], (item) => item.InstanceType === 'Element');
     });
   }
 
@@ -461,7 +455,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     }
 
     return this.restGet('/elements/' + elementId + '/attributes' + querystring).then(
-      (response) => response.data.Items ?? []
+      (response) => response.Items ?? []
     );
   }
 
@@ -496,7 +490,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     }
 
     return this.restGet('/assetdatabases/' + databaseId + '/elements' + querystring).then(
-      (response) => response.data.Items ?? []
+      (response) => response.Items ?? []
     );
   }
 
@@ -531,7 +525,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     }
 
     return this.restGet('/elements/' + elementId + '/elements' + querystring).then(
-      (response) => response.data.Items ?? []
+      (response) => response.Items ?? []
     );
   }
 
@@ -546,7 +540,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     let filter2 = `${filter1}`;
     let doFilter = false;
     if (filter1 !== nameFilter) {
-      const regex = /\{(\w|,)+\}/gs;
+      const regex = /\{(\w|,)+\}/g;
       let m;
       while ((m = regex.exec(filter1)) !== null) {
         // This is necessary to avoid infinite loops with zero-width matches
@@ -564,9 +558,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         });
       }
     }
-    return this.restGet('/dataservers/' + serverId + '/points?maxCount=50&nameFilter=' + filter2).then((results) => {
-      if (!!results && !!results.data?.Items) {
-        return doFilter ? results.data.Items.filter((item) => item.Name?.match(filter1)) : results.data.Items;
+    return this.restGet('/dataservers/' + serverId + '/points?maxCount=100&nameFilter=' + filter2).then((results) => {
+      if (!!results && !!results?.Items) {
+        return doFilter ? results.Items.filter((item) => item.Name?.match(filter1)) : results.Items;
       }
       return [];
     });
