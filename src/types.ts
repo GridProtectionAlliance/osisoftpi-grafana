@@ -36,36 +36,55 @@ export interface PIWebAPISelectableValue {
   expandable?: boolean;
 }
 
+export interface PiWebAPIEnable {
+  enable: boolean;
+}
+
+export interface PiWebAPIRegex extends PiWebAPIEnable {
+  search?: string;
+  replace?: string
+}
+
+export interface PiWebAPIRecordedValue extends PiWebAPIEnable {
+  maxNumber?: number;
+  boundaryType?: string;
+}
+
+export interface PiWebAPIInterpolate extends PiWebAPIEnable {
+  interval?: string;
+}
+
+export interface PiWebAPISummary extends PiWebAPIEnable {
+  types?: Array<SelectableValue<PIWebAPISelectableValue>>;
+  basis?: string,
+  duration?: string,
+  sampleTypeInterval?: boolean,
+  sampleInterval?: string
+}
+
 export interface PIWebAPIAnnotationsQuery extends DataQuery {
   target: string;
 }
 
 export interface PIWebAPIQuery extends DataQuery {
-  target?: string;
+  target: string;
+  attributes: Array<SelectableValue<PIWebAPISelectableValue>>;
+  segments: Array<SelectableValue<PIWebAPISelectableValue>>;
+  useUnit: PiWebAPIEnable;
+  regex: PiWebAPIRegex;
+  interpolate: PiWebAPIInterpolate;
+  recordedValues: PiWebAPIRecordedValue;
+  useLastValue: PiWebAPIEnable;
+  summary: PiWebAPISummary;
+  digitalStates: PiWebAPIEnable;
+  isPiPoint: boolean;
   elementPath?: string;
-  attributes?: Array<SelectableValue<PIWebAPISelectableValue>>;
-  segments?: any[];
-  isPiPoint?: boolean;
   hideError?: boolean;
   isAnnotation?: boolean;
   webid?: string;
   display?: any;
-  interpolate?: any;
-  recordedValues?: any;
-  digitalStates?: any;
-  enableStreaming: any;
-  useLastValue?: any;
-  useUnit?: any;
-  regex?: any;
   nodata?: string,
-  summary?: {
-    enable?: boolean,
-    types?: any[],
-    basis?: string,
-    duration?: string,
-    sampleTypeInterval?: boolean,
-    sampleInterval?: string
-  };
+  enableStreaming?: any;
   expression?: string;
   rawQuery?: boolean;
   query?: string;
