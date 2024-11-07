@@ -6,10 +6,9 @@ import { QueryEditorProps, SelectableValue, TypedVariableModel } from '@grafana/
 
 import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
-import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
+import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery, PiWebAPISummary } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
-import { parseRawQuery } from 'helper';
-import { types } from '@babel/core';
+import { parseRawQuery, getSummaryTypes } from 'helper';
 
 const LABEL_WIDTH = 24;
 const LABEL_SWITCH_WIDTH = 49.067 / 8.0;
@@ -952,7 +951,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
     let segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>> = force ? [] : segments?.slice(0) ?? [];
     let attributesArray: Array<SelectableValue<PIWebAPISelectableValue>> = force ? [] : attributes?.slice(0) ?? [];
-    let summariesArray = summary?.types ?? [];
+    let summariesArray = getSummaryTypes(summary); // TODO: remove in 6.0.0 => summary.types ?? [];
 
     if (!isPiPoint && segmentsArray.length === 0) {
       if (query.target && query.target.length > 0 && query.target !== ';') {
@@ -995,7 +994,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           ';'
         );
     }
-    const summary = query.summary;
+
+    // recover summary due to format change
+    // TODO: remove in 6.0.0
+    const summary = {
+      ...defaultQuery.summary,
+      ...query.summary,
+    };
     if (summary) {
       summary.types = this.state.summaries;
     }
@@ -1307,7 +1312,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               <InlineSwitch
                 value={interpolate.enable}
                 onChange={() =>
-                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable, interval: null } })
+                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable, interval: undefined } })
                 }
               />
             </InlineField>
@@ -1338,7 +1343,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 onChange={() =>
                   this.onChange({
                     ...metricsQuery,
-                    recordedValues: { ...recordedValues, enable: !recordedValues.enable, maxNumber: null, boundaryType: 'Inside' },
+                    recordedValues: { ...recordedValues, enable: !recordedValues.enable, maxNumber: undefined, boundaryType: 'Inside' },
                   })
                 }
               />

@@ -1,4 +1,4 @@
-import { each, map } from 'lodash';
+import { each, filter, map } from 'lodash';
 
 import {
   AnnotationQuery,
@@ -9,7 +9,21 @@ import {
   toDataFrame,
 } from '@grafana/data';
 
-import { PiwebapiElementPath, PiwebapiRsp, PIWebAPIQuery } from 'types';
+import { PiwebapiElementPath, PiwebapiRsp, PIWebAPIQuery, PiWebAPISummary } from 'types';
+
+// TODO: remove in 6.0.0
+export function getSummaryTypes(summary: PiWebAPISummary | undefined) {
+  let types = filter(summary?.types ?? [], (item) => {
+    return item !== undefined && item !== null && String(item) !== '';
+  });
+  return types.map((t) => {
+    if (typeof t === 'string' || t instanceof String) {
+      const new_type = String(t);
+      return { label: new_type, value: { value: new_type, expandable: true } };
+    }
+    return t;
+  });
+}
 
 export function parseRawQuery(tr: string): any {
   const splitAttributes = tr.split(';');

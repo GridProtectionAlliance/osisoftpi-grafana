@@ -15,7 +15,7 @@ import {
 import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiRsp } from './types';
-import { metricQueryTransform } from 'helper';
+import { getSummaryTypes, metricQueryTransform } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -264,10 +264,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
       }
 
-      if (tar.summary.enable && tar.summary.types !== undefined) {
-        tar.summary.types = filter(tar.summary.types, (item) => {
-          return item !== undefined && item !== null && item !== '';
-        });
+      if (tar.summary.enable) {
         tar.summary.duration = !!tar.summary.duration
           ? this.templateSrv.replace(tar.summary.duration, options.scopedVars)
           : tar.summary.duration;
@@ -276,6 +273,10 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           ? this.templateSrv.replace(tar.summary.sampleInterval, options.scopedVars)
           : tar.summary.sampleInterval;
       }
+
+      // recover summary due to format change
+      // TODO: remove in 6.0.0
+      tar.summary.types = getSummaryTypes(tar.summary);
 
       return tar;
     });
@@ -301,7 +302,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       for (let i = 0; i < values['time'].length; i++) {
         // replace Dataframe name using Regex
         let title = values['title'][i];
-        if (annotationOptions.regex && annotationOptions.regex.enable) {
+        if (annotationOptions.regex?.enable && annotationOptions.regex.search && annotationOptions.regex.replace) {
           title = title.replace(new RegExp(annotationOptions.regex.search), annotationOptions.regex.replace);
         }
 
@@ -524,9 +525,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       querystring = '';
     }
 
-    return this.restGet('/elements/' + elementId + '/elements' + querystring).then(
-      (response) => response.Items ?? []
-    );
+    return this.restGet('/elements/' + elementId + '/elements' + querystring).then((response) => response.Items ?? []);
   }
 
   /**
