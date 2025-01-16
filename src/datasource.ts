@@ -15,7 +15,7 @@ import {
 import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiRsp } from './types';
-import { getSummaryTypes, metricQueryTransform } from 'helper';
+import { getSummaryTypes, hashCode, metricQueryTransform, removeTime } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -258,6 +258,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         isPiPoint: !!target.isPiPoint,
         hideError: !!target.hideError,
         scopedVars: options.scopedVars,
+        hashCode: '',
       };
 
       if (tar.expression) {
@@ -277,6 +278,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       // recover summary due to format change
       // TODO: remove in 6.0.0
       tar.summary.types = getSummaryTypes(tar.summary);
+      // END TODO
+
+      tar.hashCode = hashCode(removeTime(tar));
 
       return tar;
     });

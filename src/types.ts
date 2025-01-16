@@ -95,6 +95,7 @@ export interface PIWebAPIQuery extends DataQuery {
   attribute?: any;
   nameFilter?: string;
   categoryName?: string;
+  hashCode?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {
@@ -135,6 +136,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   useUnit?: boolean;
   useExperimental?: boolean;
   useStreaming?: boolean;
+  useResponseCache?: boolean;
 }
 
 /**

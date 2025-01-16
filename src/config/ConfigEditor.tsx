@@ -101,6 +101,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onUseResponseCacheChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      useResponseCache: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -137,6 +146,13 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
               <InlineSwitch value={options.jsonData.useExperimental} onChange={this.onUseExperimentalChange} />
             </InlineField>
           </div>
+          {options.jsonData.useExperimental && (
+            <div className="gf-form-inline">
+              <InlineField label="Enable Response Cache" labelWidth={24}>
+                <InlineSwitch value={options.jsonData.useResponseCache} onChange={this.onUseResponseCacheChange} />
+              </InlineField>
+            </div>
+          )}
           {options.jsonData.useExperimental && (
             <div className="gf-form-inline">
               <InlineField label="Enable Steaming Support" labelWidth={24}>

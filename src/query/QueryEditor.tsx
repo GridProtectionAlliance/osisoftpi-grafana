@@ -6,7 +6,7 @@ import { QueryEditorProps, SelectableValue, TypedVariableModel } from '@grafana/
 
 import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
-import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery, PiWebAPISummary } from '../types';
+import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
 import { parseRawQuery, getSummaryTypes } from 'helper';
 
@@ -1004,6 +1004,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     if (summary) {
       summary.types = this.state.summaries;
     }
+    // END TODO
 
     onChange({...query, summary});
 
@@ -1228,7 +1229,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         <InlineFieldRow>
           <InlineField
             label="Use Last Value"
-            tooltip={"Fetch only last value from time range"}
+            tooltip={"Returns values of the attributes for an Element or Pi Point at the specified end time (StreamSet GetValues)."}
             labelWidth={LABEL_WIDTH}
           >
             <InlineSwitch
@@ -1237,10 +1238,31 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 this.onChange({
                   ...metricsQuery,
                   useLastValue: { ...useLastValue, enable: !useLastValue.enable },
+                  recordedValues: defaultQuery.recordedValues!,
+                  interpolate: defaultQuery.interpolate!,
+                  summary: defaultQuery.summary!,
                 })
               }
             />
           </InlineField>
+
+          {useLastValue.enable && (
+            <InlineField
+              label="Ignore end time"
+              tooltip={"Returns End of stream value (StreamSet GetEnd). Ignore selected end time."}
+              labelWidth={LABEL_WIDTH}
+            >
+              <InlineSwitch
+                value={recordedValues.enable}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    recordedValues: { enable: !recordedValues.enable , boundaryType: 'Inside' },
+                  })
+                }
+              />
+            </InlineField>
+          )}
           <InlineField label="Digital States" labelWidth={LABEL_WIDTH}>
             <InlineSwitch
               value={digitalStates.enable}
@@ -1269,9 +1291,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               options={this.getNoDataSegments()}
               allowCustomValue
             />
-          </InlineField>
-          <InlineField label="Ignore API Error?" labelWidth={LABEL_WIDTH}>
-            <InlineSwitch value={hideError} onChange={this.onHideErrorChange} />
           </InlineField>
           {this.props.datasource.useUnitConfig && (
             <InlineField
@@ -1306,13 +1325,23 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           )}
         </InlineFieldRow>
         
-        {(interpolate.enable || (!useLastValue.enable && !recordedValues.enable)) && (
+        {(interpolate.enable || (!useLastValue.enable && !recordedValues.enable && !summary.enable)) && (
           <InlineFieldRow>
-            <InlineField label={!!expression ? "Interval Values" : "Interpolate"} labelWidth={LABEL_WIDTH}>
+            <InlineField
+              label={!!expression ? "Interval Values" : "Interpolate"}
+              labelWidth={LABEL_WIDTH}
+              tooltip={!!expression ? '' : 'Returns interpolated values of attributes for an element or pi point over the specified time range at the specified sampling interval (StreamSet GetInterpolated).'}
+            >
               <InlineSwitch
                 value={interpolate.enable}
                 onChange={() =>
-                  this.onChange({ ...metricsQuery, interpolate: { ...interpolate, enable: !interpolate.enable, interval: undefined } })
+                  this.onChange({
+                    ...metricsQuery,
+                    interpolate: { ...interpolate, enable: !interpolate.enable, interval: undefined },
+                    useLastValue: defaultQuery.useLastValue!,
+                    recordedValues: defaultQuery.recordedValues!,
+                    summary: defaultQuery.summary!,
+                  })
                 }
               />
             </InlineField>
@@ -1335,21 +1364,27 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </InlineFieldRow>
         )}
 
-        {(recordedValues.enable || (!useLastValue.enable && !interpolate.enable)) && (
+        {!useLastValue.enable && !interpolate.enable && !summary.enable && (
           <InlineFieldRow>
-            <InlineField label="Recorded Values" labelWidth={LABEL_WIDTH}>
+            <InlineField
+              label="Recorded Values"
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Returns recorded values of the attributes for an element, event frame, or attribute (StreamSet GetRecorded).'}
+            >
               <InlineSwitch
                 value={recordedValues.enable}
                 onChange={() =>
                   this.onChange({
                     ...metricsQuery,
                     recordedValues: { ...recordedValues, enable: !recordedValues.enable, maxNumber: undefined, boundaryType: 'Inside' },
+                    useLastValue: defaultQuery.useLastValue!,
+                    interpolate: defaultQuery.interpolate!,
+                    summary: defaultQuery.summary!,
                   })
                 }
               />
             </InlineField>
             <InlineField
-              disabled={!recordedValues?.enable}
               label="Max Recorded Values"
               labelWidth={LABEL_WIDTH}
               tooltip={
@@ -1371,7 +1406,6 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               />
             </InlineField>
             <InlineField
-              disabled={!recordedValues?.enable}
               label="Boundary Type"
               labelWidth={LABEL_WIDTH}
               tooltip={
@@ -1394,15 +1428,22 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </InlineFieldRow>
         )}
 
-        {!useLastValue.enable && (
+        {(summary.enable || (!recordedValues.enable && !useLastValue.enable && !interpolate.enable)) && (
           <InlineFieldRow>
-            <InlineField label="Summary Enable" labelWidth={LABEL_WIDTH}>
+            <InlineField
+              label="Summary Enable"
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Returns summary values of the attributes for an element, event frame or attribute (StreamSet GetSummaries).'}
+            >
               <InlineSwitch
                 value={summary?.enable}
                 onChange={() =>
                   this.onChange({
                     ...metricsQuery,
                     summary: { ...summary, enable: !(summary?.enable) },
+                    useLastValue: defaultQuery.useLastValue!,
+                    recordedValues: defaultQuery.recordedValues!,
+                    interpolate: defaultQuery.interpolate!,
                   })
                 }
               />
@@ -1555,6 +1596,16 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               }
               placeholder="$1"
             />
+          </InlineField>
+        </InlineFieldRow>
+
+        <InlineFieldRow>
+          <InlineField
+            label="Ignore API Error?"
+            labelWidth={LABEL_WIDTH}
+            tooltip={'Don\'t present errors from PiWebAPI in the panel.'}
+          >
+            <InlineSwitch value={hideError} onChange={this.onHideErrorChange} />
           </InlineField>
         </InlineFieldRow>
       </>

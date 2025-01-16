@@ -17,6 +17,7 @@ type Datasource struct {
 	StreamHandler             backend.StreamHandler
 	httpClient                *http.Client
 	webIDCache                WebIDCache
+	webCache                  *Cache[string, PiBatchData]
 	channelConstruct          map[string]StreamChannelConstruct
 	datasourceMutex           *sync.Mutex
 	scheduler                 *gocron.Scheduler
@@ -31,14 +32,15 @@ type Datasource struct {
 }
 
 type PIWebAPIDataSourceJsonData struct {
-	URL             *string `json:"url,omitempty"`
-	Access          *string `json:"access,omitempty"`
-	PIServer        *string `json:"piserver,omitempty"`
-	AFServer        *string `json:"afserver,omitempty"`
-	AFDatabase      *string `json:"afdatabase,omitempty"`
-	PIPoint         *bool   `json:"pipoint,omitempty"`
-	NewFormat       *bool   `json:"newFormat,omitempty"`
-	UseUnit         *bool   `json:"useUnit,omitempty"`
-	UseExperimental *bool   `json:"useExperimental,omitempty"`
-	UseStreaming    *bool   `json:"useStreaming,omitempty"`
+	URL              *string `json:"url,omitempty"`
+	Access           *string `json:"access,omitempty"`
+	PIServer         *string `json:"piserver,omitempty"`
+	AFServer         *string `json:"afserver,omitempty"`
+	AFDatabase       *string `json:"afdatabase,omitempty"`
+	PIPoint          *bool   `json:"pipoint,omitempty"`
+	NewFormat        *bool   `json:"newFormat,omitempty"`
+	UseUnit          *bool   `json:"useUnit,omitempty"`
+	UseExperimental  *bool   `json:"useExperimental,omitempty"`
+	UseStreaming     *bool   `json:"useStreaming,omitempty"`
+	UseResponseCache *bool   `json:"useResponseCache,omitempty"`
 }

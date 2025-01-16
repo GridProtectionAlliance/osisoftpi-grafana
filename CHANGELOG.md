@@ -61,3 +61,11 @@
 - Truncate time from grafana date time picker to seconds
 - Fixed warnings during deploy
 - Fixed LICENSE file
+
+### 5.2.0
+
+- Improved query performance to PiWebAPI by joing all queries in Panel into one batch request only
+- Change the Query Editor layout
+- Increased WebID cache from 1 hour to 12 hours
+
+- Added experimental feature to cache latest response in case of request failure to PiWebAPI

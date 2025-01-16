@@ -53,16 +53,18 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	}
 
 	webIDCache := newWebIDCache()
+	webCache := newCache[string, PiBatchData]()
 
 	// Create a new scheduler that will be used to clean the webIDCache every 60 minutes.
 	scheduler := gocron.NewScheduler(time.UTC)
-	scheduler.Every(1).Hour().Do(cleanWebIDCache, webIDCache)
+	scheduler.Every(12).Hour().Do(cleanWebIDCache, webIDCache)
 	scheduler.StartAsync()
 
 	ds := &Datasource{
 		settings:                  settings,
 		httpClient:                httpClient,
 		webIDCache:                webIDCache,
+		webCache:                  webCache,
 		scheduler:                 scheduler,
 		websocketConnectionsMutex: &sync.Mutex{},
 		datasourceMutex:           &sync.Mutex{},
@@ -79,7 +81,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	// Create a new query mux and assign it to the datasource.
 	ds.queryMux = ds.newQueryMux()
 
-	backend.Logger.Info("NewPIWebAPIDatasource Created")
+	log.DefaultLogger.Info("PIWebAPI Datasource Created", "UID", settings.UID, "Name", settings.Name)
 
 	return ds, nil
 }
@@ -103,8 +105,8 @@ func (d *Datasource) updateRate() {
 		time.Sleep(time.Duration(d.callRate) * time.Millisecond)
 	}
 
-	// reset every 5 minutes (300 s)
-	if time.Since(d.initalTime).Seconds() > 300 {
+	// reset every 10 minutes (600 s)
+	if time.Since(d.initalTime).Seconds() > 600 {
 		d.initalTime = time.Now()
 		d.totalCalls = 1
 		d.callRate = float64(d.totalCalls) / float64(time.Now().Unix()-d.initalTime.Unix())
@@ -132,13 +134,6 @@ func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
 func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	// //TODO: Remove this debug information
-	// jsonReq, err := json.Marshal(req)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("error marshaling QueryDataRequest: %v", err)
-	// }
-	// backend.Logger.Info("QueryDataRequest: ", "REQUEST", string(jsonReq))
-	// end remove this debug information
 	// Pass the query to the query muxer.
 	return d.queryMux.QueryData(ctx, req)
 }
@@ -146,19 +141,32 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 // TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	processedPIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
 
+	// tracer
+	ctx, span := tracing.DefaultTracer().Start(
+		ctx,
+		"New annotation query recieved",
+	)
+	defer span.End()
+
 	// Process queries generic query objects and turn them into a suitable format for the PI Web API
-	for _, q := range req.Queries {
-		processedPIWebAPIQueries[q.RefID] = d.processQuery(q, datasourceUID)
-	}
+	processedPIWebAPIQueries := d.processQuery(req.Queries, datasourceUID)
+
+	// span
+	span.AddEvent("Completed processing query request")
 
 	// Send the queries to the PI Web API
 	processedQueries_temp := d.batchRequest(ctx, processedPIWebAPIQueries)
 
+	// span
+	span.AddEvent("Completed processing batch request")
+
 	// Convert the PI Web API response into Grafana frames
 	response := d.processBatchtoFrames(processedQueries_temp)
+
+	// span
+	span.AddEvent("Completed processing batch to frames")
 
 	// Update rate and do backpressure
 	d.updateRate()
@@ -178,7 +186,6 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	defer span.End()
 
 	for _, q := range req.Queries {
-
 		span.AddEvent("Processing annotation query request",
 			trace.WithAttributes(
 				attribute.String("query.ref_id", q.RefID),
@@ -188,7 +195,6 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 			),
 		)
 
-		// backend.Logger.Info("Processing Annotation Query", "RefID", q.RefID)
 		// Process the annotation query request, extracting only the useful information
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		span.AddEvent("Completed processing annotation query request")
@@ -299,12 +305,13 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.DefaultLogger.Error("check health: failed to close response body", "err", err.Error())
+			log.DefaultLogger.Error("PiWebAPI Check health: failed to close response body", "err", err.Error())
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
 		return newHealthCheckErrorf("got response code %d", resp.StatusCode), nil
 	}
+	// return good status
 	return &backend.CheckHealthResult{
 		Status:  backend.HealthStatusOk,
 		Message: "Data source is working",
@@ -317,6 +324,25 @@ func newHealthCheckErrorf(format string, args ...interface{}) *backend.CheckHeal
 	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
 }
 
+// isUsingNewFormat checks whether the datasource is configured to use a new format.
+// This is determined by the NewFormat option in dataSourceOptions.
+// Returns true if NewFormat is set and enabled; otherwise, false.
 func (d *Datasource) isUsingNewFormat() bool {
 	return d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat
+}
+
+// isUsingStreaming checks whether the datasource has streaming enabled in experimental mode.
+// This requires both the UseExperimental and UseStreaming options to be set and enabled.
+// Returns true if both options are enabled; otherwise, false.
+func (d *Datasource) isUsingStreaming() bool {
+	return d.dataSourceOptions.UseExperimental != nil && *d.dataSourceOptions.UseExperimental &&
+		d.dataSourceOptions.UseStreaming != nil && *d.dataSourceOptions.UseStreaming
+}
+
+// isUsingResponseCache checks if response caching is enabled in experimental mode for the datasource.
+// This requires both the UseExperimental and UseResponseCache options to be set and enabled.
+// Returns true if both options are enabled; otherwise, false.
+func (d *Datasource) isUsingResponseCache() bool {
+	return d.dataSourceOptions.UseExperimental != nil && *d.dataSourceOptions.UseExperimental &&
+		d.dataSourceOptions.UseResponseCache != nil && *d.dataSourceOptions.UseResponseCache
 }
