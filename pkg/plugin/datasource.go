@@ -52,12 +52,18 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
 
-	webIDCache := newWebIDCache()
+	var maxDuration int
+	if dataSourceOptions.MaxCacheTime != nil && *dataSourceOptions.MaxCacheTime > 0 {
+		maxDuration = *dataSourceOptions.MaxCacheTime
+	} else {
+		maxDuration = 12
+	}
+	webIDCache := newWebIDCache(maxDuration)
 	webCache := newCache[string, PiBatchData]()
 
-	// Create a new scheduler that will be used to clean the webIDCache every 60 minutes.
+	// Create a new scheduler that will be used to clean the webIDCache every MaxCacheTime hours.
 	scheduler := gocron.NewScheduler(time.UTC)
-	scheduler.Every(12).Hour().Do(cleanWebIDCache, webIDCache)
+	scheduler.Every(maxDuration).Hour().Do(cleanWebIDCache, webIDCache)
 	scheduler.StartAsync()
 
 	ds := &Datasource{

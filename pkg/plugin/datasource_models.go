@@ -39,6 +39,7 @@ type PIWebAPIDataSourceJsonData struct {
 	AFDatabase       *string `json:"afdatabase,omitempty"`
 	PIPoint          *bool   `json:"pipoint,omitempty"`
 	NewFormat        *bool   `json:"newFormat,omitempty"`
+	MaxCacheTime     *int    `json:"maxCacheTime,omitempty"`
 	UseUnit          *bool   `json:"useUnit,omitempty"`
 	UseExperimental  *bool   `json:"useExperimental,omitempty"`
 	UseStreaming     *bool   `json:"useStreaming,omitempty"`

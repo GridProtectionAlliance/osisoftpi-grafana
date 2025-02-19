@@ -1,5 +1,6 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
+import internal from 'stream';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -133,6 +134,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   afdatabase?: string;
   pipoint?: boolean;
   newFormat?: boolean;
+  maxCacheTime?: number;
   useUnit?: boolean;
   useExperimental?: boolean;
   useStreaming?: boolean;

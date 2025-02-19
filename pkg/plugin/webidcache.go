@@ -20,11 +20,11 @@ type WebIDCache struct {
 }
 
 // newWebIDCache creates a new WebIDCache with initialized maps.
-func newWebIDCache() WebIDCache {
+func newWebIDCache(durationOpt int) WebIDCache {
 	return WebIDCache{
 		webIDPaths: make(map[string]string),
 		webIDCache: make(map[string]WebIDCacheEntry),
-		duration:   12 * time.Hour,
+		duration:   time.Duration(durationOpt) * time.Hour,
 	}
 }
 
