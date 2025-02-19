@@ -66,6 +66,6 @@
 
 - Improved query performance to PiWebAPI by joing all queries in Panel into one batch request only
 - Change the Query Editor layout
-- Increased WebID cache from 1 hour to 12 hours
+- Increased WebID cache from 1 hour to 12 hours and made it configurable
 
 - Added experimental feature to cache latest response in case of request failure to PiWebAPI
