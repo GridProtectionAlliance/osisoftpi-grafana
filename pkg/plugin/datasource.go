@@ -120,6 +120,9 @@ func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
 	// QueryAnnotations is called by Grafana when a user creates an annotation query.
 	mux.HandleFunc("Annotation", d.QueryAnnotations)
 
+	// Register the alert query handler
+	mux.HandleFunc("alert", d.QueryAlert)
+
 	// QueryData is called by Grafana when a user executes any other query type.
 	mux.HandleFunc("", d.QueryTSData)
 
@@ -230,6 +233,13 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 	}
 
 	return response, nil
+}
+
+// QueryAlert is called by Grafana when a user creates an alert rule.
+// It handles alert queries by using the same logic as time series data queries.
+func (d *Datasource) QueryAlert(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+	// For alerting, we can use the same logic as regular time series queries
+	return d.QueryTSData(ctx, req)
 }
 
 // This function provides a way to proxy requests to the PI Web API. It is used to limit access from the frontend to the PI Web API.
