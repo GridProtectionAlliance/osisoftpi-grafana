@@ -1,0 +1,85 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+Below is a concise set of instructions (in markdown) outlining the changes needed to add alerting support. Essentially, you must:
+
+1. **Update plugin.json:**  
+   Enable alerting by adding `"alerting": true` in the plugin’s configuration (typically in the src/plugin.json file).
+
+2. **Implement an Alert Query Handler:**  
+   In your datasource (e.g. in pkg/plugin/datasource.go), add a new method (for example, QueryAlert) that handles alert queries. You can either reuse your existing QueryTSData logic or adjust it to fit alerting needs.
+
+3. **Register the Alert Query Handler:**  
+   In the query mux setup (inside newQueryMux), register your new handler—for example, mapping a query type like “alert” to your QueryAlert method.
+
+Below is an example markdown file (ENABLE_ALERTING.md) you can feed to cursor.ai:
+
+---  
+# Enabling Grafana Alerting Functionality
+
+This document provides concise instructions for adding Grafana alerting support to the plugin.
+
+## 1. Update Plugin Configuration
+
+In **src/plugin.json**, add the alerting capability:
+```json
+{
+  "id": "denizbac-osisoftpi",
+  "name": "OSIsoft PI Datasource",
+  "type": "datasource",
+  "alerting": true,
+  // ... other properties
+}
+```
+
+## 2. Implement Alert Query Handler
+
+In **pkg/plugin/datasource.go**, add a new method to handle alert queries. For example:
+```go
+func (d *Datasource) QueryAlert(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+    // Option 1: Directly reuse the time series query (adjust as needed for alerts)
+    return d.QueryTSData(ctx, req)
+
+    // Option 2: Customize processing for alert queries here
+}
+```
+
+## 3. Register the Alert Query Handler
+
+In the function that sets up query routing (e.g. newQueryMux), register the new alert handler:
+```go
+func (d *Datasource) newQueryMux() *datasource.QueryTypeMux {
+    mux := datasource.NewQueryTypeMux()
+    
+    // Existing handlers
+    mux.HandleFunc("Annotation", d.QueryAnnotations)
+    mux.HandleFunc("", d.QueryTSData)
+    
+    // Register the alert query handler (use an appropriate query type identifier, e.g., "alert")
+    mux.HandleFunc("alert", d.QueryAlert)
+    
+    return mux
+}
+```
+
+## 4. Testing
+
+- Restart Grafana and add the datasource.
+- Create an alert rule using this datasource.
+- Verify that alert queries are routed through your new QueryAlert method and that the returned data is formatted appropriately for the alert engine.
+
+## Additional Considerations
+
+- Ensure that time series data returned by the alert query handler conforms to Grafana’s alerting requirements.
+- Review Grafana’s [alerting documentation](https://grafana.com/docs/grafana/latest/alerting/) for any additional specifics.
+
+---
+
+These changes will enable alerting functionality for your plugin.  
+Feel free to adjust the code and logic based on your specific requirements.
+
