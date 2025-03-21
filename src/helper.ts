@@ -1,13 +1,6 @@
 import { each, filter, map } from 'lodash';
 
-import {
-  AnnotationQuery,
-  DataFrame,
-  TableData,
-  MetricFindValue,
-  Field,
-  toDataFrame,
-} from '@grafana/data';
+import { AnnotationQuery, DataFrame, TableData, MetricFindValue, Field, toDataFrame } from '@grafana/data';
 
 import { PiwebapiElementPath, PiwebapiRsp, PIWebAPIQuery, PiWebAPISummary } from 'types';
 
@@ -23,6 +16,30 @@ export function getSummaryTypes(summary: PiWebAPISummary | undefined) {
     }
     return t;
   });
+}
+// END TODO
+
+export function removeTime(s: any): string {
+  const temp = Object.assign({}, s);
+  delete temp.startTime;
+  delete temp.endTime;
+  delete temp.scopedVars;
+  delete temp.hashCode;
+  delete temp.webid;
+  return JSON.stringify(temp);
+}
+
+export function hashCode(s: string) {
+  // Convert the string to bytes
+  const bytes = new TextEncoder().encode(s);
+
+  // Encode the bytes to Base64
+  const base64 = btoa(String.fromCharCode(...bytes));
+
+  // Concatenate the base64 string and the unique identifier
+  const uniqueBase64Id = base64;
+
+  return uniqueBase64Id;
 }
 
 export function parseRawQuery(tr: string): any {
@@ -95,46 +112,46 @@ export function isAllSelected(current: any): boolean {
   return current.text === 'All';
 }
 
-export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>,data: DataFrame[]): DataFrame[] {
+export function processAnnotationQuery(annon: AnnotationQuery<PIWebAPIQuery>, data: DataFrame[]): DataFrame[] {
   let processedFrames: DataFrame[] = [];
-  
+
   data.forEach((d: DataFrame) => {
     d.fields.forEach((f: Field) => {
-
-      // check if the label has been set, if it hasn't been set then the eventframe annotation is not valid. 
-      if (!f.labels) { 
-        return 
+      // check if the label has been set, if it hasn't been set then the eventframe annotation is not valid.
+      if (!f.labels) {
+        return;
       }
 
       if (!('eventframe' in f.labels)) {
         return;
       }
 
-      let attribute = 'attribute' in f.labels
+      let attribute = 'attribute' in f.labels;
 
       // Check whether f.values is an array or not to allow for each.
       // Check whether f.values is an array or not to allow for each.
       if (Array.isArray(f.values)) {
         f.values.forEach((value: any) => {
-
           if (attribute) {
-            let annotation = value['1'].Content
-            let valueData:  any[] = []
+            let annotation = value['1'].Content;
+            let valueData: any[] = [];
             for (let i = 2; i in value; i++) {
-              valueData.push(value[i].Content.Items)
+              valueData.push(value[i].Content.Items);
             }
 
             const processedFrame = convertToTableData(annotation.Items!, valueData).map((r) => {
-              return toDataFrame(r)});
+              return toDataFrame(r);
+            });
             processedFrames = processedFrames.concat(processedFrame);
           } else {
-            let annotation = value['1'].Content
+            let annotation = value['1'].Content;
             const processedFrame = convertToTableData(annotation.Items!).map((r) => {
-              return toDataFrame(r)});
+              return toDataFrame(r);
+            });
             processedFrames = processedFrames.concat(processedFrame);
           }
         });
-      } 
+      }
     });
   });
   return processedFrames;
@@ -146,12 +163,18 @@ export function convertToTableData(items: any[], valueData?: any[]): TableData[]
     const rows = [item.StartTime, item.EndTime];
     if (valueData) {
       for (let attributeIndex = 0; attributeIndex < valueData.length; attributeIndex++) {
-          let attributeData = valueData[attributeIndex]
-          let eventframeAributeData = attributeData[index].Content.Items
-          eventframeAributeData.forEach((attribute: any) => {
-            columns.push({ text: attribute.Name });
-            rows.push(String(attribute.Value.Value ? attribute.Value.Value.Name || attribute.Value.Value.Value || attribute.Value.Value : ''));
-          });
+        let attributeData = valueData[attributeIndex];
+        let eventframeAributeData = attributeData[index].Content.Items;
+        eventframeAributeData.forEach((attribute: any) => {
+          columns.push({ text: attribute.Name });
+          rows.push(
+            String(
+              attribute.Value.Value
+                ? attribute.Value.Value.Name || attribute.Value.Value.Value || attribute.Value.Value
+                : ''
+            )
+          );
+        });
       }
     }
 

@@ -138,6 +138,7 @@ type PIWebAPIQuery struct {
 	UseUnit *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
+	HashCode string `json:"hashCode"`
 }
 
 type QuerySummary struct {
@@ -199,13 +200,19 @@ type PiProcessedQuery struct {
 	DigitalStates       bool               `json:"DigitalStates"`
 	Display             *string            `json:"Display"`
 	Nodata              *string            `json:"Nodata"`
-	Error               error
-	Index               int
+	Regex               *Regex             `json:"Regex"`
+	Summary             *QuerySummary      `json:"Summary"`
+	HashCode            string             `json:"HashCode"`
+	StartTime           time.Time          `json:"StartTime"`
+	EndTime             time.Time          `json:"EndTime"`
 	Resource            string
 	TargetPath          string
 	Variable            string
-	Regex               *Regex        `json:"Regex"`
-	Summary             *QuerySummary `json:"Summary"`
+	RefID               string
+	Error               error
+	Status              int
+	Cached              bool
+	Index               int
 }
 
 type Links struct {

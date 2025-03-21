@@ -20,11 +20,11 @@ type WebIDCache struct {
 }
 
 // newWebIDCache creates a new WebIDCache with initialized maps.
-func newWebIDCache() WebIDCache {
+func newWebIDCache(durationOpt int) WebIDCache {
 	return WebIDCache{
 		webIDPaths: make(map[string]string),
 		webIDCache: make(map[string]WebIDCacheEntry),
-		duration:   1 * time.Hour,
+		duration:   time.Duration(durationOpt) * time.Hour,
 	}
 }
 
@@ -112,16 +112,11 @@ type WebIDResponse interface {
 
 func (d *Datasource) getCachedWebID(path string) *WebIDCacheEntry {
 	d.datasourceMutex.Lock()
-	value := d._getCachedWebID(path)
-	d.datasourceMutex.Unlock()
-	return value
-}
+	defer d.datasourceMutex.Unlock()
 
-func (d *Datasource) _getCachedWebID(path string) *WebIDCacheEntry {
 	entry, ok := d.webIDCache.webIDCache[path]
-
 	if ok && time.Now().Before(entry.ExpTime) {
-		log.DefaultLogger.Debug("WebID cache hit", "path", path)
+		log.DefaultLogger.Debug("WebID cache - found", "path", path)
 		d.webIDCache.webIDPaths[entry.WebID] = path
 		return &entry
 	}
@@ -142,12 +137,8 @@ func (d *Datasource) getRequestWebId(path string, isPiPoint bool) string {
 
 func (d *Datasource) saveWebID(data interface{}, path string, isPiPoint bool) string {
 	d.datasourceMutex.Lock()
-	savedWebID := d._saveWebID(data, path, isPiPoint)
-	d.datasourceMutex.Unlock()
-	return savedWebID
-}
+	defer d.datasourceMutex.Unlock()
 
-func (d *Datasource) _saveWebID(data interface{}, path string, isPiPoint bool) string {
 	r, err := json.Marshal(data)
 	if err != nil {
 		backend.Logger.Warn("Error saving web id", "data", data)
@@ -217,9 +208,10 @@ func getValueType(Type string) reflect.Type {
 
 func cleanWebIDCache(cache WebIDCache) {
 	now := time.Now()
+	log.DefaultLogger.Info("WebID cleared cached", "length", len(cache.webIDCache))
 	for key, entry := range cache.webIDCache {
 		if now.After(entry.ExpTime) {
-			log.DefaultLogger.Debug("Removing aged WebID path: ", entry.Path)
+			log.DefaultLogger.Debug("WebID cache - removing aged WebID", "path", entry.Path)
 			delete(cache.webIDCache, key)
 			delete(cache.webIDPaths, entry.Path)
 		}
@@ -228,12 +220,7 @@ func cleanWebIDCache(cache WebIDCache) {
 
 func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
 	d.datasourceMutex.Lock()
-	webIdType := d._getTypeForWebID(webID)
-	d.datasourceMutex.Unlock()
-	return webIdType
-}
-
-func (d *Datasource) _getTypeForWebID(webID string) reflect.Type {
+	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
 	if exists {
 		entry, exists := d.webIDCache.webIDCache[path]
@@ -249,12 +236,7 @@ func (d *Datasource) _getTypeForWebID(webID string) reflect.Type {
 
 func (d *Datasource) getDigitalStateForWebID(webID string) bool {
 	d.datasourceMutex.Lock()
-	webIdState := d._getDigitalStateForWebID(webID)
-	d.datasourceMutex.Unlock()
-	return webIdState
-}
-
-func (d *Datasource) _getDigitalStateForWebID(webID string) bool {
+	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
 	if exists {
 		entry, exists := d.webIDCache.webIDCache[path]
@@ -270,12 +252,7 @@ func (d *Datasource) _getDigitalStateForWebID(webID string) bool {
 
 func (d *Datasource) getPointTypeForWebID(webID string) string {
 	d.datasourceMutex.Lock()
-	webIdPointType := d._getPointTypeForWebID(webID)
-	d.datasourceMutex.Unlock()
-	return webIdPointType
-}
-
-func (d *Datasource) _getPointTypeForWebID(webID string) string {
+	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
 	if exists {
 		entry, exists := d.webIDCache.webIDCache[path]
@@ -291,12 +268,7 @@ func (d *Datasource) _getPointTypeForWebID(webID string) string {
 
 func (d *Datasource) getUnitsForWebID(webID string) string {
 	d.datasourceMutex.Lock()
-	webIdUnits := d._getUnitsForWebID(webID)
-	d.datasourceMutex.Unlock()
-	return webIdUnits
-}
-
-func (d *Datasource) _getUnitsForWebID(webID string) string {
+	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
 	if exists {
 		entry, exists := d.webIDCache.webIDCache[path]
@@ -312,12 +284,7 @@ func (d *Datasource) _getUnitsForWebID(webID string) string {
 
 func (d *Datasource) getDescriptionForWebID(webID string) string {
 	d.datasourceMutex.Lock()
-	webIdDescription := d._getDescriptionForWebID(webID)
-	d.datasourceMutex.Unlock()
-	return webIdDescription
-}
-
-func (d *Datasource) _getDescriptionForWebID(webID string) string {
+	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
 	if exists {
 		entry, exists := d.webIDCache.webIDCache[path]

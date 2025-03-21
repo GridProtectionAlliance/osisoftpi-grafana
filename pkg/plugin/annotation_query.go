@@ -22,7 +22,7 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 	// if there are errors we'll set the error and return the PiProcessedQuery with an error set.
 	tempJson, err := json.Marshal(query)
 	if err != nil {
-		log.DefaultLogger.Error("Error marshalling query", "error", err)
+		log.DefaultLogger.Error("Process annotation - Error marshalling", "error", err)
 
 		// create a processed query with the error set
 		ProcessedQuery = PiProcessedAnnotationQuery{
@@ -33,7 +33,7 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 
 	err = json.Unmarshal(tempJson, &PiAnnotationQuery)
 	if err != nil {
-		log.DefaultLogger.Error("Error unmarshalling query", "error", err)
+		log.DefaultLogger.Error("Process annotation - Error unmarshalling", "error", err)
 
 		// create a processed query with the error set
 		ProcessedQuery = PiProcessedAnnotationQuery{
@@ -164,9 +164,6 @@ func (q PiProcessedAnnotationQuery) getEventFrameAttributeQueryURL() ([]string, 
 func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte, attributesEnabled bool) (*data.Frame, error) {
 	var annotationResponse map[string]AnnotationBatchResponse
 	var attributeDataItems []string
-
-	// log attributesEnabled
-	// log.DefaultLogger.Debug("Attributes Enabled", "attributesEnabled", attributesEnabled)
 
 	err := json.Unmarshal(rawAnnotationResponse, &annotationResponse)
 	if err != nil {

@@ -1,5 +1,6 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
+import internal from 'stream';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -95,6 +96,7 @@ export interface PIWebAPIQuery extends DataQuery {
   attribute?: any;
   nameFilter?: string;
   categoryName?: string;
+  hashCode?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {
@@ -132,9 +134,11 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   afdatabase?: string;
   pipoint?: boolean;
   newFormat?: boolean;
+  maxCacheTime?: number;
   useUnit?: boolean;
   useExperimental?: boolean;
   useStreaming?: boolean;
+  useResponseCache?: boolean;
 }
 
 /**

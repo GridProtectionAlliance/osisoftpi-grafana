@@ -73,6 +73,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onMaxCacheTimeChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      maxCacheTime: Number(event.target.value),
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   onUseUnitChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
@@ -101,6 +110,15 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
+  onUseResponseCacheChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { onOptionsChange, options } = this.props;
+    const jsonData = {
+      ...options.jsonData,
+      useResponseCache: event.target.checked,
+    };
+    onOptionsChange({ ...options, jsonData });
+  };
+
   render() {
     const { options: originalOptions } = this.props;
     const options = coerceOptions(originalOptions);
@@ -117,33 +135,40 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
         <h3 className="page-heading">Custom Configuration</h3>
 
         <div className="gf-form-group">
+          <div className="gf-form">
+            <FormField
+              label="Max Cache Time"
+              labelWidth={13}
+              inputWidth={12}
+              type='number'
+              tooltip={'Maximum number of hours for WebID cache. Default 12h'}
+              onChange={this.onMaxCacheTimeChange}
+              value={options.jsonData.maxCacheTime}
+              placeholder="Cache in hours"
+            />
+          </div>
           <div className="gf-form-inline">
-            <InlineField label="Enable PI Points in Query" labelWidth={24}>
+            <InlineField label="Enable PI Points in Query" labelWidth={26} tooltip={'Allow queries to PI data server'}>
               <InlineSwitch value={options.jsonData.pipoint} onChange={this.onPiPointChange} />
             </InlineField>
           </div>
           <div className="gf-form-inline">
-            <InlineField label="Enable New Data Format" labelWidth={24}>
+            <InlineField label="Enable New Data Format" labelWidth={26} tooltip={'Allow new extended format in data frames'}>
               <InlineSwitch value={options.jsonData.newFormat} onChange={this.onNewFormatChange} />
             </InlineField>
           </div>
           <div className="gf-form-inline">
-            <InlineField label="Enable Unit in Data" labelWidth={24}>
+            <InlineField label="Enable Unit From Data" labelWidth={26} tooltip={'Add units defined in PI to data frames'}>
               <InlineSwitch value={options.jsonData.useUnit} onChange={this.onUseUnitChange} />
             </InlineField>
           </div>
-          <div className="gf-form-inline">
-            <InlineField label="Enable Experimental Features" labelWidth={24}>
-              <InlineSwitch value={options.jsonData.useExperimental} onChange={this.onUseExperimentalChange} />
-            </InlineField>
-          </div>
-          {options.jsonData.useExperimental && (
+          {/* {options.jsonData.useExperimental && (
             <div className="gf-form-inline">
-              <InlineField label="Enable Steaming Support" labelWidth={24}>
+              <InlineField label="Enable Steaming Support" labelWidth={26}>
                 <InlineSwitch value={options.jsonData.useStreaming} onChange={this.onUseStreamingChange} />
               </InlineField>
             </div>
-          )}
+          )} */}
         </div>
 
         <h3 className="page-heading">PI/AF Connection Details</h3>
@@ -153,34 +178,54 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
             <div className="gf-form">
               <FormField
                 label="PI Server"
-                labelWidth={10}
-                inputWidth={25}
+                labelWidth={13}
+                inputWidth={20}
                 onChange={this.onPIServerChange}
                 value={options.jsonData.piserver || ''}
-                placeholder="Default PI Server to use for data requests"
+                tooltip={'Default PI Server to use for data requests'}
+                placeholder="PI Server"
               />
             </div>
           )}
           <div className="gf-form">
             <FormField
               label="AF Server"
-              labelWidth={10}
-              inputWidth={25}
+              labelWidth={13}
+              inputWidth={20}
               onChange={this.onAFServerChange}
               value={options.jsonData.afserver || ''}
-              placeholder="Default AF Server to use for data requests"
+              tooltip={'Default AF Server to use for data requests'}
+              placeholder="AF Server"
             />
           </div>
           <div className="gf-form">
             <FormField
               label="AF Database"
-              labelWidth={10}
-              inputWidth={25}
+              labelWidth={13}
+              inputWidth={20}
               onChange={this.onAFDatabaseChange}
               value={options.jsonData.afdatabase || ''}
-              placeholder="Default AF Database server for AF queries"
+              tooltip={'Default AF Database server for AF queries'}
+              placeholder="AF Database"
             />
           </div>
+        </div>
+
+        <h3 className="page-heading">Additional Configuration</h3>
+
+        <div className="gf-form-group">
+          <div className="gf-form-inline">
+              <InlineField label="Enable Experimental Features" labelWidth={26}>
+                <InlineSwitch value={options.jsonData.useExperimental} onChange={this.onUseExperimentalChange} />
+              </InlineField>
+            </div>
+            {options.jsonData.useExperimental && (
+              <div className="gf-form-inline">
+                <InlineField label="Enable Response Cache" labelWidth={26} tooltip={'Use cached response when API returns error'}>
+                  <InlineSwitch value={options.jsonData.useResponseCache} onChange={this.onUseResponseCacheChange} />
+                </InlineField>
+              </div>
+            )}
         </div>
       </div>
     );

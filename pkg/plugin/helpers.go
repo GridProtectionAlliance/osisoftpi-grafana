@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
@@ -79,7 +79,7 @@ func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		backend.Logger.Error("API Get request failed", "error", err, "uri", uri, "body", string(body))
+		log.DefaultLogger.Error("API Get - request failed", "error", err, "uri", uri, "body", string(body))
 		return nil, err
 	}
 	return body, nil
@@ -97,13 +97,13 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 
 	jsonValue, err := json.Marshal(BatchSubRequests)
 	if err != nil {
-		backend.Logger.Error("Batch request create", "error", err)
+		log.DefaultLogger.Error("Batch request - marshal", "error", err)
 		return nil, fmt.Errorf("request failed. parsing request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewBuffer(jsonValue))
 	if err != nil {
-		backend.Logger.Error("Batch request create", "error", err)
+		log.DefaultLogger.Error("Batch request - create", "error", err)
 		return nil, fmt.Errorf("request failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -115,20 +115,20 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		backend.Logger.Error("Batch request do", "error", err)
+		log.DefaultLogger.Error("Batch request - do", "error", err)
 		return nil, fmt.Errorf("request timeout")
 	}
 
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			backend.Logger.Error("Batch request failed. body closed", "error", err, "uri", uri)
+			log.DefaultLogger.Error("Batch request failed. body closed", "error", err, "uri", uri)
 		}
 	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		backend.Logger.Error("Batch request failed", "error", err, "uri", uri)
+		log.DefaultLogger.Error("Batch request failed", "error", err, "uri", uri)
 		return nil, fmt.Errorf("request failed. failed reading response body")
 	}
 
@@ -338,7 +338,7 @@ func updateBadData(index int, fp FrameProcessed, timestamp time.Time, noDataRepl
 		fp.badValues = append(fp.badValues, index)
 		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
 	}
-	backend.Logger.Debug("Update bad data", "no_replace", noDataReplace, "zero", zeroVal.Interface())
+	log.DefaultLogger.Debug("Update bad data", "no_replace", noDataReplace, "zero", zeroVal.Interface())
 	return fp
 }
 
@@ -446,7 +446,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 
 	for i, item := range items {
 		if item.Value == nil {
-			backend.Logger.Warn("item.Value is nil", "value", item.Value, "item", item)
+			log.DefaultLogger.Debug("Convert items to frames - nil", "value", item.Value, "item", item)
 			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			continue
 		}
@@ -454,7 +454,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 		fP.val = reflect.ValueOf(item.Value)
 
 		if !fP.val.IsValid() {
-			backend.Logger.Warn("Is Not Valid", "value", item.Value, "item", item)
+			log.DefaultLogger.Debug("Convert items to frames - invalid", "value", item.Value, "item", item)
 			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			continue
 		}
@@ -471,7 +471,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 			var err error
 			fP.val, err = parseTimestampValue(fP.val)
 			if err != nil {
-				backend.Logger.Error("Error parseTimestampValue", "error", err.Error(), "kind", fP.val.Kind().String(), "item", item)
+				log.DefaultLogger.Error("Convert items to frames - parseTimestampValue", "error", err.Error(), "kind", fP.val.Kind().String(), "item", item)
 				continue
 			}
 		}
@@ -491,23 +491,25 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 					fP.prevVal = itemValue
 				} else {
 					// should not happen
-					backend.Logger.Error("Error unmarshalling digital state", err)
+					log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
 					fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 				}
 			} else {
 				// should not happen
-				backend.Logger.Error("Error unmarshalling digital state", err)
+				log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
 				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
 			}
 		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() { // mismatch - try conversion
-			backend.Logger.Warn("Mismatch type", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
-				"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			if compatible(fP.val.Type(), fP.sliceType.Elem()) { // try to convert if numeric values
 				fP.timestamps = append(fP.timestamps, item.Timestamp)
 				fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val.Convert(fP.sliceType.Elem())).Interface()
 				fP.prevVal = fP.val
+				log.DefaultLogger.Debug("Convert items to frames - Mismatch compatible", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
+					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			} else {
 				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+				log.DefaultLogger.Warn("Convert items to frames - Mismatch", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
+					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			}
 		} else { // normal
 			fP.timestamps = append(fP.timestamps, item.Timestamp)
@@ -516,6 +518,17 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 		}
 	}
 
+	// Response cache
+	log.DefaultLogger.Debug("Convert items to frames - Cache", "Cached", processedQuery.Cached, "TimeLen", len(fP.timestamps),
+		"RefID", processedQuery.RefID)
+	if processedQuery.Cached {
+		if len(fP.timestamps) > 1 {
+			fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.prevVal).Interface()
+			fP.timestamps = append(fP.timestamps, processedQuery.EndTime)
+		} else if len(fP.timestamps) == 1 {
+			fP.timestamps[0] = processedQuery.EndTime
+		}
+	}
 	// Convert the slice of values to a slice of pointers to the values
 	// This is so that we can nullify the values that are "bad"
 	// "Bad" values are values such as system type values that cannot be represented
@@ -544,7 +557,11 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	}
 
 	// create a metadata struct for the frame so we can set it later.
-	frame.Meta = &data.FrameMeta{}
+	frame.Meta = &data.FrameMeta{
+		Custom: map[string]interface{}{
+			"Cached": processedQuery.Cached,
+		},
+	}
 	return frame, nil
 }
 
