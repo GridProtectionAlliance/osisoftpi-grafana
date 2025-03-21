@@ -460,7 +460,7 @@ func (q *PIWebAPIQuery) getSummaryURIComponent() string {
 	for _, t := range *q.Summary.Types {
 		uri += "&summaryType=" + t.Value.Value
 	}
-	uri += "&summaryBasis=" + *q.Summary.Basis
+	uri += "&calculationBasis=" + *q.Summary.Basis
 	if q.Summary.Duration != nil && *q.Summary.Duration != "" {
 		uri += "&summaryDuration=" + q.getSummaryDuration()
 	}
