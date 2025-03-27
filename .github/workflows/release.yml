@@ -3,14 +3,14 @@ name: Release
 on:
   push:
     tags:
-      - "v*" # Run workflow on version tags, e.g. v1.0.0.
-
-# necessary to create releases
-permissions:
-  contents: write
+      - 'v*' # Run workflow on version tags, e.g. v1.0.0.
 
 jobs:
   release:
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +20,5 @@ jobs:
           # see https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin#generate-an-access-policy-token to generate it
           # save the value in your repository secrets
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          # creates a signed build provenance attestation to verify the authenticity of the plugin build
+          attestation: true
