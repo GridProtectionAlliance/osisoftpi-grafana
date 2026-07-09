@@ -69,3 +69,8 @@
 - Increased WebID cache from 1 hour to 12 hours and made it configurable
 
 - Added experimental feature to cache latest response in case of request failure to PiWebAPI
+
+
+### 5.2.1
+
+- Add query text editor for PI datapoints

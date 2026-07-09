@@ -39,11 +39,11 @@
       {"name": "Datasource Configuration", "path": "img/configuration.png"},
       {"name": "Annotations Editor", "path": "img/annotations.png"}
     ],
-    "version": "5.2.0",
-    "updated": "2025-03-21"
+    "version": "5.2.1",
+    "updated": "2025-09-17"
   },
   "dependencies": {
-    "grafanaDependency": ">=10.1.0",
+    "grafanaDependency": ">=10.2.0",
     "plugins": []
   }
 }

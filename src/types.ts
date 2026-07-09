@@ -1,6 +1,5 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
-import internal from 'stream';
 
 export interface PiwebapiElementPath {
   path: string;

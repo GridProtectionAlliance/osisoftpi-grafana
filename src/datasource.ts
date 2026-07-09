@@ -106,6 +106,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       return of({ data: [] });
     }
 
+    console.log(query);
+
     return super.query(query);
   }
 

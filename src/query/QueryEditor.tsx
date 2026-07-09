@@ -790,6 +790,61 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     let segments: Array<SelectableValue<PIWebAPISelectableValue>> = [];
     let attributes: Array<SelectableValue<PIWebAPISelectableValue>> = [];
 
+    if (query.isPiPoint) {
+      if (splitElements.length > 1 || (splitElements.length === 1 && splitElements[0] !== '')) {
+        // remove element hierarchy from attribute collection
+        splitAttributes.splice(0, 1);
+
+        each(splitElements, (item, _) => {
+          segments.push({
+            label: item,
+            value: {
+              type: item.match(/\${\w+}/gi) ? 'template' : undefined,
+              value: item,
+              expandable: true,
+            },
+          });
+        });
+        each(splitAttributes, function (item, index) {
+          if (item !== '') {
+            attributes.push({
+              label: item,
+              value: {
+                type: item.match(/\${\w+}/gi) ? 'template' : undefined,
+                value: item,
+                expandable: false,
+              },
+            });
+          }
+        });
+
+        this.updateArray(segments, attributes, this.state.summaries, query.isPiPoint!, () => {
+          this.onChange({
+            ...query,
+            query: undefined,
+            rawQuery: false,
+            attributes: this.state.attributes,
+            segments: this.state.segments,
+          });
+        });
+      } else {
+        const server = {
+          label: '',
+        };
+        this.updateArray([server], this.state.attributes, this.state.summaries, query.isPiPoint!, () => {
+          this.onChange({
+            ...query,
+            query: undefined,
+            rawQuery: false,
+            attributes: this.state.attributes,
+            segments: this.state.segments,
+          });
+        });
+      }
+
+      return;
+    }
+
     if (splitElements.length > 1 || (splitElements.length === 1 && splitElements[0] !== '')) {
       // remove element hierarchy from attribute collection
       splitAttributes.splice(0, 1);
@@ -919,7 +974,11 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
         isPiPoint,
       },
       () => {
-        if (!isPiPoint) {
+        if (isPiPoint) {
+          if (cb) {
+            cb();
+          }
+        } else {
           this.checkAttributeSegments(attributesArray, this.state.segments).then(() => {
             if (cb) {
               cb();
@@ -1131,14 +1190,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   );
                 })}
                 <QueryRowTerminator />
-                {!isPiPoint && (
-                  <QueryEditorModeSwitcher
-                    isRaw={false}
-                    onChange={(value: boolean) => {
-                      onChange({ ...metricsQuery, query: metricsQuery.target, rawQuery: value });
-                    }}
-                  />
-                )}
+                <QueryEditorModeSwitcher
+                  isRaw={false}
+                  onChange={(value: boolean) => {
+                    onChange({ ...metricsQuery, query: metricsQuery.target, rawQuery: value });
+                  }}
+                />
               </QueryRawInlineField>
             </div>
 
@@ -1311,7 +1368,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           )}
           {this.props.datasource.useStreaming && (
             <InlineField 
-              label="Enable Streaming" 
+              label="Enable Streaming"
               labelWidth={LABEL_WIDTH}
               tooltip={'Enable streaming data if it is supported for the point type.'}
             >

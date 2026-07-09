@@ -385,6 +385,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 			"element":     targetParts[0],
 			"name":        label,
 			"type":        pointType + summaryNewFormat,
+			"summaryType": summaryLabel,
 			"description": description,
 			"units":       units,
 		}
@@ -397,6 +398,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 			"element":     labelParts[0],
 			"name":        label,
 			"type":        pointType + summaryNewFormat,
+			"summaryType": summaryLabel,
 			"description": description,
 			"units":       units,
 		}
