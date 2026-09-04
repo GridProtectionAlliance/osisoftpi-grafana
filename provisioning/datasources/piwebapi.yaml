@@ -1,0 +1,25 @@
+apiVersion: 1
+
+datasources:
+  - name: PI Web API
+    type: gridprotectionalliance-osisoftpi-datasource
+    access: proxy
+    # PI Web API base URL, e.g. https://mypiserver/piwebapi
+    # Set PI_URL in your .env file (see .env.example).
+    url: ${PI_URL}
+    basicAuth: true
+    basicAuthUser: ${PI_USER}
+    secureJsonData:
+      basicAuthPassword: ${PI_PASSWORD}
+    jsonData:
+      # Skip TLS verification for self-signed / internal CA certificates on the PI server.
+      tlsSkipVerify: true
+      # "server" proxies all PI Web API calls through Grafana's backend.
+      # Use "browser" only if the PI Web API is directly reachable from clients.
+      access: server
+      # Streaming requires the experimental features flag to be enabled.
+      useExperimental: true
+      useStreaming: true
+    editable: true
+    # Unique identifier — change this if you provision multiple PI datasources.
+    uid: piwebapi-dev

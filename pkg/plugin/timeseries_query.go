@@ -409,6 +409,9 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 		}
 		response.Responses[RefID] = subResponse
 	}
+	if len(streamableWebIDs) > 0 {
+		d.pruneConnectionKeyWebIDs(connectionKey)
+	}
 	return response
 }
 

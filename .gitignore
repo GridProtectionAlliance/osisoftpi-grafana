@@ -50,4 +50,10 @@ yarn.lock
 docker-compose.override.yml
 
 # Copilot session files
-copilot-session-*.mddist
+copilot-session-*.md
+
+# Build output
+dist
+
+# Agent tooling
+.serena/

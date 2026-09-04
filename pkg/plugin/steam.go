@@ -535,6 +535,40 @@ func (d *Datasource) checkForOrphanedWebSocket(webID, connectionKey string) {
 	}
 }
 
+// pruneConnectionKeyWebIDs drops connection-key entries that nothing can still need.
+// The map is keyed by the sorted WebIDs of a query batch, so every distinct panel and
+// dashboard combination mints a new key. Entries are deliberately not removed when a
+// connection is orphaned (a stream may reconnect without a preceding QueryData), so
+// without this sweep they accumulate for the lifetime of the process. An entry survives
+// while its socket is live, while any registered channel still names it, or when it is
+// the batch just registered.
+// Lock ordering matches checkForOrphanedWebSocket: websocketConnectionsMutex first.
+func (d *Datasource) pruneConnectionKeyWebIDs(keep string) {
+	d.websocketConnectionsMutex.Lock()
+	defer d.websocketConnectionsMutex.Unlock()
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+
+	inUse := make(map[string]struct{}, len(d.channelConstruct)+1)
+	if keep != "" {
+		inUse[keep] = struct{}{}
+	}
+	for _, construct := range d.channelConstruct {
+		inUse[construct.ConnectionKey] = struct{}{}
+	}
+
+	for key := range d.connectionKeyWebIDs {
+		if _, needed := inUse[key]; needed {
+			continue
+		}
+		if _, live := d.websocketConnections[key]; live {
+			continue
+		}
+		delete(d.connectionKeyWebIDs, key)
+		backend.Logger.Debug("Streaming: pruned unused connection key", "connectionKey", key)
+	}
+}
+
 // addStreamSender registers a new subscriber for webID and returns its private buffered
 // StreamData channel.
 func (d *Datasource) addStreamSender(webID string, sender *backend.StreamSender) chan StreamData {
