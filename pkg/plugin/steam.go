@@ -81,14 +81,33 @@ func buildStreamSetsWebSocketURL(baseURL string, webIDs []string) (string, error
 // SubscribeStream is called by Grafana when a panel subscribes to a streaming channel.
 // It verifies that the requested path was registered during a prior QueryData call.
 func (d *Datasource) SubscribeStream(_ context.Context, req *backend.SubscribeStreamRequest) (*backend.SubscribeStreamResponse, error) {
-	status := backend.SubscribeStreamStatusPermissionDenied
 	d.datasourceMutex.Lock()
-	_, ok := d.channelConstruct[req.Path]
+	construct, ok := d.channelConstruct[req.Path]
 	d.datasourceMutex.Unlock()
-	if ok {
-		status = backend.SubscribeStreamStatusOK
+	if !ok {
+		return &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusPermissionDenied}, nil
 	}
-	return &backend.SubscribeStreamResponse{Status: status}, nil
+
+	// Hand every subscriber the field definitions up front. RunStream is per channel and
+	// long-lived, so a schema published from there is invisible to anyone who subscribes
+	// later, leaving them with data-only packets and no field names. Schema-only keeps the
+	// packet row-less so it cannot disturb the panel's buffer.
+	resp := &backend.SubscribeStreamResponse{Status: backend.SubscribeStreamStatusOK}
+	if construct.query == nil {
+		return resp, nil
+	}
+	frame, err := convertStreamItemsToFrame(construct.query, nil, construct.frameCache)
+	if err != nil {
+		backend.Logger.Error("Streaming: failed to build schema frame", "path", req.Path, "error", err)
+		return resp, nil
+	}
+	initial, err := backend.NewInitialFrame(frame, data.IncludeSchemaOnly)
+	if err != nil {
+		backend.Logger.Error("Streaming: failed to build initial schema data", "path", req.Path, "error", err)
+		return resp, nil
+	}
+	resp.InitialData = initial
+	return resp, nil
 }
 
 // PublishStream is not supported — data originates from PI Web API, not from Grafana clients.
@@ -275,7 +294,60 @@ func (d *Datasource) teardownStream(webID, path string, construct StreamChannelC
 	d.datasourceMutex.Lock()
 	d.channelGenerations[construct.generationKey]++
 	delete(d.channelConstruct, path)
+	delete(d.streamWatermarks, path)
 	d.datasourceMutex.Unlock()
+}
+
+// streamWatermark returns the newest timestamp already published on this channel.
+func (d *Datasource) streamWatermark(channelKey string) time.Time {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	return d.streamWatermarks[channelKey]
+}
+
+// advanceStreamWatermark moves a channel's watermark forward, never backwards.
+func (d *Datasource) advanceStreamWatermark(channelKey string, ts time.Time) {
+	if ts.IsZero() {
+		return
+	}
+	d.datasourceMutex.Lock()
+	if current, ok := d.streamWatermarks[channelKey]; !ok || ts.After(current) {
+		d.streamWatermarks[channelKey] = ts
+	}
+	d.datasourceMutex.Unlock()
+}
+
+// filterNewStreamItems keeps only the items strictly newer than watermark and returns the
+// advanced watermark. PI Web API repeats the current value in every streamsets/channel
+// message (and a tag shared by two query batches is delivered over two sockets), so without
+// this filter the same timestamp is published several times.
+func filterNewStreamItems(items []PiBatchContentItem, watermark time.Time) ([]PiBatchContentItem, time.Time) {
+	fresh := make([]PiBatchContentItem, 0, len(items))
+	for _, item := range items {
+		if !item.Timestamp.After(watermark) {
+			continue
+		}
+		watermark = item.Timestamp
+		fresh = append(fresh, item)
+	}
+	return fresh, watermark
+}
+
+// lastFrameTime returns the newest timestamp in a frame's time field, or the zero time.
+func lastFrameTime(frame *data.Frame) time.Time {
+	if frame == nil || len(frame.Fields) == 0 {
+		return time.Time{}
+	}
+	timeField := frame.Fields[0]
+	if timeField.Len() == 0 {
+		return time.Time{}
+	}
+	if v, ok := timeField.ConcreteAt(timeField.Len() - 1); ok {
+		if ts, ok := v.(time.Time); ok {
+			return ts
+		}
+	}
+	return time.Time{}
 }
 
 // sendStreamData is the per-subscriber send loop. It reads pre-parsed StreamData items
@@ -296,34 +368,38 @@ func (d *Datasource) sendStreamData(
 	const maxReconnectAttempts = 5
 	const baseReconnectDelay = time.Second
 
-	// Keepalive: if no data arrives within this interval, re-send the last known
-	// frame to prevent Grafana's centrifuge from expiring the idle channel.
-	const keepaliveInterval = 30 * time.Second
+	// Keepalive: if no data arrives within this interval, send an empty frame to prevent
+	// Grafana's centrifuge from expiring the idle channel. It must stay empty — re-sending
+	// the previous frame would republish a timestamp that has already been sent.
+	// Grafana's default stream_idle_timeout can be as low as 30s; use 15s to
+	// stay well within that window.
+	const keepaliveInterval = 15 * time.Second
 	keepalive := time.NewTimer(keepaliveInterval)
 	defer keepalive.Stop()
-	var lastFrame *data.Frame
 
 	for {
 		select {
 		case <-ctx.Done():
 			backend.Logger.Info("Streaming: subscriber context done", "path", path, "webID", webID)
-			d.teardownStream(webID, path, construct, sender)
+			// Only remove the sender and check for orphaned WebSocket — do NOT delete
+			// the channel construct or increment the generation. This allows the panel
+			// to re-subscribe to the same channel path when the browser tab wakes back
+			// up (Edge/Chrome tab sleeping) without getting "Forbidden".
+			d.removeStreamSender(webID, sender)
+			d.checkForOrphanedWebSocket(webID, construct.ConnectionKey)
 			errchan <- nil
 			return
 
 		case <-keepalive.C:
-			// No data received within the keepalive window — re-send the last frame
-			// to keep the Grafana streaming channel alive.
-			if lastFrame != nil {
-				if err := sender.SendFrame(lastFrame, data.IncludeDataOnly); err != nil {
-					backend.Logger.Error("Streaming: keepalive send failed",
-						"webID", webID, "error", err)
-					d.teardownStream(webID, path, construct, sender)
-					errchan <- fmt.Errorf("streaming: keepalive send failed: %w", err)
-					return
-				}
-				backend.Logger.Debug("Streaming: keepalive frame sent", "webID", webID)
+			emptyFrame := data.NewFrame("keepalive")
+			if err := sender.SendFrame(emptyFrame, data.IncludeDataOnly); err != nil {
+				backend.Logger.Error("Streaming: keepalive send failed",
+					"webID", webID, "error", err)
+				d.teardownStream(webID, path, construct, sender)
+				errchan <- fmt.Errorf("streaming: keepalive send failed: %w", err)
+				return
 			}
+			backend.Logger.Debug("Streaming: keepalive frame sent", "webID", webID)
 			keepalive.Reset(keepaliveInterval)
 
 		case item, ok := <-senderCh:
@@ -369,12 +445,20 @@ func (d *Datasource) sendStreamData(
 				continue
 			}
 
-			frame, err := convertStreamItemsToFrame(construct.query, item.Items, construct.frameCache)
+			fresh, newest := filterNewStreamItems(item.Items, d.streamWatermark(path))
+			if len(fresh) == 0 {
+				backend.Logger.Debug("Streaming: no new samples in message, nothing sent",
+					"webID", webID, "items", len(item.Items))
+				continue
+			}
+
+			frame, err := convertStreamItemsToFrame(construct.query, fresh, construct.frameCache)
 			if err != nil {
 				backend.Logger.Error("Streaming: failed to convert stream items to frame",
 					"webID", webID, "error", err)
 				continue
 			}
+			d.advanceStreamWatermark(path, newest)
 
 			if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
 				backend.Logger.Error("Streaming: failed to send frame to subscriber",
@@ -383,11 +467,10 @@ func (d *Datasource) sendStreamData(
 				errchan <- fmt.Errorf("streaming: send frame failed: %w", err)
 				return
 			}
-			lastFrame = frame
 			keepalive.Reset(keepaliveInterval)
 
 			backend.Logger.Debug("Streaming: frame sent to subscriber",
-				"webID", webID, "items", len(item.Items))
+				"webID", webID, "items", len(fresh))
 		}
 	}
 }
@@ -421,6 +504,9 @@ func buildStreamFrameCache(d *Datasource, q *PiProcessedQuery) streamFrameCache 
 // no subscribers remain across all WebIDs that share that connection.
 // Lock ordering: websocketConnectionsMutex is always acquired before datasourceMutex to
 // eliminate the TOCTOU window between the subscriber-count check and the connection close.
+// Note: connectionKeyWebIDs is intentionally NOT deleted here — it must remain populated
+// so that Grafana's automatic stream re-establishment (RunStream retry) can reconnect
+// without a preceding QueryData call repopulating it.
 func (d *Datasource) checkForOrphanedWebSocket(webID, connectionKey string) {
 	d.websocketConnectionsMutex.Lock()
 	defer d.websocketConnectionsMutex.Unlock()
@@ -435,8 +521,6 @@ func (d *Datasource) checkForOrphanedWebSocket(webID, connectionKey string) {
 			return
 		}
 	}
-	// No subscribers remain; clean up connectionKeyWebIDs while datasourceMutex is held.
-	delete(d.connectionKeyWebIDs, connectionKey)
 	d.datasourceMutex.Unlock()
 
 	ws, connExists := d.websocketConnections[connectionKey]

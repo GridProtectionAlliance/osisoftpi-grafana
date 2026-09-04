@@ -12,13 +12,13 @@ import (
 )
 
 type Datasource struct {
-	settings                  backend.DataSourceInstanceSettings
-	queryMux                  *datasource.QueryTypeMux
-	StreamHandler             backend.StreamHandler
-	httpClient                *http.Client
-	webIDCache                WebIDCache
-	webCache                  *Cache[string, PiBatchData]
-	channelConstruct          map[string]StreamChannelConstruct
+	settings         backend.DataSourceInstanceSettings
+	queryMux         *datasource.QueryTypeMux
+	StreamHandler    backend.StreamHandler
+	httpClient       *http.Client
+	webIDCache       WebIDCache
+	webCache         *Cache[string, PiBatchData]
+	channelConstruct map[string]StreamChannelConstruct
 	// channelGenerations tracks a per-(webID,summaryType) counter that is incremented
 	// each time a subscription ends. channelKeyFor embeds the generation so that after
 	// expiry the next QueryData call produces a new channel URI, forcing Grafana to
@@ -36,13 +36,19 @@ type Datasource struct {
 	// connectionKeyWebIDs maps a connection key (sorted WebIDs joined by "|") to the
 	// ordered WebID slice used to build the streamsets/channel WebSocket URL.
 	connectionKeyWebIDs map[string][]string
-	dataSourceOptions         *PIWebAPIDataSourceJsonData
+	// streamWatermarks holds, per channel key, the newest timestamp already published on
+	// that channel. PI Web API repeats the current value in every streamsets message, and a
+	// tag shared by two query batches arrives over two sockets, so without this the same
+	// timestamp is published repeatedly and the panel's time field stops being monotonic —
+	// which makes uPlot fail to render the series at all.
+	streamWatermarks  map[string]time.Time
+	dataSourceOptions *PIWebAPIDataSourceJsonData
 	// tlsInsecureSkipVerify mirrors the datasource's TLS skip-verify setting so the
 	// WebSocket dialer can skip certificate verification for self-signed PI Web API certs.
-	tlsInsecureSkipVerify     bool
-	initalTime                time.Time
-	totalCalls                int
-	callRate                  float64
+	tlsInsecureSkipVerify bool
+	initalTime            time.Time
+	totalCalls            int
+	callRate              float64
 }
 
 type PIWebAPIDataSourceJsonData struct {

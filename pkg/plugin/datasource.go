@@ -79,6 +79,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 		websocketConnections:      make(map[string]*websocket.Conn),
 		senderChannels:            make(map[string]map[*backend.StreamSender]chan StreamData),
 		connectionKeyWebIDs:       make(map[string][]string),
+		streamWatermarks:          make(map[string]time.Time),
 		dataSourceOptions:         &dataSourceOptions,
 		tlsInsecureSkipVerify:     opts.TLS != nil && opts.TLS.InsecureSkipVerify,
 		initalTime:                time.Now(),

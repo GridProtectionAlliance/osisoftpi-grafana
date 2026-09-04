@@ -399,6 +399,9 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 						d.datasourceMutex.Unlock()
 					}
 					frame.Meta.Channel = channelURI
+					// Seed the watermark from this frame so the live stream only ever
+					// publishes points newer than the query already returned.
+					d.advanceStreamWatermark(channelKey, lastFrameTime(frame))
 				}
 
 				subResponse.Frames = append(subResponse.Frames, frame)
