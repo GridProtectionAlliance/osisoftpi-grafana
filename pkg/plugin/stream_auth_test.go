@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +53,7 @@ func TestWebsocketAuthentication(t *testing.T) {
 			d := newTestDatasource()
 			d.settings = backend.DataSourceInstanceSettings{URL: server.URL + "/piwebapi"}
 			d.websocketHeader = websocketHeader(tt.options)
-			conn, err := d.createWebsocketConnection([]string{"W1"})
+			conn, err := d.createWebsocketConnection(context.Background(), []string{"W1"})
 			if err != nil {
 				t.Fatalf("connection failed: %v", err)
 			}
@@ -68,7 +69,7 @@ func TestWebsocketAuthentication(t *testing.T) {
 	d := newTestDatasource()
 	d.settings = backend.DataSourceInstanceSettings{URL: server.URL + "/piwebapi"}
 	d.websocketHeader = websocketHeader(httpclient.Options{})
-	if _, err := d.createWebsocketConnection([]string{"W1"}); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, err := d.createWebsocketConnection(context.Background(), []string{"W1"}); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("error = %v, want the 401 status", err)
 	}
 }

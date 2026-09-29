@@ -1370,6 +1370,25 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               />
             </InlineField>
           )}
+          {this.props.datasource.useStreaming && (
+            <InlineField
+              label="Fill gaps after reconnect"
+              labelWidth={LABEL_WIDTH}
+              tooltip={
+                'When the stream reconnects (e.g. PI Web API was unavailable), add the values recorded in the meantime, instead of waiting for the next refresh of the panel.'
+              }
+            >
+              <InlineSwitch
+                value={enableStreaming.fillGaps !== false}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    enableStreaming: { ...enableStreaming, fillGaps: enableStreaming.fillGaps === false },
+                  })
+                }
+              />
+            </InlineField>
+          )}
         </InlineFieldRow>
         
         {(interpolate.enable || (!useLastValue.enable && !recordedValues.enable && !summary.enable)) && (

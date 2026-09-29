@@ -76,6 +76,12 @@ func (q *Query) isstreamingEnabled() bool {
 	return streamingEnabled
 }
 
+// isStreamFillGaps returns true when "Fill gaps after reconnect" is on (the default): after the stream reconnects,
+// the values recorded while it was disconnected are sent to the panel.
+func (q *Query) isStreamFillGaps() bool {
+	return q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.FillGaps == nil || *q.Pi.EnableStreaming.FillGaps
+}
+
 // isStreamable returns true when the query can be updated with the values streamed by PI Web API channels: these
 // are raw values, so calculations and summaries are not streamed.
 func (q *Query) isStreamable() bool {
@@ -112,13 +118,11 @@ type PIWebAPIQuery struct {
 	UseLastValue *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useLastValue"`
-	EnableStreaming *struct {
-		Enable *bool `json:"enable"`
-	} `json:"EnableStreaming"`
-	ElementPath string `json:"elementPath"`
-	Expression  string `json:"expression"`
-	Hide        bool   `json:"hide"`
-	Interpolate struct {
+	EnableStreaming *QueryStreaming `json:"EnableStreaming"`
+	ElementPath     string          `json:"elementPath"`
+	Expression      string          `json:"expression"`
+	Hide            bool            `json:"hide"`
+	Interpolate     struct {
 		Enable   bool   `json:"enable"`
 		Interval string `json:"interval"`
 	} `json:"interpolate"`
@@ -145,6 +149,13 @@ type PIWebAPIQuery struct {
 	QueryVersion int `json:"queryVersion"`
 	// PluginVersion is the version of the plugin that last saved the query, for information only
 	PluginVersion string `json:"pluginVersion"`
+}
+
+// QueryStreaming holds the streaming options of a query.
+type QueryStreaming struct {
+	Enable *bool `json:"enable"`
+	// FillGaps is "Fill gaps after reconnect"; on when not set
+	FillGaps *bool `json:"fillGaps"`
 }
 
 type QuerySummary struct {
@@ -219,11 +230,14 @@ type PiProcessedQuery struct {
 	Variable            string
 	MultiVariable       bool
 	PluginVersion       string
-	RefID               string
-	Error               error
-	Status              int
-	Cached              bool
-	Index               int
+	// StreamFillGaps and MaxDataPoints are used to fill the gap in the stream after a reconnect
+	StreamFillGaps bool
+	MaxDataPoints  int
+	RefID          string
+	Error          error
+	Status         int
+	Cached         bool
+	Index          int
 }
 
 type Links struct {

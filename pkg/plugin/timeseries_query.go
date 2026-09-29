@@ -131,6 +131,8 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				MultiVariable:       target.MultiVariable,
 				Index:               index,
 				PluginVersion:       PiQuery.Pi.PluginVersion,
+				StreamFillGaps:      PiQuery.isStreamFillGaps(),
+				MaxDataPoints:       PiQuery.getMaxDataPoints(),
 			}
 
 			WebID := d.getCachedWebID(fullTargetPath)
@@ -415,10 +417,11 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 				// returns a new channel URI → Grafana creates a fresh LiveDataStream →
 				// panels recover from the "streaming channel error: expired" state.
 				if q.Streamable {
-					genKey := q.WebID + "|" + SummaryType
+					settings := streamSettings(&q)
+					genKey := q.WebID + "|" + settings
 					d.datasourceMutex.Lock()
 					gen := d.channelGenerations[genKey]
-					channelKey := channelKeyFor(q.WebID, SummaryType, gen)
+					channelKey := channelKeyFor(q.WebID, settings, gen)
 					_, exists := d.channelConstruct[channelKey]
 					d.datasourceMutex.Unlock()
 					channelURI := "ds/" + q.UID + "/" + channelKey
@@ -442,7 +445,7 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 						// first, or sendStreamData may have incremented the generation.
 						// Read the latest gen and recompute key to avoid registering stale entries.
 						gen = d.channelGenerations[genKey]
-						channelKey = channelKeyFor(q.WebID, SummaryType, gen)
+						channelKey = channelKeyFor(q.WebID, settings, gen)
 						channelURI = "ds/" + q.UID + "/" + channelKey
 						if _, exists = d.channelConstruct[channelKey]; !exists {
 							channel.generationKey = genKey
@@ -464,14 +467,21 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 	return response
 }
 
+// streamSettings returns the query settings that change the streamed values. Panels showing the same
+// PI point with different settings get their own channel; the stream sends values only, so settings such as the
+// display name do not matter.
+func streamSettings(q *PiProcessedQuery) string {
+	return fmt.Sprintf("digitalStates=%t|nodata=%s|fillGaps=%t", q.DigitalStates, q.getNoDataReplace(), q.StreamFillGaps)
+}
+
 // channelKeyFor returns a stable, deterministic 16-char hex key for a streaming channel.
 // The generation parameter is incremented each time a subscription ends (see sendStreamData),
 // so a recovered or expired subscription gets a new key → new Grafana LiveDataStream →
 // panel recovers. While a subscription is alive the generation stays constant, so repeated
 // QueryData calls (e.g. on time-range changes) reuse the same centrifuge subscription and
 // never accumulate past ClientChannelLimit (128).
-func channelKeyFor(webID, summaryType string, gen uint32) string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", webID, summaryType, gen)))
+func channelKeyFor(webID, settings string, gen uint32) string {
+	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", webID, settings, gen)))
 	return hex.EncodeToString(h[:8])
 }
 

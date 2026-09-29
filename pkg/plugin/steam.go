@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -34,7 +35,7 @@ type StreamChannelConstruct struct {
 	query         *PiProcessedQuery
 	frameCache    streamFrameCache // pre-computed static WebID metadata; see buildStreamFrameCache
 	// generationKey is the map key used to look up and increment channelGenerations.
-	// It is the same base string passed to channelKeyFor: "webID|summaryType".
+	// It is "webID|settings", with the settings passed to channelKeyFor (see streamSettings).
 	generationKey string
 }
 
@@ -118,7 +119,7 @@ func (d *Datasource) subscribeToWebsocketChannel(ctx context.Context, path strin
 	// to it as soon as the shared connection is established.
 	senderCh := d.addStreamSender(construct.WebID, sender)
 
-	if err := d.getOrCreateWebsocketConnection(construct.ConnectionKey); err != nil {
+	if err := d.getOrCreateWebsocketConnection(ctx, construct.ConnectionKey); err != nil {
 		d.removeStreamSender(construct.WebID, sender)
 		errchan <- fmt.Errorf("streaming: WebSocket connect failed for connection %q: %w", construct.ConnectionKey, err)
 		return
@@ -130,7 +131,7 @@ func (d *Datasource) subscribeToWebsocketChannel(ctx context.Context, path strin
 // getOrCreateWebsocketConnection ensures exactly one shared WebSocket connection exists for
 // the given connection key. The blocking network dial is performed outside any mutex so
 // that multiple panels can attempt connection setup concurrently.
-func (d *Datasource) getOrCreateWebsocketConnection(connectionKey string) error {
+func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, connectionKey string) error {
 	// Fast path: connection already exists.
 	d.websocketConnectionsMutex.Lock()
 	if _, ok := d.websocketConnections[connectionKey]; ok {
@@ -146,7 +147,7 @@ func (d *Datasource) getOrCreateWebsocketConnection(connectionKey string) error 
 	d.websocketConnectionsMutex.Unlock()
 
 	// Dial outside any lock — this may block for hundreds of milliseconds.
-	conn, err := d.createWebsocketConnection(webIDs)
+	conn, err := d.createWebsocketConnection(ctx, webIDs)
 	if err != nil {
 		return err
 	}
@@ -184,9 +185,21 @@ func websocketHeader(opts httpclient.Options) http.Header {
 	return header
 }
 
+// defaultWebsocketTimeout is the WebSocket handshake timeout when the datasource has no HTTP timeout.
+const defaultWebsocketTimeout = 30 * time.Second
+
+// websocketTimeout returns the WebSocket handshake timeout: the datasource's HTTP timeout ("Timeout" in the
+// advanced HTTP settings), or defaultWebsocketTimeout.
+func websocketTimeout(opts httpclient.Options) time.Duration {
+	if opts.Timeouts != nil && opts.Timeouts.Timeout > 0 {
+		return opts.Timeouts.Timeout
+	}
+	return defaultWebsocketTimeout
+}
+
 // createWebsocketConnection opens a new authenticated streamsets/channel WebSocket connection
 // to PI Web API for the given set of WebIDs. All tags in a query batch share one connection.
-func (d *Datasource) createWebsocketConnection(webIDs []string) (*websocket.Conn, error) {
+func (d *Datasource) createWebsocketConnection(ctx context.Context, webIDs []string) (*websocket.Conn, error) {
 	uri, err := buildStreamSetsWebSocketURL(d.settings.URL, webIDs)
 	if err != nil {
 		return nil, err
@@ -201,11 +214,30 @@ func (d *Datasource) createWebsocketConnection(webIDs []string) (*websocket.Conn
 		tlsCfg.InsecureSkipVerify = true //nolint:gosec // user-configured opt-in
 	}
 
+	// the handshake times out like the datasource's HTTP requests, so an unresponsive server cannot block the stream
+	timeout := d.websocketTimeout
+	if timeout <= 0 {
+		timeout = defaultWebsocketTimeout
+	}
+	// the connection is shared by the subscribers of the channel: the subscriber's context only cancels the
+	// handshake (the WebSocket library does not stop the handshake when the context is cancelled)
+	var stopCancel func() bool
 	dialer := websocket.Dialer{
-		TLSClientConfig: tlsCfg,
+		TLSClientConfig:  tlsCfg,
+		HandshakeTimeout: timeout,
+		NetDialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			netConn, err := (&net.Dialer{}).DialContext(dialCtx, network, addr)
+			if err == nil {
+				stopCancel = context.AfterFunc(ctx, func() { netConn.Close() })
+			}
+			return netConn, err
+		},
 	}
 
-	conn, resp, err := dialer.Dial(uri, header)
+	conn, resp, err := dialer.DialContext(ctx, uri, header)
+	if stopCancel != nil {
+		stopCancel()
+	}
 	if err != nil {
 		if resp != nil {
 			err = fmt.Errorf("%w: %s", err, resp.Status)
@@ -286,8 +318,113 @@ func (d *Datasource) teardownStream(webID, path string, construct StreamChannelC
 	d.datasourceMutex.Lock()
 	d.channelGenerations[construct.generationKey]++
 	delete(d.channelConstruct, path)
+	delete(d.streamLastTimes, path)
+	delete(d.streamFilledUntil, path)
 	d.datasourceMutex.Unlock()
 }
+
+// recordStreamTime records the time of the last value sent on the channel.
+func (d *Datasource) recordStreamTime(path string, t time.Time) {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	if d.streamLastTimes == nil {
+		d.streamLastTimes = make(map[string]time.Time)
+	}
+	if t.After(d.streamLastTimes[path]) {
+		d.streamLastTimes[path] = t
+	}
+}
+
+// lastStreamTime returns the time of the last value sent on the channel, if any.
+func (d *Datasource) lastStreamTime(path string) (time.Time, bool) {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	t, ok := d.streamLastTimes[path]
+	return t, ok
+}
+
+// recordFill records the time of the last value sent by fillStreamGap.
+func (d *Datasource) recordFill(path string, t time.Time) {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	if d.streamFilledUntil == nil {
+		d.streamFilledUntil = make(map[string]time.Time)
+	}
+	d.streamFilledUntil[path] = t
+}
+
+// newStreamItems leaves out the live values already sent by fillStreamGap: the first messages of the new connection
+// can repeat them. Once a later value arrives, all values are sent again, including values with an earlier or the
+// same time (corrected past values, attributes without data reference).
+func (d *Datasource) newStreamItems(path string, items []PiBatchContentItem) []PiBatchContentItem {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	filled, ok := d.streamFilledUntil[path]
+	if !ok {
+		return items
+	}
+	newItems := make([]PiBatchContentItem, 0, len(items))
+	for _, item := range items {
+		if item.Timestamp.After(filled) {
+			newItems = append(newItems, item)
+		}
+	}
+	if len(newItems) > 0 {
+		delete(d.streamFilledUntil, path)
+	}
+	return newItems
+}
+
+// fillStreamGap sends the values recorded since the last value sent on the channel ("Fill gaps after reconnect"):
+// PI Web API channels only send the values that change after the connection is opened, so the values recorded
+// while the stream was disconnected would otherwise only appear at the next refresh of the panel. At most the
+// query's maximum data points are sent; a failure is logged and leaves the gap until the next refresh.
+func (d *Datasource) fillStreamGap(ctx context.Context, path string, construct StreamChannelConstruct, sender *backend.StreamSender) {
+	if construct.query == nil || !construct.query.StreamFillGaps {
+		return
+	}
+	last, ok := d.lastStreamTime(path)
+	if !ok {
+		return // nothing sent yet: the query returned the values up to now
+	}
+	maxCount := construct.query.MaxDataPoints
+	if maxCount <= 0 {
+		maxCount = 1000
+	}
+	uri := fmt.Sprintf("streams/%s/recorded?startTime=%s&endTime=*&maxCount=%d",
+		construct.WebID, queryEscape(last.UTC().Format(time.RFC3339Nano)), maxCount)
+	body, err := apiGet(ctx, d, uri)
+	if err != nil {
+		backend.Logger.Warn("Streaming: could not fill the gap after reconnect", "path", path, "webID", construct.WebID, "error", err)
+		return
+	}
+	var recorded StreamData
+	if err := json.Unmarshal(body, &recorded); err != nil {
+		backend.Logger.Warn("Streaming: could not read the values to fill the gap", "path", path, "webID", construct.WebID, "error", err)
+		return
+	}
+	newItems := recorded.Items[:0]
+	for _, item := range recorded.Items {
+		if item.Timestamp.After(last) { // the recorded values start with the last value sent
+			newItems = append(newItems, item)
+		}
+	}
+	if recorded.Items = newItems; len(recorded.Items) == 0 {
+		return
+	}
+	frame := convertStreamItemsToFrame(construct.query, recorded, construct.frameCache)
+	if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
+		backend.Logger.Warn("Streaming: could not send the values filling the gap", "path", path, "webID", construct.WebID, "error", err)
+		return
+	}
+	filledUntil := recorded.Items[len(recorded.Items)-1].Timestamp
+	d.recordStreamTime(path, filledUntil)
+	d.recordFill(path, filledUntil)
+	backend.Logger.Info("Streaming: filled the gap after reconnect", "path", path, "webID", construct.WebID, "values", len(recorded.Items))
+}
+
+// streamKeepaliveInterval is how long a stream waits for a new value before sending a keepalive to the panel.
+var streamKeepaliveInterval = 30 * time.Second
 
 // streamReconnectAttempts and streamReconnectBaseDelay control how sendStreamData reconnects a lost connection:
 // the first attempt is immediate, then the delay doubles (1 s, 2 s, 4 s, 8 s).
@@ -314,10 +451,13 @@ func (d *Datasource) sendStreamData(
 
 	// Keepalive: if no data arrives within this interval, re-send the last known
 	// frame to prevent Grafana's centrifuge from expiring the idle channel.
-	const keepaliveInterval = 30 * time.Second
+	keepaliveInterval := streamKeepaliveInterval
 	keepalive := time.NewTimer(keepaliveInterval)
 	defer keepalive.Stop()
 	var lastFrame *data.Frame
+
+	// when Grafana runs the stream again after it failed, fill the gap before the new values
+	d.fillStreamGap(ctx, path, construct, sender)
 
 	for {
 		select {
@@ -328,10 +468,10 @@ func (d *Datasource) sendStreamData(
 			return
 
 		case <-keepalive.C:
-			// No data received within the keepalive window — re-send the last frame
-			// to keep the Grafana streaming channel alive.
+			// No data received within the keepalive window: send the last frame without its values, to keep the
+			// Grafana streaming channel alive without adding the last values to the panel again.
 			if lastFrame != nil {
-				if err := sender.SendFrame(lastFrame, data.IncludeDataOnly); err != nil {
+				if err := sender.SendFrame(lastFrame.EmptyCopy(), data.IncludeDataOnly); err != nil {
 					backend.Logger.Error("Streaming: keepalive send failed",
 						"webID", webID, "error", err)
 					d.teardownStream(webID, path, construct, sender)
@@ -364,7 +504,7 @@ func (d *Datasource) sendStreamData(
 					backend.Logger.Info("Streaming: connection lost, attempting reconnect",
 						"path", path, "webID", webID, "attempt", attempt)
 					newSenderCh = d.addStreamSender(webID, sender)
-					if err := d.getOrCreateWebsocketConnection(construct.ConnectionKey); err != nil {
+					if err := d.getOrCreateWebsocketConnection(ctx, construct.ConnectionKey); err != nil {
 						backend.Logger.Warn("Streaming: reconnect attempt failed",
 							"path", path, "webID", webID, "attempt", attempt, "error", err)
 						d.removeStreamSender(webID, sender)
@@ -383,9 +523,15 @@ func (d *Datasource) sendStreamData(
 					return
 				}
 				senderCh = newSenderCh
+				d.fillStreamGap(ctx, path, construct, sender)
 				continue
 			}
 
+			if construct.query != nil && construct.query.StreamFillGaps {
+				if item.Items = d.newStreamItems(path, item.Items); len(item.Items) == 0 {
+					continue
+				}
+			}
 			frame := convertStreamItemsToFrame(construct.query, item, construct.frameCache)
 
 			if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
@@ -397,6 +543,9 @@ func (d *Datasource) sendStreamData(
 			}
 			lastFrame = frame
 			keepalive.Reset(keepaliveInterval)
+			for _, sent := range item.Items {
+				d.recordStreamTime(path, sent.Timestamp)
+			}
 
 			backend.Logger.Debug("Streaming: frame sent to subscriber",
 				"webID", webID, "items", len(item.Items))

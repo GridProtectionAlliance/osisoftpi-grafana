@@ -278,18 +278,18 @@ func TestStableChannelKey_SameInputSameKey(t *testing.T) {
 	}
 }
 
-// TestStableChannelKey_DifferentSummaryTypes verifies that the same WebID with
-// different SummaryType values produces distinct channel keys.
-func TestStableChannelKey_DifferentSummaryTypes(t *testing.T) {
-	keyAvg := channelKeyFor("PI_WEBID_ABC", "Average", 0)
-	keyMax := channelKeyFor("PI_WEBID_ABC", "Maximum", 0)
-	if keyAvg == keyMax {
-		t.Errorf("expected different keys for different summary types, both got %q", keyAvg)
+// TestStableChannelKey_DifferentSettings verifies that the same WebID with
+// different query settings produces distinct channel keys.
+func TestStableChannelKey_DifferentSettings(t *testing.T) {
+	keyNull := channelKeyFor("PI_WEBID_ABC", "digitalStates=false|nodata=Null", 0)
+	keyPrevious := channelKeyFor("PI_WEBID_ABC", "digitalStates=false|nodata=Previous", 0)
+	if keyNull == keyPrevious {
+		t.Errorf("expected different keys for different settings, both got %q", keyNull)
 	}
 }
 
 // TestStableChannelKey_DifferentWebIDs verifies that different WebIDs produce
-// distinct channel keys even when the SummaryType is the same.
+// distinct channel keys even when the settings are the same.
 func TestStableChannelKey_DifferentWebIDs(t *testing.T) {
 	key1 := channelKeyFor("PI_WEBID_ABC", "", 0)
 	key2 := channelKeyFor("PI_WEBID_XYZ", "", 0)
@@ -352,9 +352,7 @@ func TestIsStreamable_NotForSummaries(t *testing.T) {
 	on, off := true, false
 	basis := "TimeWeighted"
 	types := []SummaryType{{Label: "Average", Value: SummaryTypeValue{Value: "Average"}}}
-	streaming := &struct {
-		Enable *bool `json:"enable"`
-	}{Enable: &on}
+	streaming := &QueryStreaming{Enable: &on}
 
 	plain := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming}}
 	if !plain.isStreamable() {

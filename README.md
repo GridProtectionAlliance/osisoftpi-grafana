@@ -75,6 +75,23 @@ Multi-value variables (and the `All` option) are expanded into one series for ev
 
 Variables with a custom `All` value are sent as that value and are not expanded.
 
+## Live streaming
+
+Panels can be updated with new values as soon as PI Web API receives them, using PI Web API channels (WebSocket):
+
+1. Turn on "Enable Streaming Support" in the datasource configuration.
+2. Turn on "Enable Streaming" in the query. Optionally, set "Streaming variable" to a dashboard variable
+   (e.g. `$live`) that resolves to `true` or `false` to turn streaming on and off from the dashboard.
+
+The query returns the values of the time range, and new values are then added to the panel as they arrive.
+
+- Calculations and summaries are not streamed, as PI Web API channels send raw values.
+- The WebSocket connection uses the datasource's basic authentication and custom HTTP headers, and its "Timeout"
+  (30 seconds when not set). Other authentication methods (e.g. Kerberos) are not supported for streaming.
+- When PI Web API is unavailable, streaming resumes by itself once it is back. With "Fill gaps after reconnect" (on by
+  default), the values recorded in the meantime are then added to the panel, up to the query's maximum data points;
+  when it is off, or for attributes without recorded values, they are shown at the next refresh of the panel.
+
 
 # Event Frames and Annotations
 

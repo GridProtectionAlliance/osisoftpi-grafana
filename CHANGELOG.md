@@ -72,6 +72,10 @@
 
 ## 6.0.0
 
+- Added live streaming of PI point and AF attribute values through PI Web API channels (WebSocket) - issue #206 (thanks to Michael Bohan, @mbtx2)
+  - enabled with "Enable Streaming Support" in the datasource configuration and "Enable Streaming" in the query, optionally controlled by a dashboard variable
+  - streamed values follow the query settings (Replace Bad Data, Digital States, units); calculations and summaries are not streamed
+  - streaming resumes by itself after PI Web API was unavailable, and "Fill gaps after reconnect" (on by default) adds the values recorded in the meantime; connections time out after the datasource "Timeout"
 - Rebuilt the plugin with current Grafana tooling to fix it failing to load on Grafana 12.3 and later - issue #197
 - Fixed units from PI not being added to data frames when "Enable Unit From Data" and "Use unit from datapoints" are enabled - issue #208
 - Improved template variables support - issue #187

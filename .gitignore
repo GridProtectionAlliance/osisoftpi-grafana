@@ -44,9 +44,6 @@ codealike.json
 /playwright/.cache/
 /playwright/.auth/
 
-# yarn lockfile (the project uses npm and package-lock.json)
-yarn.lock
-
 # Local environment / secrets
 .env
 
