@@ -369,10 +369,8 @@ func compatible(actual reflect.Type, expected reflect.Type) bool {
 func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, description string,
 	units string, summaryLabel string) map[string]string {
 	var frameLabel map[string]string
-	summaryNewFormat := ""
-
+	summaryType := summaryLabel
 	if summaryLabel != "" {
-		summaryNewFormat = "\" summaryType=\"" + summaryLabel
 		summaryLabel = "[" + summaryLabel + "]"
 	}
 
@@ -401,7 +399,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 		frameLabel = map[string]string{
 			"element":     targetParts[0],
 			"name":        label,
-			"type":        pointType + summaryNewFormat,
+			"type":        pointType,
 			"description": description,
 			"units":       units,
 		}
@@ -416,10 +414,14 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 			"path":        elementPath,
 			"element":     labelParts[0],
 			"name":        label,
-			"type":        pointType + summaryNewFormat,
+			"type":        pointType,
 			"description": description,
 			"units":       units,
 		}
+	}
+
+	if summaryType != "" {
+		frameLabel["summaryType"] = summaryType
 	}
 
 	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string

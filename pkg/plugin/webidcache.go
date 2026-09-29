@@ -208,14 +208,19 @@ func getValueType(Type string) reflect.Type {
 	return dataType
 }
 
-func cleanWebIDCache(cache WebIDCache) {
+// cleanWebIDCache removes the expired WebIDs. It runs on a schedule while queries use the cache, so it holds the
+// datasource lock.
+func (d *Datasource) cleanWebIDCache() {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	cache := d.webIDCache
 	now := time.Now()
 	log.DefaultLogger.Info("WebID cleared cached", "length", len(cache.webIDCache))
 	for key, entry := range cache.webIDCache {
 		if now.After(entry.ExpTime) {
 			log.DefaultLogger.Debug("WebID cache - removing aged WebID", "path", entry.Path)
 			delete(cache.webIDCache, key)
-			delete(cache.webIDPaths, entry.Path)
+			delete(cache.webIDPaths, entry.WebID)
 		}
 	}
 }
