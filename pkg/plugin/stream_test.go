@@ -228,10 +228,9 @@ func TestCheckForOrphanedWebSocket_NoSubscribers_ClosesConn(t *testing.T) {
 	// always non-nil; this test guards the map-cleanup path.)
 	func() {
 		defer func() {
-			if r := recover(); r != nil {
-				// nil.Close() panics — that is expected for this mock. The important
-				// assertion is that the entry was deleted before Close() was called.
-			}
+			// nil.Close() panics — that is expected for this mock. The important
+			// assertion is that the entry was deleted before Close() was called.
+			_ = recover()
 		}()
 		ds.checkForOrphanedWebSocket(webID, connectionKey)
 	}()

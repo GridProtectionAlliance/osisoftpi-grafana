@@ -45,7 +45,7 @@ func TestWebsocketAuthentication(t *testing.T) {
 				}
 				conn, err := upgrader.Upgrade(w, r, nil)
 				if err == nil {
-					conn.Close()
+					_ = conn.Close()
 				}
 			}))
 			t.Cleanup(server.Close)
@@ -57,7 +57,7 @@ func TestWebsocketAuthentication(t *testing.T) {
 			if err != nil {
 				t.Fatalf("connection failed: %v", err)
 			}
-			conn.Close()
+			_ = conn.Close()
 		})
 	}
 

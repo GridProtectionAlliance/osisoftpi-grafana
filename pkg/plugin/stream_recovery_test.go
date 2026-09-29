@@ -27,7 +27,7 @@ func TestStreamRecoversAfterLongOutage(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := listener.Addr().String()
-	listener.Close()
+	_ = listener.Close()
 
 	d := newTestDatasource()
 	d.settings = backend.DataSourceInstanceSettings{URL: "http://" + addr + "/piwebapi"}
@@ -60,7 +60,7 @@ func TestStreamRecoversAfterLongOutage(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		connected <- struct{}{}
 		_, _, _ = conn.ReadMessage() // until the client closes
 	}))

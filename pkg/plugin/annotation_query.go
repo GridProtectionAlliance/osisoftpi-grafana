@@ -220,7 +220,7 @@ func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte
 
 			for i, attributes := range attributes.Items {
 				for j, values := range attributes.Content.Items {
-					var sValue string = fmt.Sprintf("%v", values.Value.Value)
+					sValue := fmt.Sprintf("%v", values.Value.Value)
 
 					if j == 0 {
 						attributeName = values.Name

@@ -41,7 +41,7 @@ func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("request failed, status: %v", resp.Status)
@@ -488,7 +488,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 
 		// if the value is valid, get the underlying value
 		// we need to complete both checks to prevent a panic on a null value
-		if fP.val.IsValid() && fP.val.Kind() == reflect.Ptr {
+		if fP.val.IsValid() && fP.val.Kind() == reflect.Pointer {
 			fP.val = fP.val.Elem()
 		}
 
