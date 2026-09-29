@@ -122,7 +122,10 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	value, exists := parentItem["Value"]
 	if exists {
 		_, isFloat := value.(float64)
-		if isFloat {
+		// Calculations list the values directly (Items[].Timestamp), whatever their type: text, boolean or a
+		// system state such as "Calc Failed". Last values of stream sets nest them (Items[].Value.Timestamp).
+		_, isValue := parentItem["Timestamp"]
+		if isFloat || isValue {
 			ResContent := PiBatchDataWithFloatItem{}
 			err = json.Unmarshal(rawContent, &ResContent)
 			if err != nil {

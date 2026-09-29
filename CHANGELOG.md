@@ -100,6 +100,7 @@
 - Saved queries now record their format version (`queryVersion`) and the plugin version that saved them (`pluginVersion`), so future format changes are converted reliably; see CONTRIBUTING.md
 - Opening a panel in the query editor no longer writes the editor defaults (e.g. "Replace Bad Data" = Null) into the saved query
 - Fixed "Replace Bad Data" = Previous failing the whole request (integer points, or a bad first value), and bad values of DateTime attributes being dropped instead of replaced
+- Fixed calculations returning text or boolean values being dropped, and failed calculations ("Calc Failed") being shown in 1754
 - Fixed "Digital States" failing the whole request when a bad value (e.g. Shutdown) was returned; bad values now follow "Replace Bad Data", and numeric points whose last value is bad are no longer shown as digital states
 - An invalid query (e.g. a target without attribute) reports its error instead of silently dropping the queries after it in the same request
 - In PI point mode, the PI server set in the datasource configuration is preselected and is the only server offered
