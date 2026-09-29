@@ -40,25 +40,6 @@ func (q *Query) getIntervalTime() string {
 	return fmt.Sprintf("%dms", q.Interval/1e6)
 }
 
-func (q *Query) getWindowedTimeStampURI() string {
-	// Potential Improvement: Make windowWidth a user input
-	windowWidth := q.getMaxDataPoints()
-	fromTime := q.TimeRange.From.Truncate(time.Second)
-	toTime := q.TimeRange.To.Truncate(time.Second)
-
-	diff := toTime.Sub(fromTime).Nanoseconds() / int64(windowWidth)
-	timeQuery := "time=" + fromTime.Format(time.RFC3339)
-
-	for i := 1; i < windowWidth; i++ {
-		newTime := fromTime.Add(time.Duration(i * int(diff)))
-		timeQuery += "&time=" + newTime.Format(time.RFC3339)
-	}
-
-	timeQuery += "&time=" + toTime.Format(time.RFC3339)
-
-	return "/times?" + timeQuery
-}
-
 func (q *Query) getTimeRangeURIComponent() string {
 	return "?startTime=" + q.TimeRange.From.UTC().Truncate(time.Second).Format(time.RFC3339) +
 		"&endTime=" + q.TimeRange.To.UTC().Truncate(time.Second).Format(time.RFC3339)
@@ -87,16 +68,6 @@ func (q *Query) isStreamFillGaps() bool {
 func (q *Query) isStreamable() bool {
 	return !q.Pi.isExpression() && !q.Pi.isSummary() && q.isstreamingEnabled()
 }
-
-// func (q *PiProcessedQuery) isSummary() bool {
-// 	if q.Summary == nil {
-// 		return false
-// 	}
-// 	if q.Summary.Types == nil {
-// 		return false
-// 	}
-// 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
-// }
 
 func (q *PiProcessedQuery) getNoDataReplace() string {
 	if q.Nodata == nil {
@@ -134,10 +105,9 @@ type PIWebAPIQuery struct {
 		MaxNumber    *int    `json:"maxNumber"`
 		BoundaryType *string `json:"boundaryType"`
 	} `json:"recordedValues"`
-	RefID  *string `json:"refId"`
-	Regex  *Regex  `json:"regex"`
-	Nodata *string `json:"nodata"`
-	// Segments *[]string     `json:"segments"`
+	RefID   *string       `json:"refId"`
+	Regex   *Regex        `json:"regex"`
+	Nodata  *string       `json:"nodata"`
 	Summary *QuerySummary `json:"summary"`
 	Target  *string       `json:"target"`
 	Display *string       `json:"display"`
@@ -205,31 +175,29 @@ type FrameProcessed struct {
 }
 
 type PiProcessedQuery struct {
-	Label               string             `json:"Label"`
-	WebID               string             `json:"WebID"`
-	UID                 string             `json:"-"`
-	IntervalNanoSeconds int64              `json:"IntervalNanoSeconds"`
-	IsPIPoint           bool               `json:"IsPiPoint"`
-	HideError           bool               `json:"HideError"`
-	Streamable          bool               `json:"isStreamable"`
-	FullTargetPath      string             `json:"FullTargetPath"`
-	ResponseUnits       string             `json:"ResponseUnits"`
-	BatchRequest        BatchSubRequestMap `json:"BatchRequest"`
-	Response            PiBatchData        `json:"ResponseData"`
-	UseUnit             bool               `json:"UseUnit"`
-	DigitalStates       bool               `json:"DigitalStates"`
-	Display             *string            `json:"Display"`
-	Nodata              *string            `json:"Nodata"`
-	Regex               *Regex             `json:"Regex"`
-	Summary             *QuerySummary      `json:"Summary"`
-	HashCode            string             `json:"HashCode"`
-	StartTime           time.Time          `json:"StartTime"`
-	EndTime             time.Time          `json:"EndTime"`
-	Resource            string
-	TargetPath          string
-	Variable            string
-	MultiVariable       bool
-	PluginVersion       string
+	Label          string             `json:"Label"`
+	WebID          string             `json:"WebID"`
+	UID            string             `json:"-"`
+	IsPIPoint      bool               `json:"IsPiPoint"`
+	HideError      bool               `json:"HideError"`
+	Streamable     bool               `json:"isStreamable"`
+	FullTargetPath string             `json:"FullTargetPath"`
+	BatchRequest   BatchSubRequestMap `json:"BatchRequest"`
+	Response       PiBatchData        `json:"ResponseData"`
+	UseUnit        bool               `json:"UseUnit"`
+	DigitalStates  bool               `json:"DigitalStates"`
+	Display        *string            `json:"Display"`
+	Nodata         *string            `json:"Nodata"`
+	Regex          *Regex             `json:"Regex"`
+	Summary        *QuerySummary      `json:"Summary"`
+	HashCode       string             `json:"HashCode"`
+	StartTime      time.Time          `json:"StartTime"`
+	EndTime        time.Time          `json:"EndTime"`
+	Resource       string
+	TargetPath     string
+	Variable       string
+	MultiVariable  bool
+	PluginVersion  string
 	// StreamFillGaps and MaxDataPoints are used to fill the gap in the stream after a reconnect
 	StreamFillGaps bool
 	MaxDataPoints  int

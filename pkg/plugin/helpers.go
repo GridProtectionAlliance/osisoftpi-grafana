@@ -23,52 +23,15 @@ func queryEscape(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
 }
 
-func replaceAccentsWithEscape(s string) string {
-	// Define a mapping of accents to their corresponding escape sequences
-	accentMap := map[rune]string{
-		'á': "%C3%A1", 'à': "%C3%A0", 'â': "%C3%A2", 'ä': "%C3%A4", 'ã': "%C3%A3", 'å': "%C3%A5",
-		'é': "%C3%A9", 'è': "%C3%A8", 'ê': "%C3%AA", 'ë': "%C3%AB",
-		'í': "%C3%AD", 'ì': "%C3%AC", 'î': "%C3%AE", 'ï': "%C3%AF",
-		'ó': "%C3%B3", 'ò': "%C3%B2", 'ô': "%C3%B4", 'ö': "%C3%B6", 'õ': "%C3%B5", 'ø': "%C3%B8",
-		'ú': "%C3%BA", 'ù': "%C3%B9", 'û': "%C3%BB", 'ü': "%C3%BC",
-		'ñ': "%C3%B1",
-		'ç': "%C3%A7",
-		'Á': "%C3%81", 'À': "%C3%80", 'Â': "%C3%82", 'Ä': "%C3%84", 'Ã': "%C3%83", 'Å': "%C3%85",
-		'É': "%C3%89", 'È': "%C3%88", 'Ê': "%C3%8A", 'Ë': "%C3%8B",
-		'Í': "%C3%8D", 'Ì': "%C3%8C", 'Î': "%C3%8E", 'Ï': "%C3%8F",
-		'Ó': "%C3%93", 'Ò': "%C3%92", 'Ô': "%C3%94", 'Ö': "%C3%96", 'Õ': "%C3%95", 'Ø': "%C3%98",
-		'Ú': "%C3%9A", 'Ù': "%C3%99", 'Û': "%C3%9B", 'Ü': "%C3%9C",
-		'Ñ': "%C3%91",
-		'Ç': "%C3%87",
-		'|': "%7C", '(': "%28", ')': "%29",
-	}
-
-	var result strings.Builder
-
-	// Iterate over each character in the input string
-	for _, char := range s {
-		// Check if the character is an accent
-		if escapeSeq, ok := accentMap[char]; ok {
-			// If it is, append the escape sequence to the result
-			result.WriteString(escapeSeq)
-		} else {
-			// If it's not an accent, append the character as it is
-			result.WriteRune(char)
-		}
-	}
-
-	return strings.ReplaceAll(result.String(), ` `, `%20`)
-}
-
 // apiGet performs a GET request against the PI Web API. It returns the response body as a byte slice.
 // If the request fails, an error is returned.
 func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
+	// path is already URL-encoded (resource proxy requests are encoded by the frontend)
 	var uri = d.settings.URL
-	var pathEscaped = replaceAccentsWithEscape(path)
 	if strings.HasSuffix(uri, "/") {
-		uri = uri + pathEscaped
+		uri = uri + path
 	} else {
-		uri = uri + "/" + pathEscaped
+		uri = uri + "/" + path
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
 	if err != nil {
@@ -147,8 +110,8 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 }
 
 // convertSliceToPointers converts a slice of values to a slice of
-// pointers to those values. This is used to create point values that are nullable.
-// TODO: handle bad value processing here
+// pointers to those values. This is used to create point values that are nullable: the values at the positions in
+// badValues are nil.
 func convertSliceToPointers(slice interface{}, badValues []int) interface{} {
 	s := reflect.ValueOf(slice)
 	t := reflect.TypeOf(slice).Elem()

@@ -8,7 +8,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 )
 
-// Saved panel queries of plugin versions 4.x and 5.0 (issue #194): the summary was enabled by selecting summary
+// Saved panel queries of plugin versions 4.x and 5.0 (issue GridProtectionAlliance/osisoftpi-grafana#194): the summary was enabled by selecting summary
 // types, its duration was "interval", and "nodata" (Replace Bad Data) was part of the summary.
 func TestLegacySummaryQueries(t *testing.T) {
 	tests := []struct {

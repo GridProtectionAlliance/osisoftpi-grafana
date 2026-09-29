@@ -31,7 +31,6 @@ type streamFrameCache struct {
 type StreamChannelConstruct struct {
 	WebID         string
 	ConnectionKey string // sorted WebIDs joined by "|"; key into websocketConnections
-	tagLabel      string
 	query         *PiProcessedQuery
 	frameCache    streamFrameCache // pre-computed static WebID metadata; see buildStreamFrameCache
 	// generationKey is the map key used to look up and increment channelGenerations.

@@ -295,7 +295,7 @@ func TestConvertStreamItemsToFrame_MetaNotNil(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // An attribute of type <Anything> has no type in the WebID cache: the stream takes it from the values, as the query
-// responses do (issue #173).
+// responses do (issue GridProtectionAlliance/osisoftpi-grafana#173).
 func TestConvertStreamItemsToFrame_AnythingType(t *testing.T) {
 	webID := "webid-anything"
 	ds := newTestDatasourceWithWebID(webID, "")

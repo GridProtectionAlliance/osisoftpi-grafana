@@ -81,7 +81,7 @@ describe('applyTemplateVariables', () => {
   });
 });
 
-describe('legacy queries (issue #194)', () => {
+describe('legacy queries (issue GridProtectionAlliance/osisoftpi-grafana#194)', () => {
   it('sends the summary and bad data replacement of a 4.x query in the current format', () => {
     const target = {
       refId: 'A',

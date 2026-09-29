@@ -14,7 +14,6 @@ import (
 type Datasource struct {
 	settings         backend.DataSourceInstanceSettings
 	queryMux         *datasource.QueryTypeMux
-	StreamHandler    backend.StreamHandler
 	httpClient       *http.Client
 	webIDCache       WebIDCache
 	webCache         *Cache[string, PiBatchData]

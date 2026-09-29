@@ -21,7 +21,6 @@ import {
   buildQueryString,
   firstVariableValue,
   formatVariableValue,
-  getSummaryTypes,
   hashCode,
   metricQueryTransform,
   removeServerPrefix,
@@ -299,11 +298,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           : tar.summary.sampleInterval;
       }
 
-      // recover summary due to format change
-      // TODO: remove in 6.0.0
-      tar.summary.types = getSummaryTypes(tar.summary);
-      // END TODO
-
       tar.hashCode = hashCode(removeTime(tar));
 
       return tar;
@@ -443,19 +437,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         buildQueryString({ selectedFields: 'Items.InstanceType;Items.Name;Items.WebId' })
     ).then((response) => {
       return filter(response.Items ?? [], (item) => item.InstanceType === 'EventFrame');
-    });
-  }
-  getElementTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
-    if (!databaseId) {
-      return Promise.resolve([]);
-    }
-    return this.restGet(
-      '/assetdatabases/' +
-        databaseId +
-        '/elementtemplates' +
-        buildQueryString({ selectedFields: 'Items.InstanceType;Items.Name;Items.WebId' })
-    ).then((response) => {
-      return filter(response.Items ?? [], (item) => item.InstanceType === 'Element');
     });
   }
 

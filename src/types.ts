@@ -1,17 +1,6 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
 
-export interface PiwebapiElementPath {
-  path: string;
-  variable: string;
-}
-
-export interface PiwebapiInternalRsp {
-  data: PiwebapiRsp;
-  status: number;
-  url: string;
-}
-
 export interface PiwebapiRsp {
   Name?: string;
   InstanceType?: string;
@@ -60,10 +49,6 @@ export interface PiWebAPISummary extends PiWebAPIEnable {
   duration?: string,
   sampleTypeInterval?: boolean,
   sampleInterval?: string
-}
-
-export interface PIWebAPIAnnotationsQuery extends DataQuery {
-  target: string;
 }
 
 export interface PIWebAPIQuery extends DataQuery {
@@ -144,9 +129,3 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   useResponseCache?: boolean;
 }
 
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface PIWebAPISecureJsonData {
-  apiKey?: string;
-}

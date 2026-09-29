@@ -149,7 +149,6 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return d.queryMux.QueryData(ctx, req)
 }
 
-// TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID

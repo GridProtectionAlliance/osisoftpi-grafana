@@ -109,30 +109,29 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 			index++
 			// Create a processed query for the target
 			piQuery := PiProcessedQuery{
-				RefID:               PiQuery.RefID,
-				Label:               target.Attribute,
-				UID:                 datasourceUID,
-				IntervalNanoSeconds: PiQuery.Interval,
-				IsPIPoint:           PiQuery.Pi.IsPiPoint,
-				HideError:           PiQuery.Pi.HideError,
-				Streamable:          streamable,
-				FullTargetPath:      fullTargetPath,
-				TargetPath:          targetBasePath,
-				UseUnit:             UseUnit,
-				DigitalStates:       DigitalStates,
-				Display:             PiQuery.Pi.Display,
-				Regex:               PiQuery.Pi.Regex,
-				Nodata:              PiQuery.Pi.Nodata,
-				Summary:             PiQuery.Pi.Summary,
-				HashCode:            PiQuery.Pi.HashCode + "_" + fullTargetPath,
-				StartTime:           startTime,
-				EndTime:             endTime,
-				Variable:            target.Variable,
-				MultiVariable:       target.MultiVariable,
-				Index:               index,
-				PluginVersion:       PiQuery.Pi.PluginVersion,
-				StreamFillGaps:      PiQuery.isStreamFillGaps(),
-				MaxDataPoints:       PiQuery.getMaxDataPoints(),
+				RefID:          PiQuery.RefID,
+				Label:          target.Attribute,
+				UID:            datasourceUID,
+				IsPIPoint:      PiQuery.Pi.IsPiPoint,
+				HideError:      PiQuery.Pi.HideError,
+				Streamable:     streamable,
+				FullTargetPath: fullTargetPath,
+				TargetPath:     targetBasePath,
+				UseUnit:        UseUnit,
+				DigitalStates:  DigitalStates,
+				Display:        PiQuery.Pi.Display,
+				Regex:          PiQuery.Pi.Regex,
+				Nodata:         PiQuery.Pi.Nodata,
+				Summary:        PiQuery.Pi.Summary,
+				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,
+				StartTime:      startTime,
+				EndTime:        endTime,
+				Variable:       target.Variable,
+				MultiVariable:  target.MultiVariable,
+				Index:          index,
+				PluginVersion:  PiQuery.Pi.PluginVersion,
+				StreamFillGaps: PiQuery.isStreamFillGaps(),
+				MaxDataPoints:  PiQuery.getMaxDataPoints(),
 			}
 
 			WebID := d.getCachedWebID(fullTargetPath)
@@ -435,7 +434,6 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 						channel := StreamChannelConstruct{
 							WebID:         q.WebID,
 							ConnectionKey: connectionKey,
-							tagLabel:      q.Label,
 							query:         &streamQuery,
 							frameCache:    buildStreamFrameCache(d, &q),
 							generationKey: genKey,
@@ -633,34 +631,12 @@ func (q *PIWebAPIQuery) getBasePath() string {
 	return (*q.Target)[:semiIndex]
 }
 
-// func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
-// 	fullTargetPath := q.getBasePath()
-// 	if q.IsPiPoint {
-// 		fullTargetPath += `\` + target
-// 	} else {
-// 		fullTargetPath += "|" + target
-// 	}
-// 	return fullTargetPath
-// }
-
 func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	if q.IsPiPoint {
 		return `\`
 	}
 	return "|"
 }
-
-// func (q *PIWebAPIQuery) getTargets() []string {
-// 	if q.Target == nil {
-// 		return nil
-// 	}
-
-// 	semiIndex := strings.Index(*q.Target, ";")
-// 	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
-// 		return nil
-// 	}
-// 	return strings.Split((*q.Target)[semiIndex+1:], ";")
-// }
 
 func (q *PIWebAPIQuery) checkNilSegments() bool {
 	return q.Target == nil
@@ -722,7 +698,6 @@ func (q Query) getQueryBaseURL() string {
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			} else {
-				// uri += "/times?" + q.getWindowedTimeStampURI()
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			}
 		}

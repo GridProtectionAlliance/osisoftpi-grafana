@@ -72,29 +72,29 @@
 
 ## 6.0.0
 
-- Added live streaming of PI point and AF attribute values through PI Web API channels (WebSocket) - issue #206 (thanks to Michael Bohan, @mbtx2)
+- Added live streaming of PI point and AF attribute values through PI Web API channels (WebSocket) - issue GridProtectionAlliance/osisoftpi-grafana#206 (thanks to Michael Bohan, @mbtx2)
   - enabled with "Enable Streaming Support" in the datasource configuration and "Enable Streaming" in the query, optionally controlled by a dashboard variable
   - streamed values follow the query settings (Replace Bad Data, Digital States, units); calculations and summaries are not streamed
   - streaming resumes by itself after PI Web API was unavailable, and "Fill gaps after reconnect" (on by default) adds the values recorded in the meantime; connections time out after the datasource "Timeout"
-- Rebuilt the plugin with current Grafana tooling to fix it failing to load on Grafana 12.3 and later - issue #197
-- Fixed units from PI not being added to data frames when "Enable Unit From Data" and "Use unit from datapoints" are enabled - issue #208
-- Improved template variables support - issue #187
+- Rebuilt the plugin with current Grafana tooling to fix it failing to load on Grafana 12.3 and later - issue GridProtectionAlliance/osisoftpi-grafana#197
+- Fixed units from PI not being added to data frames when "Enable Unit From Data" and "Use unit from datapoints" are enabled - issue GridProtectionAlliance/osisoftpi-grafana#208
+- Improved template variables support - issue GridProtectionAlliance/osisoftpi-grafana#187
   - more than one multi-value variable can be used in the element path; every combination is queried
   - multi-value variables in attributes and PI points expand into one attribute or point per value
   - a query can expand into at most 1000 element/attribute combinations
   - series of a path with several variables are named after the element path below the database (e.g. `SiteA\Unit2\Pump|Flow`); with the new data format, AF series have `database` and `path` labels
   - fixed the query editor dropping attributes that use a multi-value variable
   - fixed queries overwriting the template variables saved in the panel (attributes, elements and summary settings)
-- Fixed backend panics on queries without the optional `recordedValues` or `summary` settings, and on an invalid regex - issue #209
-- Attributes and PI points are read from the query target when the query has no attributes list (API calls, hand-written queries) - issue #209
-- Fixed AF elements, attributes and PI points with `#`, `&`, `+`, `%` or spaces in their names not returning data; calculation expressions and event frame filters are encoded too - issue #186
+- Fixed backend panics on queries without the optional `recordedValues` or `summary` settings, and on an invalid regex - issue GridProtectionAlliance/osisoftpi-grafana#209
+- Attributes and PI points are read from the query target when the query has no attributes list (API calls, hand-written queries) - issue GridProtectionAlliance/osisoftpi-grafana#209
+- Fixed AF elements, attributes and PI points with `#`, `&`, `+`, `%` or spaces in their names not returning data; calculation expressions and event frame filters are encoded too - issue GridProtectionAlliance/osisoftpi-grafana#186
   - calculation expressions are now sent URL-encoded: an expression that was hand-encoded to work around the old behaviour (e.g. `%2B` instead of `+`) must be changed back to the plain character
 - The backend resource proxy only forwards the PI Web API collections used by the query editor and configuration page (asset servers, databases, elements, attributes, data servers and points); other paths, including path traversal such as `elements/../batch`, return 403
 - Fixed one failing element or attribute in a query (e.g. an element of a multi-value variable without the attribute) dropping the data of the other targets of the query
 - Connection and authentication errors (e.g. a wrong password, 401) are shown on the panel instead of an empty "No data"
 - Units of AF attributes use the abbreviation returned by PI Web API (e.g. `m3/h` instead of `cubic meter per hour`), as for PI points; the full name is used when no abbreviation is returned
-- AF attributes with the value type `<Anything>` (e.g. AF links) or a type unknown to the plugin take the type of their values, instead of being read as text ("Data is missing a number field") - issue #173
-- Queries saved by versions 4.x and 5.0 keep their summary and "Replace Bad Data" settings - issue #194
+- AF attributes with the value type `<Anything>` (e.g. AF links) or a type unknown to the plugin take the type of their values, instead of being read as text ("Data is missing a number field") - issue GridProtectionAlliance/osisoftpi-grafana#173
+- Queries saved by versions 4.x and 5.0 keep their summary and "Replace Bad Data" settings - issue GridProtectionAlliance/osisoftpi-grafana#194
   - their summary (enabled by selecting summary types, with the old "interval" period) was ignored since 5.1, returning raw values
   - "Replace Bad Data" saved inside the summary is moved to the query; opening such a panel in the query editor saves it in the current format
 - Saved queries now record their format version (`queryVersion`) and the plugin version that saved them (`pluginVersion`), so future format changes are converted reliably; see CONTRIBUTING.md

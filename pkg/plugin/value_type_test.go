@@ -23,7 +23,7 @@ func fieldValues(f *data.Field) []interface{} {
 }
 
 // Attributes whose value type is "<Anything>" (empty Type, e.g. AF links) take the type of the values returned
-// by PI Web API instead of being treated as strings ("Data is missing a number field", issue #173).
+// by PI Web API instead of being treated as strings ("Data is missing a number field", issue GridProtectionAlliance/osisoftpi-grafana#173).
 func TestAttributeValueTypeFromValues(t *testing.T) {
 	running := map[string]interface{}{"Name": "Running", "Value": 1, "IsSystem": false}
 	stopped := map[string]interface{}{"Name": "Stopped", "Value": 0, "IsSystem": false}

@@ -22,7 +22,7 @@ func (q *PIWebAPIQuery) migrate() {
 	}
 }
 
-// migrateLegacySummary converts the summary settings saved by versions 4.x and 5.0 (issue #194): the summary was
+// migrateLegacySummary converts the summary settings saved by versions 4.x and 5.0 (issue GridProtectionAlliance/osisoftpi-grafana#194): the summary was
 // enabled by selecting summary types, its duration was "interval", and "nodata" (Replace Bad Data) was part of the
 // summary. Versions 5.1 and 5.2 kept these fields when re-saving the query, with the summary disabled.
 func (q *PIWebAPIQuery) migrateLegacySummary() {
