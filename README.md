@@ -85,7 +85,8 @@ Panels can be updated with new values as soon as PI Web API receives them, using
 
 The query returns the values of the time range, and new values are then added to the panel as they arrive.
 
-- Calculations and summaries are not streamed, as PI Web API channels send raw values.
+- PI Web API channels send raw values, so "Enable Streaming" is only offered for queries without a calculation,
+  "Use Last Value", "Interpolate", "Recorded Values" or a summary. While streaming is enabled, these options are hidden.
 - The WebSocket connection uses the datasource's basic authentication and custom HTTP headers, and its "Timeout"
   (30 seconds when not set). Other authentication methods (e.g. Kerberos) are not supported for streaming.
 - When PI Web API is unavailable, streaming resumes by itself once it is back. With "Fill gaps after reconnect" (on by
