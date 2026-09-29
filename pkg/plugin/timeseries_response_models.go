@@ -48,7 +48,8 @@ type PiBatchData interface {
 // All other formations will return an PiBatchDataError
 func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	var PIBatchResponseBase PIBatchResponseBase
-	json.Unmarshal(data, &PIBatchResponseBase)
+	// Status and Headers are optional: an error here is reported by the unmarshal of the items below.
+	_ = json.Unmarshal(data, &PIBatchResponseBase)
 	p.Status = PIBatchResponseBase.Status
 	p.Headers = PIBatchResponseBase.Headers
 

@@ -116,3 +116,4 @@
 - Replaced deprecated `AsyncSelect` with `Combobox` in the annotations editor
 - Removed the committed `dist` build output from the repository
 - Added Playwright end-to-end tests that run in CI against every supported Grafana version
+- CI lints the backend with golangci-lint; releases are signed with a build provenance attestation

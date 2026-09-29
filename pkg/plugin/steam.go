@@ -156,7 +156,7 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, connect
 	defer d.websocketConnectionsMutex.Unlock()
 	if _, ok := d.websocketConnections[connectionKey]; ok {
 		// Another goroutine won the race; discard our duplicate connection.
-		conn.Close()
+		_ = conn.Close()
 		backend.Logger.Debug("Streaming: closing duplicate WebSocket connection (concurrent dial)", "connectionKey", connectionKey)
 		return nil
 	}
@@ -227,7 +227,7 @@ func (d *Datasource) createWebsocketConnection(ctx context.Context, webIDs []str
 		NetDialContext: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
 			netConn, err := (&net.Dialer{}).DialContext(dialCtx, network, addr)
 			if err == nil {
-				stopCancel = context.AfterFunc(ctx, func() { netConn.Close() })
+				stopCancel = context.AfterFunc(ctx, func() { _ = netConn.Close() })
 			}
 			return netConn, err
 		},
@@ -252,7 +252,7 @@ func (d *Datasource) createWebsocketConnection(ctx context.Context, webIDs []str
 // the connection closes or errors, the dead connection is removed so the next subscriber
 // triggers a fresh dial.
 func (d *Datasource) readWebsocketMessages(conn *websocket.Conn, connectionKey string) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	for {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
@@ -586,7 +586,7 @@ func (d *Datasource) checkForOrphanedWebSocket(webID, connectionKey string) {
 	}
 
 	if connExists {
-		ws.Close()
+		_ = ws.Close()
 		backend.Logger.Info("Streaming: closed orphaned WebSocket connection",
 			"connectionKey", connectionKey, "lastWebID", webID)
 	}

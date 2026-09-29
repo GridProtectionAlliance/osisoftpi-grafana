@@ -2,9 +2,16 @@
 
 ## Development
 
-- Frontend: `npm install`, `npm run dev` (watch) or `npm run build`; checks: `npm run typecheck`, `npm run lint`, `npm run test:ci`
-- Backend: `mage -v build:linux` (or `mage -v` for every platform); tests: `go test ./pkg/...`
-- End-to-end tests: `npm run server` starts Grafana with the plugin, then `npm run e2e`
+- Frontend: `yarn install`, `yarn dev` (watch) or `yarn build`; checks: `yarn typecheck`, `yarn lint`, `yarn test:ci`
+- Backend: `mage -v build:linux` (or `mage -v` for every platform); checks: `golangci-lint run ./...`, `go test ./pkg/...`
+- End-to-end tests: `yarn server` starts Grafana with the plugin, then `yarn e2e`
+
+## Releasing
+
+Pushing a `v*` tag (e.g. `v6.0.0`, matching the version in `package.json`) runs `.github/workflows/release.yml`: it
+builds and signs the plugin, creates a build provenance attestation and a draft GitHub release. Publish the draft,
+then submit the update in the grafana.com plugin catalog. Signing needs the `GRAFANA_ACCESS_POLICY_TOKEN` repository
+secret.
 
 ## Changing how queries are saved
 
