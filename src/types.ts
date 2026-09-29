@@ -1,17 +1,5 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
-import internal from 'stream';
-
-export interface PiwebapiElementPath {
-  path: string;
-  variable: string;
-}
-
-export interface PiwebapiInternalRsp {
-  data: PiwebapiRsp;
-  status: number;
-  url: string;
-}
 
 export interface PiwebapiRsp {
   Name?: string;
@@ -63,10 +51,6 @@ export interface PiWebAPISummary extends PiWebAPIEnable {
   sampleInterval?: string
 }
 
-export interface PIWebAPIAnnotationsQuery extends DataQuery {
-  target: string;
-}
-
 export interface PIWebAPIQuery extends DataQuery {
   target: string;
   attributes: Array<SelectableValue<PIWebAPISelectableValue>>;
@@ -97,6 +81,10 @@ export interface PIWebAPIQuery extends DataQuery {
   nameFilter?: string;
   categoryName?: string;
   hashCode?: string;
+  // format version of the saved query (see QUERY_VERSION); missing in queries saved before 6.0
+  queryVersion?: number;
+  // version of the plugin that last saved the query, for information only
+  pluginVersion?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {
@@ -118,7 +106,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   useLastValue: { enable: false },
   recordedValues: { enable: false, boundaryType: 'Inside' },
   digitalStates: { enable: false },
-  enableStreaming: { enable: false },
+  enableStreaming: { enable: false, variable: '' },
   useUnit: { enable: false },
   isPiPoint: false,
 };
@@ -141,9 +129,3 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   useResponseCache?: boolean;
 }
 
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface PIWebAPISecureJsonData {
-  apiKey?: string;
-}

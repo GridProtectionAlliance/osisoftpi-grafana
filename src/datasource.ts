@@ -11,11 +11,21 @@ import {
   DataFrame,
   DataQueryRequest,
   DataQueryResponse,
+  SelectableValue,
 } from '@grafana/data';
 import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
-import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PiDataServer, PiwebapiRsp } from './types';
-import { getSummaryTypes, hashCode, metricQueryTransform, removeTime } from 'helper';
+import { migrateQuery } from './queryVersion';
+import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PIWebAPISelectableValue, PiDataServer, PiwebapiRsp } from './types';
+import {
+  buildQueryString,
+  firstVariableValue,
+  formatVariableValue,
+  hashCode,
+  metricQueryTransform,
+  removeServerPrefix,
+  removeTime,
+} from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
 
@@ -85,7 +95,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   applyTemplateVariables(query: PIWebAPIQuery, scopedVars: ScopedVars) {
     return {
       ...query,
-      target: query.target ? this.templateSrv.replace(query.target, scopedVars) : '',
+      target: query.target
+        ? removeServerPrefix(this.templateSrv.replace(query.target, scopedVars, formatVariableValue))
+        : '',
     };
   }
 
@@ -124,18 +136,19 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       query = JSON.parse(query as string);
     }
     if (queryOptions.isPiPoint) {
-      query.path = this.templateSrv.replace(query.path, queryOptions);
+      query.path = this.templateSrv.replace(query.path, queryOptions, formatVariableValue);
     } else {
       if (query.path === '') {
         query.type = querydepth[0];
       } else {
-        query.path = this.templateSrv.replace(query.path, queryOptions); // replace variables in the path
+        query.path = this.templateSrv.replace(query.path, queryOptions, formatVariableValue); // replace variables in the path
         query.path = query.path.split(';')[0]; // if the attribute is in the path, let's remote it
         if (query.type !== 'attributes') {
           query.type = querydepth[Math.max(0, Math.min(query.path.split('\\').length, querydepth.length - 1))];
         }
       }
-      query.path = query.path.replace(/\{([^\\])*\}/gi, (r: string) => r.substring(1, r.length - 2).split(',')[0]);
+      // multi-value variables: browse the hierarchy using the first selected value
+      query.path = firstVariableValue(query.path);
     }
 
     query.filter = query.filter ?? '*';
@@ -160,7 +173,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         .getDatabase(query.path)
         .then((db) =>
           ds.getDatabaseElements(db.WebId ?? '', {
-            selectedFields: 'Items.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
+            selectedFields: 'Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
           })
         )
         .then(metricQueryTransform);
@@ -169,8 +182,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         .getElement(query.path)
         .then((element) =>
           ds.getElements(element.WebId ?? '', {
-            selectedFields:
-              'Items.Description%3BItems.WebId%3BItems.Name%3BItems.Items%3BItems.Path%3BItems.HasChildren',
+            selectedFields: 'Items.Description;Items.WebId;Items.Name;Items.Items;Items.Path;Items.HasChildren',
             nameFilter: query.filter,
           })
         )
@@ -181,8 +193,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         .then((element) =>
           ds.getAttributes(element.WebId ?? '', {
             searchFullHierarchy: 'true',
-            selectedFields:
-              'Items.Type%3BItems.DefaultUnitsName%3BItems.Description%3BItems.WebId%3BItems.Name%3BItems.Path',
+            selectedFields: 'Items.Type;Items.DefaultUnitsName;Items.Description;Items.WebId;Items.Name;Items.Path',
             nameFilter: query.filter,
             maxCount: query.max,
           })
@@ -217,23 +228,33 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (options.maxDataPoints) {
       options.maxDataPoints = options.maxDataPoints > 30000 ? 30000 : options.maxDataPoints;
     }
-    options.targets = map(options.targets, (target) => {
+    // copies a segment or attribute with its template variables replaced, so the saved query keeps the variables
+    const replaceSegment = (segment: SelectableValue<PIWebAPISelectableValue>) =>
+      segment.value
+        ? {
+            ...segment,
+            value: {
+              ...segment.value,
+              value: this.templateSrv.replace(segment.value.value, options.scopedVars, formatVariableValue),
+            },
+          }
+        : segment;
+
+    options.targets = map(options.targets, (savedTarget) => {
+      const target = migrateQuery(savedTarget);
       const tar = {
-        enableStreaming: target.enableStreaming,
-        target: this.templateSrv.replace(target.target, options.scopedVars),
-        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars),
-        attributes: map(target.attributes, (att) => {
-          if (att.value) {
-            att.value.value = this.templateSrv.replace(att.value.value, options.scopedVars);
+        enableStreaming: (() => {
+          const es = target.enableStreaming ?? { enable: false };
+          if (es.variable && es.variable.trim() !== '') {
+            const resolved = this.templateSrv.replace(es.variable.trim(), options.scopedVars).toLowerCase();
+            return { ...es, enable: resolved === 'true' || resolved === '1' || resolved === 'yes' };
           }
-          return att;
-        }),
-        segments: map(target.segments, (att) => {
-          if (att.value) {
-            att.value.value = this.templateSrv.replace(att.value.value, options.scopedVars);
-          }
-          return att;
-        }),
+          return es;
+        })(),
+        target: this.templateSrv.replace(target.target, options.scopedVars, formatVariableValue),
+        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars, formatVariableValue),
+        attributes: map(target.attributes, replaceSegment),
+        segments: map(target.segments, replaceSegment),
         isAnnotation: !!target.isAnnotation,
         display: !!target.display ? this.templateSrv.replace(target.display, options.scopedVars) : undefined,
         refId: target.refId,
@@ -251,12 +272,14 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         webid: target.webid ?? '',
         regex: target.regex || { enable: false },
         expression: target.expression || '',
-        summary: target.summary || { enable: false, types: [] },
+        summary: { ...(target.summary || { enable: false, types: [] }) },
         nodata: target.nodata,
         startTime: options.range.from,
         endTime: options.range.to,
         isPiPoint: !!target.isPiPoint,
         hideError: !!target.hideError,
+        queryVersion: target.queryVersion,
+        pluginVersion: target.pluginVersion,
         scopedVars: options.scopedVars,
         hashCode: '',
       };
@@ -274,11 +297,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
           ? this.templateSrv.replace(tar.summary.sampleInterval, options.scopedVars)
           : tar.summary.sampleInterval;
       }
-
-      // recover summary due to format change
-      // TODO: remove in 6.0.0
-      tar.summary.types = getSummaryTypes(tar.summary);
-      // END TODO
 
       tar.hashCode = hashCode(removeTime(tar));
 
@@ -350,7 +368,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     const map: Record<string, any[]> = {};
 
     dataFrame.fields.forEach((field) => {
-      map[field.name] = field.values.toArray();
+      map[field.name] = Array.from(field.values);
     });
 
     return map;
@@ -378,7 +396,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (!name) {
       return Promise.resolve({});
     }
-    return this.restGet('/dataservers?name=' + name).then((response) => response);
+    return this.restGet('/dataservers' + buildQueryString({ name })).then((response) => response);
   }
   // Get a list of all asset (AF) servers
   private getAssetServers(): Promise<PiwebapiRsp[]> {
@@ -388,13 +406,13 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (!name) {
       return Promise.resolve({});
     }
-    return this.restGet('/assetservers?path=\\\\' + name).then((response) => response);
+    return this.restGet('/assetservers' + buildQueryString({ path: '\\\\' + name })).then((response) => response);
   }
   getDatabase(path: string | undefined): Promise<PiwebapiRsp> {
     if (!path) {
       return Promise.resolve({});
     }
-    return this.restGet('/assetdatabases?path=\\\\' + path).then((response) => response);
+    return this.restGet('/assetdatabases' + buildQueryString({ path: '\\\\' + path })).then((response) => response);
   }
   getDatabases(serverId: string, options?: any): Promise<PiwebapiRsp[]> {
     if (!serverId) {
@@ -406,26 +424,19 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (!path) {
       return Promise.resolve({});
     }
-    return this.restGet('/elements?path=\\\\' + path).then((response) => response);
+    return this.restGet('/elements' + buildQueryString({ path: '\\\\' + path })).then((response) => response);
   }
   getEventFrameTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
     if (!databaseId) {
       return Promise.resolve([]);
     }
     return this.restGet(
-      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
+      '/assetdatabases/' +
+        databaseId +
+        '/elementtemplates' +
+        buildQueryString({ selectedFields: 'Items.InstanceType;Items.Name;Items.WebId' })
     ).then((response) => {
       return filter(response.Items ?? [], (item) => item.InstanceType === 'EventFrame');
-    });
-  }
-  getElementTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
-    if (!databaseId) {
-      return Promise.resolve([]);
-    }
-    return this.restGet(
-      '/assetdatabases/' + databaseId + '/elementtemplates?selectedFields=Items.InstanceType%3BItems.Name%3BItems.WebId'
-    ).then((response) => {
-      return filter(response.Items ?? [], (item) => item.InstanceType === 'Element');
     });
   }
 
@@ -449,15 +460,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @param {string} options.selectedFields - List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getAttributes(elementId: string, options: any): Promise<PiwebapiRsp[]> {
-    let querystring =
-      '?' +
-      map(options, (value, key) => {
-        return key + '=' + value;
-      }).join('&');
-
-    if (querystring === '?') {
-      querystring = '';
-    }
+    const querystring = buildQueryString(options ?? {});
 
     return this.restGet('/elements/' + elementId + '/attributes' + querystring).then(
       (response) => response.Items ?? []
@@ -484,15 +487,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @param {string} options.selectedFields -  List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getDatabaseElements(databaseId: string, options: any): Promise<PiwebapiRsp[]> {
-    let querystring =
-      '?' +
-      map(options, (value, key) => {
-        return key + '=' + value;
-      }).join('&');
-
-    if (querystring === '?') {
-      querystring = '';
-    }
+    const querystring = buildQueryString(options ?? {});
 
     return this.restGet('/assetdatabases/' + databaseId + '/elements' + querystring).then(
       (response) => response.Items ?? []
@@ -519,15 +514,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @param {string} options.selectedFields -  List of fields to be returned in the response, separated by semicolons (;). If this parameter is not specified, all available fields will be returned. See Selected Fields for more information.
    */
   private getElements(elementId: string, options: any): Promise<PiwebapiRsp[]> {
-    let querystring =
-      '?' +
-      map(options, (value, key) => {
-        return key + '=' + value;
-      }).join('&');
-
-    if (querystring === '?') {
-      querystring = '';
-    }
+    const querystring = buildQueryString(options ?? {});
 
     return this.restGet('/elements/' + elementId + '/elements' + querystring).then((response) => response.Items ?? []);
   }
@@ -561,7 +548,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
         });
       }
     }
-    return this.restGet('/dataservers/' + serverId + '/points?maxCount=100&nameFilter=' + filter2).then((results) => {
+    return this.restGet(
+      '/dataservers/' + serverId + '/points' + buildQueryString({ maxCount: 100, nameFilter: filter2 })
+    ).then((results) => {
       if (!!results && !!results?.Items) {
         return doFilter ? results.Items.filter((item) => item.Name?.match(filter1)) : results.Items;
       }

@@ -93,15 +93,15 @@ func (q PiProcessedAnnotationQuery) getEventFrameQueryURL() string {
 	// ?nameFilter=<name filter>
 
 	var uri string
-	uri += "/assetdatabases/" + q.Database.WebId + "/eventframes?templateName=" + q.Template.Name
+	uri += "/assetdatabases/" + q.Database.WebId + "/eventframes?templateName=" + queryEscape(q.Template.Name)
 	uri += q.getTimeRangeURIComponent()
 
 	//add optional parameters
 	if q.CategoryName != "" {
-		uri += "&categoryName=" + q.CategoryName
+		uri += "&categoryName=" + queryEscape(q.CategoryName)
 	}
 	if q.NameFilter != "" {
-		uri += "&nameFilter=" + q.NameFilter
+		uri += "&nameFilter=" + queryEscape(q.NameFilter)
 	}
 	return uri
 }
@@ -155,7 +155,7 @@ func (q PiProcessedAnnotationQuery) getEventFrameAttributeQueryURL() ([]string, 
 
 	for _, attribute := range q.Attributes {
 		var uri string
-		uri += "streamsets/{0}/value?selectedFields=Items.Value%3BItems.Name&nameFilter=" + attribute.Value.Value
+		uri += "streamsets/{0}/value?selectedFields=Items.Value%3BItems.Name&nameFilter=" + queryEscape(attribute.Value.Value)
 		URIs = append(URIs, uri)
 	}
 	return URIs, nil

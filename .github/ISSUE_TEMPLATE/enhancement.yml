@@ -1,0 +1,48 @@
+name: Enhancement
+description: Suggest a new feature or an improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the use case, e.g. "I need to ... but currently ...".
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you would like it to work, e.g. in the query editor or the configuration page.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds
+      description: Anything you tried or use today instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - AF query (elements and attributes)
+        - PI point query
+        - Calculation (expression)
+        - Template variables
+        - Annotations (event frames)
+        - Alerting
+        - Datasource configuration
+        - Query editor
+        - Other
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin and Grafana versions you use
+      placeholder: "plugin 6.0.0, Grafana 12.4.1"
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, PI Web API documentation links, examples.

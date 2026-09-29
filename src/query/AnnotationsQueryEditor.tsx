@@ -1,7 +1,7 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useRef, useState } from 'react';
 
-import { AnnotationQuery, QueryEditorProps, SelectableValue } from '@grafana/data';
-import { AsyncSelect, InlineField, InlineFieldRow, InlineSwitch, Input } from '@grafana/ui';
+import { AnnotationQuery, QueryEditorProps } from '@grafana/data';
+import { Combobox, ComboboxOption, InlineField, InlineFieldRow, InlineSwitch, Input } from '@grafana/ui';
 
 import { PiWebAPIDatasource } from 'datasource';
 import { PIWebAPIDataSourceJsonData, PIWebAPIQuery, PiwebapiRsp } from 'types';
@@ -22,30 +22,38 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
 
   const [afWebId, setAfWebId] = useState<string>('');
   const [database, setDatabase] = useState<PiwebapiRsp>(annotation?.target?.database ?? {});
+  // Combobox values must be scalars, so options are keyed by WebId and the full PI Web API object is looked up here.
+  const loadedItems = useRef<Record<string, PiwebapiRsp>>({});
 
   // this should never happen, but we want to keep typescript happy
   if (annotation === undefined) {
     return null;
   }
 
-  const getEventFrames = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
-    return datasource.getEventFrameTemplates(database?.WebId!).then((templ: PiwebapiRsp[]) => {
-      return templ.map((d) => ({ label: d.Name, value: d }));
-    });
+  const toOptions = (items: PiwebapiRsp[], filter: string): Array<ComboboxOption<string>> => {
+    const search = filter.toLowerCase();
+    return items
+      .filter((item) => !!item.WebId && (item.Name ?? '').toLowerCase().includes(search))
+      .map((item) => {
+        loadedItems.current[item.WebId!] = item;
+        return { label: item.Name, value: item.WebId! };
+      });
   };
 
-  const getDatabases = (): Promise<Array<SelectableValue<PiwebapiRsp>>> => {
-    return datasource.getDatabases(afWebId).then((dbs: PiwebapiRsp[]) => {
-      return dbs.map((d) => ({ label: d.Name, value: d }));
-    });
+  const getEventFrames = (filter: string): Promise<Array<ComboboxOption<string>>> => {
+    return datasource.getEventFrameTemplates(database?.WebId!).then((templ: PiwebapiRsp[]) => toOptions(templ, filter));
   };
 
-  const getValue = (key: string) => {
-    const query: any = annotation.target as any;
-    if (!query || !query[key]) {
-      return;
+  const getDatabases = (filter: string): Promise<Array<ComboboxOption<string>>> => {
+    return datasource.getDatabases(afWebId).then((dbs: PiwebapiRsp[]) => toOptions(dbs, filter));
+  };
+
+  const getValue = (key: 'database' | 'template'): ComboboxOption<string> | null => {
+    const item = annotation.target?.[key];
+    if (!item?.WebId) {
+      return null;
     }
-    return { label: query[key].Name, value: query[key] };
+    return { label: item.Name, value: item.WebId };
   };
 
   datasource.getAssetServer(datasource.afserver.name).then((result) => {
@@ -57,26 +65,25 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
       <div className="gf-form-group">
         <InlineFieldRow>
           <InlineField label="Database" labelWidth={LABEL_WIDTH} grow={true}>
-            <AsyncSelect
+            <Combobox
               key={afWebId ?? 'database-key'}
-              loadOptions={getDatabases}
-              loadingMessage={'Loading'}
+              id="annotation-database"
+              options={getDatabases}
               value={getValue('database')}
-              onChange={(e) => {
-                setDatabase(e.value);
-                onChange({ ...query, database: e.value, template: undefined });
+              onChange={(option) => {
+                const selected = loadedItems.current[option.value];
+                setDatabase(selected);
+                onChange({ ...query, database: selected, template: undefined });
               }}
-              defaultOptions
             />
           </InlineField>
           <InlineField label="Event Frames" labelWidth={LABEL_WIDTH} grow={true}>
-            <AsyncSelect
+            <Combobox
               key={database?.WebId ?? 'default-template-key'}
-              loadOptions={getEventFrames}
-              loadingMessage={'Loading'}
+              id="annotation-event-frames"
+              options={getEventFrames}
               value={getValue('template')}
-              onChange={(e) => onChange({ ...query, template: e.value })}
-              defaultOptions
+              onChange={(option) => onChange({ ...query, template: loadedItems.current[option.value] })}
             />
           </InlineField>
           <InlineField label="Show Start and End Time" labelWidth={LABEL_WIDTH} grow={true}>

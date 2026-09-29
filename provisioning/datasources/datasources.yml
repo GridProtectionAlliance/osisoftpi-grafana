@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: 'OSIsoft-PI'
+    uid: 'osisoftpi-e2e'
+    type: 'gridprotectionalliance-osisoftpi-datasource'
+    access: proxy
+    isDefault: false
+    orgId: 1
+    version: 1
+    editable: true
+    url: 'https://server.name/piwebapi'
+    jsonData:
+      afserver: 'AFSERVER'
+      afdatabase: 'AFDATABASE'
+      pipoint: true
+      piserver: 'PISERVER'
