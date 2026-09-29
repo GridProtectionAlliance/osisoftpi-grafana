@@ -64,9 +64,12 @@ func (q *Query) isStreamFillGaps() bool {
 }
 
 // isStreamable returns true when the query can be updated with the values streamed by PI Web API channels: these
-// are raw values, so calculations and summaries are not streamed.
+// are raw values, so calculations, summaries, last values, interpolated and recorded values are not streamed (the
+// query editor hides the streaming settings when one of them is selected).
 func (q *Query) isStreamable() bool {
-	return !q.Pi.isExpression() && !q.Pi.isSummary() && q.isstreamingEnabled()
+	summaryEnabled := q.Pi.Summary != nil && q.Pi.Summary.Enable != nil && *q.Pi.Summary.Enable
+	return !q.Pi.isExpression() && !q.Pi.isSummary() && !summaryEnabled && !q.Pi.isUseLastValue() &&
+		!q.Pi.isInterpolated() && !q.Pi.isRecordedValues() && q.isstreamingEnabled()
 }
 
 func (q *PiProcessedQuery) getNoDataReplace() string {

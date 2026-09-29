@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -364,5 +365,36 @@ func TestIsStreamable_NotForSummaries(t *testing.T) {
 	disabled := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming, Summary: &QuerySummary{Enable: &off, Basis: &basis, Types: &types}}}
 	if !disabled.isStreamable() {
 		t.Error("a query with the summary disabled must be streamable")
+	}
+}
+
+// Streaming sends raw values, so the query options returning other values are not streamed. The query editor hides
+// the streaming settings when one of them is selected.
+func TestIsStreamable_NotForOtherValueTypes(t *testing.T) {
+	tests := map[string]string{
+		"calculation":     `"expression":"'.'*2"`,
+		"last value":      `"useLastValue":{"enable":true}`,
+		"interpolated":    `"interpolate":{"enable":true}`,
+		"recorded values": `"recordedValues":{"enable":true}`,
+		"summary":         `"summary":{"enable":true,"basis":"EventWeighted","types":[]}`,
+	}
+	for name, option := range tests {
+		t.Run(name, func(t *testing.T) {
+			var q Query
+			if err := json.Unmarshal([]byte(`{"EnableStreaming":{"enable":true},`+option+`}`), &q.Pi); err != nil {
+				t.Fatal(err)
+			}
+			if q.isStreamable() {
+				t.Errorf("a query with %s must not be streamable", name)
+			}
+		})
+	}
+	var q Query
+	if err := json.Unmarshal([]byte(`{"EnableStreaming":{"enable":true},"useLastValue":{"enable":false},
+		"interpolate":{"enable":false},"recordedValues":{"enable":false},"summary":{"enable":false}}`), &q.Pi); err != nil {
+		t.Fatal(err)
+	}
+	if !q.isStreamable() {
+		t.Error("a query with the other options disabled must be streamable")
 	}
 }

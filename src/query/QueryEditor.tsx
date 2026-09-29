@@ -1098,6 +1098,16 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       display,
       regex,
     } = metricsQuery;
+    // Streaming sends raw values: it is offered only without the options returning other values, which are hidden
+    // while streaming is enabled.
+    const streamingAvailable =
+      this.props.datasource.useStreaming &&
+      !expression &&
+      !useLastValue.enable &&
+      !interpolate.enable &&
+      !recordedValues.enable &&
+      !summary.enable;
+    const streaming = streamingAvailable && !!enableStreaming.enable;
 
     return (
       <>
@@ -1220,45 +1230,49 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </>
         )}
 
-        <InlineFieldRow>
-          <InlineField
-            label="Calculation"
-            grow={true}
-            labelWidth={LABEL_WIDTH}
-            tooltip={
-              "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
-            }
-          >
-            <Input
-              onBlur={onRunQuery}
-              value={expression}
-              onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                onChange({ ...metricsQuery, expression: event.target.value })
+        {!streaming && (
+          <InlineFieldRow>
+            <InlineField
+              label="Calculation"
+              grow={true}
+              labelWidth={LABEL_WIDTH}
+              tooltip={
+                "Modify all attributes by an equation. Use '.' for current item. Leave Attributes empty if you wish to perform element based calculations."
               }
-              placeholder="'.'*2"
-            />
-          </InlineField>
-        </InlineFieldRow>
+            >
+              <Input
+                onBlur={onRunQuery}
+                value={expression}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  onChange({ ...metricsQuery, expression: event.target.value })
+                }
+                placeholder="'.'*2"
+              />
+            </InlineField>
+          </InlineFieldRow>
+        )}
 
         <InlineFieldRow>
-          <InlineField
-            label="Use Last Value"
-            tooltip={"Returns values of the attributes for an Element or Pi Point at the specified end time (StreamSet GetValues)."}
-            labelWidth={LABEL_WIDTH}
-          >
-            <InlineSwitch
-              value={useLastValue.enable}
-              onChange={() =>
-                this.onChange({
-                  ...metricsQuery,
-                  useLastValue: { ...useLastValue, enable: !useLastValue.enable },
-                  recordedValues: defaultQuery.recordedValues!,
-                  interpolate: defaultQuery.interpolate!,
-                  summary: defaultQuery.summary!,
-                })
-              }
-            />
-          </InlineField>
+          {!streaming && (
+            <InlineField
+              label="Use Last Value"
+              tooltip={"Returns values of the attributes for an Element or Pi Point at the specified end time (StreamSet GetValues)."}
+              labelWidth={LABEL_WIDTH}
+            >
+              <InlineSwitch
+                value={useLastValue.enable}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    useLastValue: { ...useLastValue, enable: !useLastValue.enable },
+                    recordedValues: defaultQuery.recordedValues!,
+                    interpolate: defaultQuery.interpolate!,
+                    summary: defaultQuery.summary!,
+                  })
+                }
+              />
+            </InlineField>
+          )}
 
           {useLastValue.enable && (
             <InlineField
@@ -1323,59 +1337,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
               />
             </InlineField>
           )}
-          {this.props.datasource.useStreaming && (
-            <InlineField 
-              label="Enable Streaming" 
-              labelWidth={LABEL_WIDTH}
-              tooltip={'Enable streaming data if it is supported for the point type.'}
-            >
-              <InlineSwitch
-                value={enableStreaming.enable}
-                onChange={() =>
-                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
-                }
-              />
-            </InlineField>
-          )}
-          {this.props.datasource.useStreaming && (
-            <InlineField
-              label="Streaming variable"
-              labelWidth={LABEL_WIDTH}
-              tooltip={'Optional dashboard variable that overrides the streaming toggle. E.g. $streamingEnabled. The variable should resolve to true or false.'}
-            >
-              <Input
-                value={enableStreaming.variable ?? ''}
-                onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, variable: event.target.value } })
-                }
-                onBlur={onRunQuery}
-                placeholder="$variable"
-                width={16}
-              />
-            </InlineField>
-          )}
-          {this.props.datasource.useStreaming && (
-            <InlineField
-              label="Fill gaps after reconnect"
-              labelWidth={LABEL_WIDTH}
-              tooltip={
-                'When the stream reconnects (e.g. PI Web API was unavailable), add the values recorded in the meantime, instead of waiting for the next refresh of the panel.'
-              }
-            >
-              <InlineSwitch
-                value={enableStreaming.fillGaps !== false}
-                onChange={() =>
-                  this.onChange({
-                    ...metricsQuery,
-                    enableStreaming: { ...enableStreaming, fillGaps: enableStreaming.fillGaps === false },
-                  })
-                }
-              />
-            </InlineField>
-          )}
         </InlineFieldRow>
         
-        {(interpolate.enable || (!useLastValue.enable && !recordedValues.enable && !summary.enable)) && (
+        {!streaming && (interpolate.enable || (!useLastValue.enable && !recordedValues.enable && !summary.enable)) && (
           <InlineFieldRow>
             <InlineField
               label={!!expression ? "Interval Values" : "Interpolate"}
@@ -1414,7 +1378,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </InlineFieldRow>
         )}
 
-        {!useLastValue.enable && !interpolate.enable && !summary.enable && (
+        {!streaming && !useLastValue.enable && !interpolate.enable && !summary.enable && (
           <InlineFieldRow>
             <InlineField
               label="Recorded Values"
@@ -1478,7 +1442,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           </InlineFieldRow>
         )}
 
-        {(summary.enable || (!recordedValues.enable && !useLastValue.enable && !interpolate.enable)) && (
+        {!streaming && (summary.enable || (!recordedValues.enable && !useLastValue.enable && !interpolate.enable)) && (
           <InlineFieldRow>
             <InlineField
               label="Summary Enable"
@@ -1596,6 +1560,55 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   onChange({ ...metricsQuery, summary: { ...summary, duration: event.target.value } })
                 }
                 placeholder="30s"
+              />
+            </InlineField>
+          </InlineFieldRow>
+        )}
+
+        {streamingAvailable && (
+          <InlineFieldRow>
+            <InlineField
+              label="Enable Streaming"
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Enable streaming data if it is supported for the point type.'}
+            >
+              <InlineSwitch
+                value={enableStreaming.enable}
+                onChange={() =>
+                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, enable: !enableStreaming.enable } })
+                }
+              />
+            </InlineField>
+            <InlineField
+              label="Streaming variable"
+              labelWidth={LABEL_WIDTH}
+              tooltip={'Optional dashboard variable that overrides the streaming toggle. E.g. $streamingEnabled. The variable should resolve to true or false.'}
+            >
+              <Input
+                value={enableStreaming.variable ?? ''}
+                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                  this.onChange({ ...metricsQuery, enableStreaming: { ...enableStreaming, variable: event.target.value } })
+                }
+                onBlur={onRunQuery}
+                placeholder="$variable"
+                width={16}
+              />
+            </InlineField>
+            <InlineField
+              label="Fill gaps after reconnect"
+              labelWidth={LABEL_WIDTH}
+              tooltip={
+                'When the stream reconnects (e.g. PI Web API was unavailable), add the values recorded in the meantime, instead of waiting for the next refresh of the panel.'
+              }
+            >
+              <InlineSwitch
+                value={enableStreaming.fillGaps !== false}
+                onChange={() =>
+                  this.onChange({
+                    ...metricsQuery,
+                    enableStreaming: { ...enableStreaming, fillGaps: enableStreaming.fillGaps === false },
+                  })
+                }
               />
             </InlineField>
           </InlineFieldRow>
