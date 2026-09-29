@@ -321,3 +321,51 @@ func TestSubscribeStream_StableKeyFound(t *testing.T) {
 		t.Errorf("expected OK, got %v", resp.Status)
 	}
 }
+
+// "Enable Streaming Support" is no longer an experimental feature: the configuration page shows it on its own.
+func TestIsUsingStreaming_WithoutExperimentalFeatures(t *testing.T) {
+	on, off := true, false
+	tests := []struct {
+		name         string
+		experimental *bool
+		streaming    *bool
+		want         bool
+	}{
+		{"streaming only", nil, &on, true},
+		{"streaming with experimental features off", &off, &on, true},
+		{"streaming and experimental features", &on, &on, true},
+		{"streaming off", &on, &off, false},
+		{"not configured", nil, nil, false},
+	}
+	for _, tt := range tests {
+		d := newTestDatasource()
+		d.dataSourceOptions = &PIWebAPIDataSourceJsonData{UseExperimental: tt.experimental, UseStreaming: tt.streaming}
+		if got := d.isUsingStreaming(); got != tt.want {
+			t.Errorf("%s: isUsingStreaming() = %v, want %v", tt.name, got, tt.want)
+		}
+	}
+}
+
+// A summary series (e.g. 1 min averages) must not stream: PI Web API channels send the raw values, which would be
+// appended to the averages.
+func TestIsStreamable_NotForSummaries(t *testing.T) {
+	on, off := true, false
+	basis := "TimeWeighted"
+	types := []SummaryType{{Label: "Average", Value: SummaryTypeValue{Value: "Average"}}}
+	streaming := &struct {
+		Enable *bool `json:"enable"`
+	}{Enable: &on}
+
+	plain := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming}}
+	if !plain.isStreamable() {
+		t.Error("a query with streaming enabled must be streamable")
+	}
+	summary := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming, Summary: &QuerySummary{Enable: &on, Basis: &basis, Types: &types}}}
+	if summary.isStreamable() {
+		t.Error("a summary query must not be streamable")
+	}
+	disabled := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming, Summary: &QuerySummary{Enable: &off, Basis: &basis, Types: &types}}}
+	if !disabled.isStreamable() {
+		t.Error("a query with the summary disabled must be streamable")
+	}
+}

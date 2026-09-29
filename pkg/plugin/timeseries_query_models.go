@@ -77,8 +77,10 @@ func (q *Query) isstreamingEnabled() bool {
 	return streamingEnabled
 }
 
+// isStreamable returns true when the query can be updated with the values streamed by PI Web API channels: these
+// are raw values, so calculations and summaries are not streamed.
 func (q *Query) isStreamable() bool {
-	return !q.Pi.isExpression() && q.isstreamingEnabled()
+	return !q.Pi.isExpression() && !q.Pi.isSummary() && q.isstreamingEnabled()
 }
 
 // func (q *PiProcessedQuery) isSummary() bool {

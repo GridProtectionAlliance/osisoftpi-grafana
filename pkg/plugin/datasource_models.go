@@ -12,13 +12,13 @@ import (
 )
 
 type Datasource struct {
-	settings                  backend.DataSourceInstanceSettings
-	queryMux                  *datasource.QueryTypeMux
-	StreamHandler             backend.StreamHandler
-	httpClient                *http.Client
-	webIDCache                WebIDCache
-	webCache                  *Cache[string, PiBatchData]
-	channelConstruct          map[string]StreamChannelConstruct
+	settings         backend.DataSourceInstanceSettings
+	queryMux         *datasource.QueryTypeMux
+	StreamHandler    backend.StreamHandler
+	httpClient       *http.Client
+	webIDCache       WebIDCache
+	webCache         *Cache[string, PiBatchData]
+	channelConstruct map[string]StreamChannelConstruct
 	// channelGenerations tracks a per-(webID,summaryType) counter that is incremented
 	// each time a subscription ends. channelKeyFor embeds the generation so that after
 	// expiry the next QueryData call produces a new channel URI, forcing Grafana to
@@ -36,13 +36,15 @@ type Datasource struct {
 	// connectionKeyWebIDs maps a connection key (sorted WebIDs joined by "|") to the
 	// ordered WebID slice used to build the streamsets/channel WebSocket URL.
 	connectionKeyWebIDs map[string][]string
-	dataSourceOptions         *PIWebAPIDataSourceJsonData
+	dataSourceOptions   *PIWebAPIDataSourceJsonData
 	// tlsInsecureSkipVerify mirrors the datasource's TLS skip-verify setting so the
 	// WebSocket dialer can skip certificate verification for self-signed PI Web API certs.
-	tlsInsecureSkipVerify     bool
-	initalTime                time.Time
-	totalCalls                int
-	callRate                  float64
+	tlsInsecureSkipVerify bool
+	// websocketHeader holds the authentication and custom headers sent when opening a WebSocket connection.
+	websocketHeader http.Header
+	initalTime      time.Time
+	totalCalls      int
+	callRate        float64
 }
 
 type PIWebAPIDataSourceJsonData struct {
