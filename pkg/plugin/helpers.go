@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
@@ -15,6 +16,12 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
+
+// queryEscape URL-encodes a query string value for the PI Web API, so paths and names containing characters such
+// as '#', '&', '+', '%' or spaces are not cut or altered. Spaces are encoded as %20 rather than '+'.
+func queryEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
 
 func replaceAccentsWithEscape(s string) string {
 	// Define a mapping of accents to their corresponding escape sequences
@@ -116,7 +123,7 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
 		log.DefaultLogger.Error("Batch request - do", "error", err)
-		return nil, fmt.Errorf("request timeout")
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	defer func() {
@@ -313,15 +320,17 @@ func parseTimestampValue(val reflect.Value) (reflect.Value, error) {
 	return ts, nil
 }
 
-func updateBadData(index int, fp FrameProcessed, timestamp time.Time, noDataReplace string) FrameProcessed {
+func updateBadData(fp FrameProcessed, timestamp time.Time, noDataReplace string) FrameProcessed {
 	// reflect
 	zeroVal := reflect.Zero(fp.sliceType.Elem())
 	valuesValue := reflect.ValueOf(fp.values)
+	// position of the value in the frame (not the item index: dropped items shift the positions)
+	position := valuesValue.Len()
 	// update
 	switch noDataReplace {
 	case "Null":
 		fp.timestamps = append(fp.timestamps, timestamp)
-		fp.badValues = append(fp.badValues, index)
+		fp.badValues = append(fp.badValues, position)
 		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
 	case "Keep":
 		fp.timestamps = append(fp.timestamps, timestamp)
@@ -331,11 +340,16 @@ func updateBadData(index int, fp FrameProcessed, timestamp time.Time, noDataRepl
 		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
 	case "Previous":
 		fp.timestamps = append(fp.timestamps, timestamp)
-		fp.values = reflect.Append(valuesValue, fp.prevVal).Interface()
+		if fp.prevVal.IsValid() {
+			fp.values = reflect.Append(valuesValue, fp.prevVal).Interface()
+		} else { // no good value yet
+			fp.badValues = append(fp.badValues, position)
+			fp.values = reflect.Append(valuesValue, zeroVal).Interface()
+		}
 	case "Drop":
 	default:
 		fp.timestamps = append(fp.timestamps, timestamp)
-		fp.badValues = append(fp.badValues, index)
+		fp.badValues = append(fp.badValues, position)
 		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
 	}
 	log.DefaultLogger.Debug("Update bad data", "no_replace", noDataReplace, "zero", zeroVal.Interface())
@@ -369,7 +383,10 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 		label = q.Label + summaryLabel
 	} else {
 		targetParts := strings.Split(q.FullTargetPath, `\`)
-		if q.Variable != "" {
+		if _, elementPath := afDatabaseAndPath(q.TargetPath); q.MultiVariable && elementPath != "" {
+			// e.g. SiteA\Unit2\Pump|Flow
+			label = elementPath + "|" + q.Label
+		} else if q.Variable != "" {
 			label = q.Variable + "|" + targetParts[len(targetParts)-1]
 		} else {
 			label = targetParts[len(targetParts)-1]
@@ -393,7 +410,10 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 		// Element|Attribute {element="Element", name="Attribute", type="Single"}
 		targetParts := strings.Split(q.FullTargetPath, `\`)
 		labelParts := strings.SplitN(targetParts[len(targetParts)-1], "|", 2)
+		database, elementPath := afDatabaseAndPath(q.TargetPath)
 		frameLabel = map[string]string{
+			"database":    database,
+			"path":        elementPath,
 			"element":     labelParts[0],
 			"name":        label,
 			"type":        pointType + summaryNewFormat,
@@ -405,8 +425,12 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 	// Use ReplaceAllString to replace all instances of the search pattern with the replacement string
 	// FIXME: This is working, but graph panels seem to not render the trend.
 	if q.isRegexQuery() {
-		regex := regexp.MustCompile(*q.Regex.Search)
-		frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
+		// the search pattern is typed by the user, so an invalid pattern must not panic
+		if regex, err := regexp.Compile(*q.Regex.Search); err == nil {
+			frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
+		} else {
+			log.DefaultLogger.Warn("Invalid regex in query, the label is not replaced", "search", *q.Regex.Search, "error", err)
+		}
 	} else if q.Display != nil && strings.TrimSpace(*q.Display) != "" {
 		// Old format with display name
 		frameLabel["name"] = strings.TrimSpace(*q.Display)
@@ -414,154 +438,78 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 	return frameLabel
 }
 
-// convertStreamItemsToFrame builds a Grafana data.Frame from a slice of live PI Web API
-// WebSocket items. It uses pre-computed WebID metadata from cache instead of querying
-// the datasource on every message, avoiding per-message mutex acquisition.
-func convertStreamItemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, cache streamFrameCache) (*data.Frame, error) {
-	includeMetaData := processedQuery.UseUnit
-	digitalStates := processedQuery.DigitalStates
-	noDataReplace := processedQuery.getNoDataReplace()
-
-	digitalStateValues := make([]string, 0)
-	fP := FrameProcessed{
-		sliceType:  cache.sliceType,
-		prevVal:    reflect.Zero(cache.sliceType),
-		values:     reflect.MakeSlice(reflect.SliceOf(cache.sliceType.Elem()), 0, 0).Interface(),
-		badValues:  make([]int, 0),
-		timestamps: make([]time.Time, 0),
-	}
-
-	frameLabel := cache.frameLabel
-	labels := cache.labels
-	digitalState := cache.digitalState
-
-	frame := data.NewFrame("")
-
-	for i, item := range items {
-		if item.Value == nil {
-			log.DefaultLogger.Debug("Convert stream items - nil value", "item", item)
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-			continue
-		}
-
-		fP.val = reflect.ValueOf(item.Value)
-
-		if !fP.val.IsValid() {
-			log.DefaultLogger.Debug("Convert stream items - invalid value", "item", item)
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-			continue
-		}
-
-		if fP.val.IsValid() && fP.val.Kind() == reflect.Ptr {
-			fP.val = fP.val.Elem()
-		}
-
-		if fP.sliceType == reflect.TypeOf([]time.Time{}) {
-			var err error
-			fP.val, err = parseTimestampValue(fP.val)
-			if err != nil {
-				log.DefaultLogger.Error("Convert stream items - parseTimestampValue",
-					"error", err.Error(), "kind", fP.val.Kind().String(), "item", item)
-				continue
-			}
-		}
-
-		_, digitalState = item.Value.(map[string]interface{})
-		if !item.isGood() {
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-		} else if digitalState {
-			var pds PointDigitalState
-			if b, err := json.Marshal(item.Value); err == nil {
-				if err := json.Unmarshal(b, &pds); err == nil {
-					fP.timestamps = append(fP.timestamps, item.Timestamp)
-					digitalStateValues = append(digitalStateValues, pds.Name)
-					pdsValue := reflect.ValueOf(pds.Value)
-					itemValue := pdsValue.Convert(fP.sliceType.Elem())
-					fP.values = reflect.Append(reflect.ValueOf(fP.values), itemValue).Interface()
-					fP.prevVal = itemValue
-				} else {
-					log.DefaultLogger.Error("Convert stream items - error unmarshalling digital state", err)
-					fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-				}
-			} else {
-				log.DefaultLogger.Error("Convert stream items - error marshalling digital state", err)
-				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-			}
-		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() {
-			if compatible(fP.val.Type(), fP.sliceType.Elem()) {
-				fP.timestamps = append(fP.timestamps, item.Timestamp)
-				fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val.Convert(fP.sliceType.Elem())).Interface()
-				fP.prevVal = fP.val
-				log.DefaultLogger.Debug("Convert stream items - type mismatch converted",
-					"from", fP.val.Type().String(), "to", fP.sliceType.Elem().String())
-			} else {
-				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-				log.DefaultLogger.Warn("Convert stream items - incompatible type, dropping value",
-					"from", fP.val.Type().String(), "to", fP.sliceType.Elem().String())
-			}
-		} else {
-			fP.timestamps = append(fP.timestamps, item.Timestamp)
-			fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val).Interface()
-			fP.prevVal = fP.val
-		}
-	}
-
-	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
-	timeField := data.NewField(data.TimeSeriesTimeFieldName, nil, fP.timestamps)
-
-	if !digitalState || !digitalStates {
-		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
-		frame.Fields = append(frame.Fields, timeField, valueField)
-	} else {
-		fieldConfig := &data.FieldConfig{}
-		if includeMetaData {
-			fieldConfig.Unit = cache.units
-			fieldConfig.Description = cache.description
-		}
-		valueField := data.NewField(frameLabel["name"], labels, digitalStateValues)
-		valueField.SetConfig(fieldConfig)
-		frame.Fields = append(frame.Fields, timeField, valueField)
-	}
-
-	frame.Meta = &data.FrameMeta{}
-	frame.RefID = processedQuery.RefID
-	return frame, nil
+func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) *data.Frame {
+	// when the WebID is not cached, the type is taken from the values and the metadata is empty
+	metadata, _ := d.getWebIDEntry(processedQuery.WebID)
+	return itemsToFrame(processedQuery, *processedQuery.Response.getItems(SummaryType), frameOptions{
+		metadata:      metadata,
+		responseUnits: processedQuery.Response.getUnits(SummaryType),
+		summaryType:   SummaryType,
+		newFormat:     d.isUsingNewFormat(),
+		units:         d.isUsingUnits(),
+	})
 }
 
-func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) (*data.Frame, error) {
-	items := *processedQuery.Response.getItems(SummaryType)
-	webID := processedQuery.WebID
-	includeMetaData := processedQuery.UseUnit
+// convertStreamItemsToFrame converts the values of one stream of a PI Web API channel message, with the same
+// rules as the query responses.
+func convertStreamItemsToFrame(processedQuery *PiProcessedQuery, stream StreamData, cache streamFrameCache) *data.Frame {
+	return itemsToFrame(processedQuery, stream.Items, frameOptions{
+		metadata:      cache.metadata,
+		responseUnits: stream.UnitsAbbreviation,
+		newFormat:     cache.newFormat,
+		units:         cache.units,
+	})
+}
+
+// frameOptions are the WebID metadata and datasource options used by itemsToFrame.
+type frameOptions struct {
+	metadata      WebIDCacheEntry // empty when the WebID is not cached
+	responseUnits string          // units abbreviation returned with the values
+	summaryType   string
+	newFormat     bool // "Enable New Data Format"
+	units         bool // "Enable Unit From Data"
+}
+
+// itemsToFrame converts the values of a PI point or AF attribute to a data frame.
+func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, o frameOptions) *data.Frame {
+	metadata := o.metadata
+	// Units are only added when enabled in both the datasource configuration and the query.
+	includeMetaData := processedQuery.UseUnit && o.units
 	digitalStates := processedQuery.DigitalStates
 	noDataReplace := processedQuery.getNoDataReplace()
 
-	digitalStateValues := make([]string, 0)
-	sliceType := d.getTypeForWebID(webID)
+	stateNames := map[int64]string{} // digital state code -> name, from the good values
+	sliceType := metadata.Type
+	if sliceType == nil {
+		sliceType = inferValueType(items)
+	}
 
 	fP := FrameProcessed{
 		sliceType:  sliceType,
-		prevVal:    reflect.Zero(sliceType),
+		prevVal:    reflect.Value{}, // no good value yet
 		values:     reflect.MakeSlice(reflect.SliceOf(sliceType.Elem()), 0, 0).Interface(),
 		badValues:  make([]int, 0),
 		timestamps: make([]time.Time, 0),
 	}
 
+	units := preferredUnits(o.responseUnits, metadata.Units)
+
 	// get frame name
-	frameLabel := getDataLabels(d.isUsingNewFormat(), processedQuery, d.getPointTypeForWebID(webID),
-		d.getDescriptionForWebID(webID), d.getUnitsForWebID(webID), SummaryType)
+	frameLabel := getDataLabels(o.newFormat, processedQuery, metadata.PointType,
+		metadata.Description, units, o.summaryType)
 
 	var labels map[string]string
-	var digitalState = d.getDigitalStateForWebID(webID)
+	digitalState := metadata.DigitalState
 
 	frame := data.NewFrame("")
-	if d.isUsingNewFormat() {
+	if o.newFormat {
 		labels = frameLabel
 	}
 
-	for i, item := range items {
+	for _, item := range items {
 		if item.Value == nil {
 			log.DefaultLogger.Debug("Convert items to frames - nil", "value", item.Value, "item", item)
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+			fP = updateBadData(fP, item.Timestamp, noDataReplace)
 			continue
 		}
 
@@ -569,7 +517,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 
 		if !fP.val.IsValid() {
 			log.DefaultLogger.Debug("Convert items to frames - invalid", "value", item.Value, "item", item)
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+			fP = updateBadData(fP, item.Timestamp, noDataReplace)
 			continue
 		}
 
@@ -581,24 +529,26 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 
 		// handle value being a timestamp, the PIWab API returns a timestamp as a string
 		// we need to convert it to a time.Time
-		if fP.sliceType == reflect.TypeOf([]time.Time{}) {
+		if fP.sliceType == reflect.TypeOf([]time.Time{}) && item.isGood() {
 			var err error
 			fP.val, err = parseTimestampValue(fP.val)
 			if err != nil {
-				log.DefaultLogger.Error("Convert items to frames - parseTimestampValue", "error", err.Error(), "kind", fP.val.Kind().String(), "item", item)
+				log.DefaultLogger.Error("Convert items to frames - parseTimestampValue", "error", err.Error(), "item", item)
+				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				continue
 			}
 		}
 
-		_, digitalState = item.Value.(map[string]interface{})
-		if !item.isGood() {
-			fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
-		} else if digitalState { // digital state
+		_, isState := item.Value.(map[string]interface{})
+		if !item.isGood() { // bad values are system states such as "Shutdown"
+			fP = updateBadData(fP, item.Timestamp, noDataReplace)
+		} else if isState { // digital state
 			var pds PointDigitalState
 			if b, err := json.Marshal(item.Value); err == nil {
 				if err := json.Unmarshal(b, &pds); err == nil {
 					fP.timestamps = append(fP.timestamps, item.Timestamp)
-					digitalStateValues = append(digitalStateValues, pds.Name)
+					stateNames[int64(pds.Value)] = pds.Name
+					digitalState = true
 					pdsValue := reflect.ValueOf(pds.Value)
 					itemValue := pdsValue.Convert(fP.sliceType.Elem())
 					fP.values = reflect.Append(reflect.ValueOf(fP.values), itemValue).Interface()
@@ -606,22 +556,23 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 				} else {
 					// should not happen
 					log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
-					fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+					fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				}
 			} else {
 				// should not happen
 				log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
-				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 			}
 		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() { // mismatch - try conversion
 			if compatible(fP.val.Type(), fP.sliceType.Elem()) { // try to convert if numeric values
+				converted := fP.val.Convert(fP.sliceType.Elem())
 				fP.timestamps = append(fP.timestamps, item.Timestamp)
-				fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.val.Convert(fP.sliceType.Elem())).Interface()
-				fP.prevVal = fP.val
+				fP.values = reflect.Append(reflect.ValueOf(fP.values), converted).Interface()
+				fP.prevVal = converted
 				log.DefaultLogger.Debug("Convert items to frames - Mismatch compatible", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
 					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			} else {
-				fP = updateBadData(i, fP, item.Timestamp, noDataReplace)
+				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				log.DefaultLogger.Warn("Convert items to frames - Mismatch", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
 					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			}
@@ -636,7 +587,7 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	log.DefaultLogger.Debug("Convert items to frames - Cache", "Cached", processedQuery.Cached, "TimeLen", len(fP.timestamps),
 		"RefID", processedQuery.RefID)
 	if processedQuery.Cached {
-		if len(fP.timestamps) > 1 {
+		if len(fP.timestamps) > 1 && fP.prevVal.IsValid() {
 			fP.values = reflect.Append(reflect.ValueOf(fP.values), fP.prevVal).Interface()
 			fP.timestamps = append(fP.timestamps, processedQuery.EndTime)
 		} else if len(fP.timestamps) == 1 {
@@ -650,25 +601,20 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 	valuepointers := convertSliceToPointers(fP.values, fP.badValues)
 
 	timeField := data.NewField(data.TimeSeriesTimeFieldName, nil, fP.timestamps)
-	if !digitalState || !digitalStates {
-		valueField := data.NewField(frameLabel["name"], labels, valuepointers)
-		frame.Fields = append(frame.Fields,
-			timeField,
-			valueField,
-		)
-	} else {
-		fieldConfig := &data.FieldConfig{}
-		if includeMetaData {
-			fieldConfig.Unit = d.getUnitsForWebID(webID)
-			fieldConfig.Description = d.getDescriptionForWebID(webID)
+	var fieldConfig *data.FieldConfig
+	if includeMetaData {
+		fieldConfig = &data.FieldConfig{
+			Unit:        units,
+			Description: metadata.Description,
 		}
-		valueField := data.NewField(frameLabel["name"], labels, digitalStateValues)
-		valueField.SetConfig(fieldConfig)
-		frame.Fields = append(frame.Fields,
-			timeField,
-			valueField,
-		)
 	}
+	values := valuepointers
+	if digitalState && digitalStates {
+		values = digitalStateNames(fP.values, fP.badValues, stateNames)
+	}
+	valueField := data.NewField(frameLabel["name"], labels, values)
+	valueField.SetConfig(fieldConfig)
+	frame.Fields = append(frame.Fields, timeField, valueField)
 
 	// create a metadata struct for the frame so we can set it later.
 	frame.Meta = &data.FrameMeta{
@@ -676,7 +622,86 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 			"Cached": processedQuery.Cached,
 		},
 	}
-	return frame, nil
+	return frame
+}
+
+// preferredUnits returns the units to show for a PI point or AF attribute: the abbreviation returned with the
+// values (e.g. "m3/h"), or the units from the WebID metadata when there is none. AF attributes report
+// DefaultUnitsName as the full name ("cubic meter per hour"), while PI points report the abbreviation.
+func preferredUnits(responseUnits string, metadataUnits string) string {
+	if units := strings.TrimSpace(responseUnits); units != "" {
+		return units
+	}
+	return strings.TrimSpace(metadataUnits)
+}
+
+// inferValueType returns the slice type for a stream whose value type is not declared ("<Anything>", e.g. AF
+// links) or not known to the plugin, based on the first good value returned by PI Web API. Bad values are
+// system digital states (e.g. "Bad Input") and are skipped, so they do not turn a numeric stream into a digital one.
+func inferValueType(items []PiBatchContentItem) reflect.Type {
+	for _, item := range items {
+		if item.Value == nil || !item.isGood() {
+			continue
+		}
+		switch value := item.Value.(type) {
+		case float64, float32, int, int32, int64:
+			return reflect.TypeOf([]float64{})
+		case bool:
+			return reflect.TypeOf([]bool{})
+		case string:
+			return reflect.TypeOf([]string{})
+		case map[string]interface{}:
+			if isSystem, _ := value["IsSystem"].(bool); isSystem {
+				continue
+			}
+			return reflect.TypeOf([]int32{}) // digital state
+		default:
+			return reflect.TypeOf([]string{})
+		}
+	}
+	return reflect.TypeOf([]float64{})
+}
+
+// digitalStateNames returns the state name of each digital state code in values, or nil for a bad value (or a
+// code without a known name). It has one entry per value, so the frame fields keep the same length.
+func digitalStateNames(values any, badValues []int, stateNames map[int64]string) []*string {
+	bad := make(map[int]bool, len(badValues))
+	for _, i := range badValues {
+		bad[i] = true
+	}
+	v := reflect.ValueOf(values)
+	names := make([]*string, v.Len())
+	for i := range names {
+		if bad[i] {
+			continue
+		}
+		var code int64
+		switch e := v.Index(i); e.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			code = e.Int()
+		case reflect.Float32, reflect.Float64:
+			code = int64(e.Float())
+		default:
+			continue
+		}
+		if name, ok := stateNames[code]; ok {
+			names[i] = &name
+		}
+	}
+	return names
+}
+
+// afDatabaseAndPath splits an AF element path (server\database\element\...) into the database name and the
+// element path below the database.
+func afDatabaseAndPath(targetPath string) (database string, elementPath string) {
+	parts := strings.SplitN(strings.TrimLeft(targetPath, `\`), `\`, 3)
+	if len(parts) > 1 {
+		database = parts[1]
+	}
+	if len(parts) > 2 {
+		elementPath = parts[2]
+	}
+	return database, elementPath
 }
 
 func getTimeStamp(input reflect.Value) (reflect.Value, error) {

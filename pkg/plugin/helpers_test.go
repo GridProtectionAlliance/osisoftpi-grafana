@@ -68,10 +68,7 @@ func TestConvertStreamItemsToFrame_Float64(t *testing.T) {
 		{Timestamp: ts.Add(time.Second), Value: float64(2.72), Good: true},
 	}
 
-	frame, err := convertStreamItemsToFrame(query, items, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame == nil {
 		t.Fatal("expected non-nil frame")
 	}
@@ -115,10 +112,7 @@ func TestConvertStreamItemsToFrame_EmptyItems(t *testing.T) {
 	ds := newTestDatasourceWithWebID(webID, "Float32")
 	query := makeTestQuery(webID)
 
-	frame, err := convertStreamItemsToFrame(query, []PiBatchContentItem{}, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
 	if frame == nil {
 		t.Fatal("expected non-nil frame")
 	}
@@ -145,10 +139,7 @@ func TestConvertStreamItemsToFrame_NilValue(t *testing.T) {
 		{Timestamp: ts, Value: nil, Good: false},
 	}
 
-	frame, err := convertStreamItemsToFrame(query, items, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame.Fields[0].Len() != 1 {
 		t.Fatalf("expected 1 row (timestamp retained), got %d", frame.Fields[0].Len())
 	}
@@ -184,10 +175,7 @@ func TestConvertStreamItemsToFrame_NodataDrop(t *testing.T) {
 		{Timestamp: ts.Add(2 * time.Second), Value: float64(3.0), Good: true},
 	}
 
-	frame, err := convertStreamItemsToFrame(query, items, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	// The nil/bad value is dropped, so only 2 rows remain.
 	if frame.Fields[0].Len() != 2 {
 		t.Errorf("expected 2 rows after drop, got %d", frame.Fields[0].Len())
@@ -218,10 +206,7 @@ func TestConvertStreamItemsToFrame_NodataPrevious(t *testing.T) {
 		{Timestamp: ts.Add(time.Second), Value: nil, Good: false}, // replaced by previous
 	}
 
-	frame, err := convertStreamItemsToFrame(query, items, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame.Fields[0].Len() != 2 {
 		t.Errorf("expected 2 rows, got %d", frame.Fields[0].Len())
 	}
@@ -271,10 +256,7 @@ func TestConvertStreamItemsToFrame_DigitalState(t *testing.T) {
 		},
 	}
 
-	frame, err := convertStreamItemsToFrame(query, items, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if len(frame.Fields) != 2 {
 		t.Fatalf("expected 2 fields, got %d", len(frame.Fields))
 	}
@@ -302,11 +284,27 @@ func TestConvertStreamItemsToFrame_MetaNotNil(t *testing.T) {
 	ds := newTestDatasourceWithWebID(webID, "Float32")
 	query := makeTestQuery(webID)
 
-	frame, err := convertStreamItemsToFrame(query, []PiBatchContentItem{}, buildStreamFrameCache(ds, query))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
 	if frame.Meta == nil {
 		t.Error("frame.Meta must not be nil (Grafana requires it for streaming frames)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// convertStreamItemsToFrame – <Anything> value type
+// ---------------------------------------------------------------------------
+
+// An attribute of type <Anything> has no type in the WebID cache: the stream takes it from the values, as the query
+// responses do (issue #173).
+func TestConvertStreamItemsToFrame_AnythingType(t *testing.T) {
+	webID := "webid-anything"
+	ds := newTestDatasourceWithWebID(webID, "")
+	query := makeTestQuery(webID)
+
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{{Timestamp: ts, Value: float64(2), Good: true}}},
+		buildStreamFrameCache(ds, query))
+	if v, ok := frame.Fields[1].ConcreteAt(0); !ok || v != float64(2) {
+		t.Errorf("value = %v (%v), want 2", v, ok)
 	}
 }

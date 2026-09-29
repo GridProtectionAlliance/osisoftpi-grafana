@@ -1,0 +1,83 @@
+name: Bug report
+description: Something does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Please remove credentials, host names and other private information from everything you paste.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what happened instead. Include the error shown on the panel, if any.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create a panel with ...
+        2. Select ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      placeholder: "6.0.0"
+    validations:
+      required: true
+  - type: input
+    id: grafana-version
+    attributes:
+      label: Grafana version
+      placeholder: "12.4.1"
+    validations:
+      required: true
+  - type: input
+    id: piwebapi-version
+    attributes:
+      label: PI Web API version
+      placeholder: "2023 SP1"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - AF query (elements and attributes)
+        - PI point query
+        - Calculation (expression)
+        - Template variables
+        - Annotations (event frames)
+        - Alerting
+        - Datasource configuration or connection
+        - Query editor
+        - After upgrading the plugin
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: query
+    attributes:
+      label: Query JSON
+      description: |
+        In the panel editor, open Query inspector > Query (or Panel JSON) and paste the query of the affected panel.
+        For problems after an upgrade, the saved query before the upgrade helps most.
+      render: json
+  - type: textarea
+    id: logs
+    attributes:
+      label: Grafana server logs
+      description: |
+        Lines from the Grafana server log that mention the plugin (`gridprotectionalliance-osisoftpi-datasource`), e.g. `Query target failed`.
+        Set `[log] level = debug` in the Grafana configuration for more details.
+      render: text
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else?
+      description: Screenshots, authentication method, datasource options that are enabled, etc.

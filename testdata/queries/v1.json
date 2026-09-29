@@ -1,0 +1,104 @@
+[
+  {
+    "name": "summary disabled with summary types",
+    "saved": {
+      "refId": "A",
+      "target": "AFSIM\\TankControlSim\\E;Level",
+      "attributes": [
+        {
+          "label": "Level",
+          "value": {
+            "value": "Level",
+            "expandable": false
+          }
+        }
+      ],
+      "nodata": "Null",
+      "queryVersion": 1,
+      "pluginVersion": "6.0.0",
+      "summary": {
+        "enable": false,
+        "duration": "",
+        "basis": "EventWeighted",
+        "types": [
+          {
+            "label": "Average",
+            "value": {
+              "value": "Average",
+              "expandable": true
+            }
+          }
+        ],
+        "sampleTypeInterval": false,
+        "sampleInterval": ""
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Null",
+      "summary": {
+        "enable": false,
+        "duration": "",
+        "types": [
+          {
+            "label": "Average",
+            "value": {
+              "value": "Average",
+              "expandable": true
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "summary enabled",
+    "saved": {
+      "refId": "A",
+      "target": "PISIM;T-101.Level",
+      "isPiPoint": true,
+      "attributes": [
+        {
+          "label": "T-101.Level",
+          "value": {
+            "value": "T-101.Level"
+          }
+        }
+      ],
+      "nodata": "Previous",
+      "queryVersion": 1,
+      "pluginVersion": "6.0.0",
+      "summary": {
+        "enable": true,
+        "duration": "1h",
+        "basis": "TimeWeighted",
+        "types": [
+          {
+            "label": "Maximum",
+            "value": {
+              "value": "Maximum",
+              "expandable": true
+            }
+          }
+        ]
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Previous",
+      "summary": {
+        "enable": true,
+        "duration": "1h",
+        "types": [
+          {
+            "label": "Maximum",
+            "value": {
+              "value": "Maximum",
+              "expandable": true
+            }
+          }
+        ]
+      }
+    }
+  }
+]

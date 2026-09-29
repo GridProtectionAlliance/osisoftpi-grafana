@@ -1,9 +1,8 @@
 import React, { ChangeEvent, PureComponent } from 'react';
-import { LegacyForms, DataSourceHttpSettings, InlineField, InlineSwitch } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps, DataSourceJsonData, DataSourceSettings } from '@grafana/data';
+import { Divider, InlineField, InlineSwitch, Input } from '@grafana/ui';
+import { DataSourcePluginOptionsEditorProps, DataSourceSettings } from '@grafana/data';
+import { AdvancedHttpSettings, Auth, ConnectionSettings, convertLegacyAuthProps } from '@grafana/plugin-ui';
 import { PIWebAPIDataSourceJsonData } from '../types';
-
-const { FormField } = LegacyForms;
 
 interface Props extends DataSourcePluginOptionsEditorProps<PIWebAPIDataSourceJsonData, {}> {}
 
@@ -49,7 +48,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     onOptionsChange({ ...options, jsonData });
   };
 
-  onHttpOptionsChange = (options: DataSourceSettings<DataSourceJsonData, {}>) => {
+  onHttpOptionsChange = (options: DataSourceSettings<PIWebAPIDataSourceJsonData, {}>) => {
     const { onOptionsChange } = this.props;
     onOptionsChange(coerceOptions(options));
   };
@@ -124,27 +123,35 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
 
     return (
       <div>
-        <DataSourceHttpSettings
-          defaultUrl="https://server.name/piwebapi"
-          dataSourceConfig={options}
+        <ConnectionSettings
+          config={options}
           onChange={this.onHttpOptionsChange}
-          showAccessOptions
+          urlPlaceholder="https://server.name/piwebapi"
         />
+        <Divider />
+        <Auth {...convertLegacyAuthProps({ config: options, onChange: this.onHttpOptionsChange })} />
+        <Divider />
+        <AdvancedHttpSettings config={options} onChange={this.onHttpOptionsChange} />
+        <Divider />
 
         <h3 className="page-heading">Custom Configuration</h3>
 
         <div className="gf-form-group">
           <div className="gf-form">
-            <FormField
+            <InlineField
               label="Max Cache Time"
-              labelWidth={13}
-              inputWidth={12}
-              type='number'
+              labelWidth={26}
               tooltip={'Maximum number of hours for WebID cache. Default 12h'}
-              onChange={this.onMaxCacheTimeChange}
-              value={options.jsonData.maxCacheTime}
-              placeholder="Cache in hours"
-            />
+            >
+              <Input
+                id="config-max-cache-time"
+                width={24}
+                type="number"
+                onChange={this.onMaxCacheTimeChange}
+                value={options.jsonData.maxCacheTime}
+                placeholder="Cache in hours"
+              />
+            </InlineField>
           </div>
           <div className="gf-form-inline">
             <InlineField label="Enable PI Points in Query" labelWidth={26} tooltip={'Allow queries to PI data server'}>
@@ -173,38 +180,38 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
         <div className="gf-form-group">
           {options.jsonData.pipoint && (
             <div className="gf-form">
-              <FormField
-                label="PI Server"
-                labelWidth={13}
-                inputWidth={20}
-                onChange={this.onPIServerChange}
-                value={options.jsonData.piserver || ''}
-                tooltip={'Default PI Server to use for data requests'}
-                placeholder="PI Server"
-              />
+              <InlineField label="PI Server" labelWidth={26} tooltip={'Default PI Server to use for data requests'}>
+                <Input
+                  id="config-pi-server"
+                  width={40}
+                  onChange={this.onPIServerChange}
+                  value={options.jsonData.piserver || ''}
+                  placeholder="PI Server"
+                />
+              </InlineField>
             </div>
           )}
           <div className="gf-form">
-            <FormField
-              label="AF Server"
-              labelWidth={13}
-              inputWidth={20}
-              onChange={this.onAFServerChange}
-              value={options.jsonData.afserver || ''}
-              tooltip={'Default AF Server to use for data requests'}
-              placeholder="AF Server"
-            />
+            <InlineField label="AF Server" labelWidth={26} tooltip={'Default AF Server to use for data requests'}>
+              <Input
+                id="config-af-server"
+                width={40}
+                onChange={this.onAFServerChange}
+                value={options.jsonData.afserver || ''}
+                placeholder="AF Server"
+              />
+            </InlineField>
           </div>
           <div className="gf-form">
-            <FormField
-              label="AF Database"
-              labelWidth={13}
-              inputWidth={20}
-              onChange={this.onAFDatabaseChange}
-              value={options.jsonData.afdatabase || ''}
-              tooltip={'Default AF Database server for AF queries'}
-              placeholder="AF Database"
-            />
+            <InlineField label="AF Database" labelWidth={26} tooltip={'Default AF Database server for AF queries'}>
+              <Input
+                id="config-af-database"
+                width={40}
+                onChange={this.onAFDatabaseChange}
+                value={options.jsonData.afdatabase || ''}
+                placeholder="AF Database"
+              />
+            </InlineField>
           </div>
         </div>
 

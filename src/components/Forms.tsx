@@ -6,7 +6,7 @@ export interface Props extends InputHTMLAttributes<HTMLInputElement> {
   tooltip?: string;
   labelWidth?: number;
   children?: React.ReactNode;
-  queryEditor?: JSX.Element;
+  queryEditor?: React.JSX.Element;
 }
 
 export const QueryField: FunctionComponent<Partial<Props>> = ({ label, labelWidth = 12, tooltip, children }) => (

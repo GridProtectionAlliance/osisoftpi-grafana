@@ -20,3 +20,6 @@ jobs:
           # see https://grafana.com/developers/plugin-tools/publish-a-plugin/sign-a-plugin#generate-an-access-policy-token to generate it
           # save the value in your repository secrets
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          # grafana-plugin-sdk-go requires the Go version declared in go.mod
+          go-version: '1.26'
+          node-version: '22'

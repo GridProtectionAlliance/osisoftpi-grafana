@@ -19,6 +19,46 @@ export function getSummaryTypes(summary: PiWebAPISummary | undefined) {
 }
 // END TODO
 
+/** Builds a `?key=value&...` query string with every value URL-encoded; empty values are left out. */
+export function buildQueryString(params: Record<string, unknown>): string {
+  const parts = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
+  return parts.length > 0 ? '?' + parts.join('&') : '';
+}
+
+/**
+ * Formats a multi-value variable as a `{value1,value2}` group, which the backend expands into one target per value.
+ * Commas, braces and `%` inside the values are percent-encoded so they cannot break the group.
+ */
+export function formatVariableValue(value: unknown): string {
+  if (!Array.isArray(value)) {
+    return value === undefined || value === null ? '' : String(value);
+  }
+  if (value.length === 1) {
+    return String(value[0]);
+  }
+  const encoded = value.map((v) =>
+    String(v).replace(/%/g, '%25').replace(/,/g, '%2C').replace(/\{/g, '%7B').replace(/\}/g, '%7D')
+  );
+  return '{' + encoded.join(',') + '}';
+}
+
+/**
+ * Replaces every `{value1,value2}` group created by formatVariableValue with its first value.
+ * Used when browsing the AF hierarchy, which needs a single concrete path.
+ */
+export function firstVariableValue(path: string): string {
+  return path.replace(/\{([^{}]*)\}/g, (_: string, values: string) =>
+    values.split(',')[0].replace(/%2C/g, ',').replace(/%7B/g, '{').replace(/%7D/g, '}').replace(/%25/g, '%')
+  );
+}
+
+/** Removes the leading `\\` of a UNC-style target (`\\AFServer\DB\Element;Attr`): the backend adds it. */
+export function removeServerPrefix(target: string): string {
+  return target.replace(/^\\+/, '');
+}
+
 export function removeTime(s: any): string {
   const temp = Object.assign({}, s);
   delete temp.startTime;

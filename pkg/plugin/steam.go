@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
 
@@ -18,16 +17,12 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
-// streamFrameCache holds pre-computed, per-WebID metadata that is static for the lifetime
-// of a streaming subscription. Storing it here eliminates per-message datasourceMutex
-// acquisitions inside convertStreamItemsToFrame.
+// streamFrameCache holds the WebID metadata and datasource options of a stream, read once when the channel is
+// registered so that converting each WebSocket message needs no lock.
 type streamFrameCache struct {
-	sliceType    reflect.Type
-	digitalState bool
-	frameLabel   map[string]string
-	labels       map[string]string // non-nil only when useNewFormat is true
-	units        string
-	description  string
+	metadata  WebIDCacheEntry
+	newFormat bool
+	units     bool
 }
 
 // StreamChannelConstruct holds the metadata needed to connect a Grafana streaming channel
@@ -391,12 +386,7 @@ func (d *Datasource) sendStreamData(
 				continue
 			}
 
-			frame, err := convertStreamItemsToFrame(construct.query, item.Items, construct.frameCache)
-			if err != nil {
-				backend.Logger.Error("Streaming: failed to convert stream items to frame",
-					"webID", webID, "error", err)
-				continue
-			}
+			frame := convertStreamItemsToFrame(construct.query, item, construct.frameCache)
 
 			if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
 				backend.Logger.Error("Streaming: failed to send frame to subscriber",
@@ -414,29 +404,10 @@ func (d *Datasource) sendStreamData(
 	}
 }
 
-// buildStreamFrameCache snapshots all WebID-derived metadata for a query so the streaming
-// hot path never needs to re-acquire datasourceMutex for these static values.
+// buildStreamFrameCache reads the WebID metadata and datasource options used to convert the stream's values.
 func buildStreamFrameCache(d *Datasource, q *PiProcessedQuery) streamFrameCache {
-	webID := q.WebID
-	pointType := d.getPointTypeForWebID(webID)
-	desc := d.getDescriptionForWebID(webID)
-	units := d.getUnitsForWebID(webID)
-	sliceType := d.getTypeForWebID(webID)
-	digitalState := d.getDigitalStateForWebID(webID)
-	usingNewFormat := d.isUsingNewFormat()
-	frameLabel := getDataLabels(usingNewFormat, q, pointType, desc, units, "")
-	var labels map[string]string
-	if usingNewFormat {
-		labels = frameLabel
-	}
-	return streamFrameCache{
-		sliceType:    sliceType,
-		digitalState: digitalState,
-		frameLabel:   frameLabel,
-		labels:       labels,
-		units:        units,
-		description:  desc,
-	}
+	metadata, _ := d.getWebIDEntry(q.WebID)
+	return streamFrameCache{metadata: metadata, newFormat: d.isUsingNewFormat(), units: d.isUsingUnits()}
 }
 
 // checkForOrphanedWebSocket closes the shared WebSocket connection for connectionKey when

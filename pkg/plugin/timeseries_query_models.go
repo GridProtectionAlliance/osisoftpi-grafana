@@ -1,7 +1,6 @@
 package plugin
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"time"
@@ -142,6 +141,10 @@ type PIWebAPIQuery struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 	HashCode string `json:"hashCode"`
+	// QueryVersion is the format version of the saved query (see queryVersion); 0 when saved before 6.0
+	QueryVersion int `json:"queryVersion"`
+	// PluginVersion is the version of the plugin that last saved the query, for information only
+	PluginVersion string `json:"pluginVersion"`
 }
 
 type QuerySummary struct {
@@ -151,6 +154,9 @@ type QuerySummary struct {
 	Types              *[]SummaryType `json:"types"`
 	SampleTypeInterval *bool          `json:"sampleTypeInterval"`
 	SampleInterval     *string        `json:"sampleInterval"`
+	// Interval and Nodata are only in queries saved by versions 4.x and 5.0 (see migrateLegacySummary)
+	Interval *string `json:"interval,omitempty"`
+	Nodata   *string `json:"nodata,omitempty"`
 }
 
 type QueryPropertiesValue struct {
@@ -165,30 +171,6 @@ type QueryProperties struct {
 type SummaryType struct {
 	Label string           `json:"label"`
 	Value SummaryTypeValue `json:"value"`
-}
-
-// UnmarshalJSON handles two formats that appear in the wild:
-//   - Object: {"label":"Total","value":{"value":"Total","expandable":true}}  (normal)
-//   - String: "Total" or ""  (legacy saved queries / alert rules)
-//
-// Empty strings are treated as a no-op by returning a zero-value struct; callers
-// should filter out entries where Value.Value == "".
-func (s *SummaryType) UnmarshalJSON(data []byte) error {
-	// Try object form first
-	type summaryTypeAlias SummaryType
-	var obj summaryTypeAlias
-	if err := json.Unmarshal(data, &obj); err == nil {
-		*s = SummaryType(obj)
-		return nil
-	}
-	// Fall back to plain string form
-	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
-		return err
-	}
-	s.Label = str
-	s.Value = SummaryTypeValue{Value: str, Expandable: true}
-	return nil
 }
 
 type SummaryTypeValue struct {
@@ -235,6 +217,8 @@ type PiProcessedQuery struct {
 	Resource            string
 	TargetPath          string
 	Variable            string
+	MultiVariable       bool
+	PluginVersion       string
 	RefID               string
 	Error               error
 	Status              int

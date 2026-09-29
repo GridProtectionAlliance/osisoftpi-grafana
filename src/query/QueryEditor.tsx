@@ -8,7 +8,8 @@ import { PiWebAPIDatasource } from '../datasource';
 import { QueryInlineField, QueryRawInlineField, QueryRowTerminator } from '../components/Forms';
 import { PIWebAPISelectableValue, PIWebAPIDataSourceJsonData, PIWebAPIQuery, defaultQuery } from '../types';
 import { QueryEditorModeSwitcher } from 'components/QueryEditorModeSwitcher';
-import { parseRawQuery, getSummaryTypes } from 'helper';
+import { parseRawQuery, getSummaryTypes, removeServerPrefix } from 'helper';
+import { migrateQuery, QUERY_VERSION } from 'queryVersion';
 
 const LABEL_WIDTH = 24;
 const LABEL_SWITCH_WIDTH = 49.067 / 8.0;
@@ -377,7 +378,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
       // Accept only one PI server
       if (query.isPiPoint) {
-        this.piServer.push(item);
+        this.piServer = [item];
         this.segmentChangeValue(segments);
         return;
       }
@@ -432,6 +433,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
           afServerWebId: this.state.segments.length > 0 && this.state.segments[0].value ? this.state.segments[0].value.webId : undefined,
         };
 
+    if (query.isPiPoint && datasource.piserver?.name) {
+      return Promise.resolve(this.checkPiServer());
+    }
     if (!query.isPiPoint) {
       if (datasource.afserver?.name && index === 0) {
         return Promise.resolve([
@@ -715,6 +719,12 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
         const filteredAttributes = filter(attributes, (attrib: SelectableValue<PIWebAPISelectableValue>) => {
           const changedValue = datasource.templateSrv.replace(attrib.value?.value);
+          // keep attributes that use template variables: a multi-value variable expands into several
+          // attributes, which are resolved by the backend when the query runs.
+          // (templateSrv.containsTemplate is not reliable in Grafana 11.6 dashboards, so compare instead)
+          if (changedValue !== attrib.value?.value) {
+            return true;
+          }
           return validAttributes[changedValue] !== undefined;
         });
 
@@ -763,18 +773,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
    * @memberOf PIWebAPIQueryEditor
    */
   getSelectedPIServer() {
-    let webID = '';
-
-    this.piServer.forEach((s) => {
-      const parts = this.props.query.target!.split(';');
-      if (parts.length >= 2) {
-        if (parts[0] === s.text) {
-          webID = s.WebId;
-          return;
-        }
-      }
-    });
-    return this.piServer.length > 0 ? this.piServer[0].value?.webId : webID;
+    const { piserver } = this.props.datasource;
+    const webId = this.piServer[0]?.value?.webId;
+    // the configured server's WebId is looked up when the datasource is created
+    return piserver?.name ? piserver.webid ?? webId : webId;
   }
 
   /**
@@ -851,6 +853,17 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       });
     }
   }
+
+  /**
+   * Returns the PI server segment: the server configured in the datasource, or an empty segment to select one.
+   */
+  checkPiServer = (): Array<SelectableValue<PIWebAPISelectableValue>> => {
+    const { piserver } = this.props.datasource;
+    if (!piserver?.name) {
+      return [{ label: '' }];
+    }
+    return [{ label: piserver.name, value: { value: piserver.name, webId: piserver.webid } }];
+  };
 
   /**
    * Check if the AF server and database are configured in the datasoure config.
@@ -945,8 +958,13 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   };
 
   initialLoad = (force: boolean) => {
-    const { query } = this.props;
-    const metricsQuery = defaults(query, defaultQuery) as PIWebAPIQuery;
+    const migrated = migrateQuery(this.props.query);
+    const query = migrated === this.props.query ? migrated : this.withVersion(migrated);
+    if (query !== this.props.query) {
+      this.props.onChange(query);
+    }
+    // defaults on a copy: the defaults must not be saved into the query just because it was opened
+    const metricsQuery = defaults({ ...query }, defaultQuery) as PIWebAPIQuery;
     const { segments, attributes, summary, isPiPoint } = metricsQuery;
 
     let segmentsArray: Array<SelectableValue<PIWebAPISelectableValue>> = force ? [] : segments?.slice(0) ?? [];
@@ -966,19 +984,30 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
       } else {
         segmentsArray = this.checkAfServer();
       }
-    } else if (isPiPoint && segmentsArray.length > 0) {
-      this.piServer = segmentsArray;
+    } else if (isPiPoint) {
+      if (this.props.datasource.piserver?.name || !segmentsArray.some((s) => s.label)) {
+        segmentsArray = this.checkPiServer();
+      }
+      this.piServer = segmentsArray.filter((s) => s.label);
     }
     this.updateArray(segmentsArray, attributesArray, summariesArray, !!isPiPoint, () => {
-      this.onChange(query);
+      this.onChange(query, false);
     });
   };
 
-  onChange = (query: PIWebAPIQuery) => {
+  /** Adds the format version and the plugin version to a query that is saved. */
+  withVersion = (query: PIWebAPIQuery): PIWebAPIQuery => ({
+    ...query,
+    queryVersion: QUERY_VERSION,
+    pluginVersion: this.props.datasource.meta?.info?.version,
+  });
+
+  // versioned: false when the query is only refreshed after being opened, so the dashboard is not modified
+  onChange = (query: PIWebAPIQuery, versioned = true) => {
     const { onChange, onRunQuery } = this.props;
 
     if (query.rawQuery) {
-      query.target = query.query ?? '';
+      query.target = removeServerPrefix(query.query ?? '');
       if (!!query.query) {
         const { attributes, elementPath } = parseRawQuery(query.target);
         query.attributes = attributes;
@@ -1006,7 +1035,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
     }
     // END TODO
 
-    onChange({...query, summary});
+    onChange(versioned ? this.withVersion({ ...query, summary }) : { ...query, summary });
 
     if (this.isValidQuery(query)) {
       onRunQuery();
@@ -1030,9 +1059,10 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
   onIsPiPointChange = (event: React.SyntheticEvent<HTMLInputElement>) => {
     const { query: queryChange } = this.props;
     const isPiPoint = !queryChange.isPiPoint;
+    this.piServer = isPiPoint ? this.checkPiServer().filter((s) => s.label) : [];
     this.setState(
       {
-        segments: isPiPoint ? [{ label: '' }] : this.checkAfServer(),
+        segments: isPiPoint ? this.checkPiServer() : this.checkAfServer(),
         attributes: [],
         isPiPoint,
       },
@@ -1066,7 +1096,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
 
   render() {
     const { query: queryProps, onChange, onRunQuery } = this.props;
-    const metricsQuery = defaults(queryProps, defaultQuery) as PIWebAPIQuery;
+    const metricsQuery = defaults({ ...queryProps }, defaultQuery) as PIWebAPIQuery;
     const {
       useLastValue,
       useUnit,

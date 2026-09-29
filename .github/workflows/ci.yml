@@ -4,46 +4,47 @@ on:
   push:
     branches:
       - master
+      - main
+      - 'release/**'
   pull_request:
     branches:
       - master
+      - main
+      - 'release/**'
+
+permissions:
+  contents: read
+
 jobs:
   build:
+    name: Build, lint and unit tests
     runs-on: ubuntu-latest
+    outputs:
+      plugin-id: ${{ steps.metadata.outputs.plugin-id }}
+      plugin-version: ${{ steps.metadata.outputs.plugin-version }}
+      has-e2e: ${{ steps.check-for-e2e.outputs.has-e2e }}
+      has-backend: ${{ steps.check-for-backend.outputs.has-backend }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2.1.2
+        uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
-
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-
-      - name: Cache yarn cache
-        uses: actions/cache@v4
-        id: cache-yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      - name: Cache node_modules
-        id: cache-node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-${{ matrix.node-version }}-nodemodules-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.node-version }}-nodemodules-
+          node-version: '22'
+          cache: 'yarn'
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Build and test frontend
+      - name: Check types
+        run: yarn typecheck
+      - name: Lint
+        run: yarn lint
+      - name: Unit tests
+        run: yarn test:ci
+      - name: Build frontend
         run: yarn build
 
       - name: Check for backend
@@ -51,14 +52,14 @@ jobs:
         run: |
           if [ -f "Magefile.go" ]
           then
-            echo "::set-output name=has-backend::true"
+            echo "has-backend=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup Go environment
         if: steps.check-for-backend.outputs.has-backend == 'true'
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go.mod
 
       - name: Test backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
@@ -73,3 +74,132 @@ jobs:
         with:
           version: latest
           args: buildAll
+
+      - name: Check for E2E
+        id: check-for-e2e
+        run: |
+          if [ -f "playwright.config.ts" ]
+          then
+            echo "has-e2e=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get plugin metadata
+        id: metadata
+        run: |
+          export GRAFANA_PLUGIN_ID=$(cat dist/plugin.json | jq -r .id)
+          export GRAFANA_PLUGIN_VERSION=$(cat dist/plugin.json | jq -r .info.version)
+          export GRAFANA_PLUGIN_ARTIFACT=${GRAFANA_PLUGIN_ID}-${GRAFANA_PLUGIN_VERSION}.zip
+
+          echo "plugin-id=${GRAFANA_PLUGIN_ID}" >> $GITHUB_OUTPUT
+          echo "plugin-version=${GRAFANA_PLUGIN_VERSION}" >> $GITHUB_OUTPUT
+          echo "archive=${GRAFANA_PLUGIN_ARTIFACT}" >> $GITHUB_OUTPUT
+
+      - name: Package plugin
+        run: |
+          mv dist ${PLUGIN_ID}
+          zip ${ARCHIVE} ${PLUGIN_ID} -r
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+          PLUGIN_ID: ${{ steps.metadata.outputs.plugin-id }}
+
+      - name: Check plugin.json
+        run: |
+          docker run --pull=always \
+            -v $PWD/${ARCHIVE}:/archive.zip \
+            grafana/plugin-validator-cli -analyzer=metadatavalid /archive.zip
+        env:
+          ARCHIVE: ${{ steps.metadata.outputs.archive }}
+
+      - name: Archive Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.metadata.outputs.plugin-id }}-${{ steps.metadata.outputs.plugin-version }}
+          path: ${{ steps.metadata.outputs.plugin-id }}
+          retention-days: 5
+
+  resolve-versions:
+    name: Resolve e2e images
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: build
+    if: ${{ needs.build.outputs.has-e2e == 'true' }}
+    outputs:
+      matrix: ${{ steps.resolve-versions.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # Resolves the Grafana versions to test against from `grafanaDependency` in src/plugin.json.
+      - name: Resolve Grafana E2E versions
+        id: resolve-versions
+        uses: grafana/plugin-actions/e2e-version@main
+
+  playwright-tests:
+    needs: [resolve-versions, build]
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        GRAFANA_IMAGE: ${{ fromJson(needs.resolve-versions.outputs.matrix) }}
+    name: e2e test ${{ matrix.GRAFANA_IMAGE.name }}@${{ matrix.GRAFANA_IMAGE.VERSION }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download plugin
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          name: ${{ needs.build.outputs.plugin-id }}-${{ needs.build.outputs.plugin-version }}
+
+      - name: Execute permissions on binary
+        if: needs.build.outputs.has-backend == 'true'
+        run: |
+          chmod +x ./dist/gpx_*
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dev dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Start Grafana
+        run: |
+          docker compose pull
+          ANONYMOUS_AUTH_ENABLED=false DEVELOPMENT=false GRAFANA_VERSION=${{ matrix.GRAFANA_IMAGE.VERSION }} GRAFANA_IMAGE=${{ matrix.GRAFANA_IMAGE.NAME }} docker compose up -d
+
+      - name: Wait for grafana server
+        uses: grafana/plugin-actions/wait-for-grafana@main
+        with:
+          url: http://localhost:3000/login
+
+      - name: Install Playwright Browsers
+        run: yarn playwright install chromium --with-deps
+
+      - name: Run Playwright tests
+        id: run-tests
+        run: yarn e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.run-tests.outcome == 'failure' }}
+        with:
+          name: playwright-report-${{ matrix.GRAFANA_IMAGE.NAME }}-v${{ matrix.GRAFANA_IMAGE.VERSION }}-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 5
+
+      - name: Docker logs
+        if: ${{ always() && steps.run-tests.outcome == 'failure' }}
+        run: |
+          docker logs gridprotectionalliance-osisoftpi-datasource 2>&1 | tail -200
+
+      - name: Stop grafana docker
+        if: ${{ always() }}
+        run: docker compose down

@@ -1,6 +1,5 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
-import internal from 'stream';
 
 export interface PiwebapiElementPath {
   path: string;
@@ -97,6 +96,10 @@ export interface PIWebAPIQuery extends DataQuery {
   nameFilter?: string;
   categoryName?: string;
   hashCode?: string;
+  // format version of the saved query (see QUERY_VERSION); missing in queries saved before 6.0
+  queryVersion?: number;
+  // version of the plugin that last saved the query, for information only
+  pluginVersion?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {

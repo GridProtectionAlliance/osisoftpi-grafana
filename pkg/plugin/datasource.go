@@ -264,31 +264,16 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	)
 	defer span.End()
 
-	var isAllowed = true
-	var allowedBasePaths = []string{
-		"/assetdatabases",
-		"/elements",
-		"/assetservers",
-		"/points",
-		"/attributes",
-		"/dataservers",
-		"/annotations",
-	}
-	for _, path := range allowedBasePaths {
-		if strings.HasPrefix(req.Path, path) {
-			isAllowed = true
-			break
-		}
-	}
-
+	resourceURL, isAllowed := allowedResourceURL(req.URL)
 	if !isAllowed {
+		log.DefaultLogger.Warn("Call resource - path not allowed", "path", req.Path)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusForbidden,
 			Body:   nil,
 		})
 	}
 
-	r, err := apiGet(ctx, d, req.URL)
+	r, err := apiGet(ctx, d, resourceURL)
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
@@ -340,6 +325,13 @@ func (d *Datasource) isUsingNewFormat() bool {
 	return d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat
 }
 
+// isUsingUnits checks whether the datasource is configured to add units defined in PI to data frames.
+// This is determined by the UseUnit option ("Enable Unit From Data") in dataSourceOptions.
+// Returns true if UseUnit is set and enabled; otherwise, false.
+func (d *Datasource) isUsingUnits() bool {
+	return d.dataSourceOptions.UseUnit != nil && *d.dataSourceOptions.UseUnit
+}
+
 // isUsingStreaming checks whether "Enable Streaming Support" is enabled in the datasource configuration.
 func (d *Datasource) isUsingStreaming() bool {
 	return d.dataSourceOptions.UseStreaming != nil && *d.dataSourceOptions.UseStreaming
@@ -351,4 +343,44 @@ func (d *Datasource) isUsingStreaming() bool {
 func (d *Datasource) isUsingResponseCache() bool {
 	return d.dataSourceOptions.UseExperimental != nil && *d.dataSourceOptions.UseExperimental &&
 		d.dataSourceOptions.UseResponseCache != nil && *d.dataSourceOptions.UseResponseCache
+}
+
+// allowedResourcePaths are the PI Web API collections the frontend may read through CallResource
+// while configuring the datasource, queries and annotations.
+var allowedResourcePaths = []string{
+	"assetdatabases",
+	"elements",
+	"assetservers",
+	"points",
+	"attributes",
+	"dataservers",
+	"annotations",
+}
+
+// allowedResourceURL returns the resource URL to forward to PI Web API when its first path segment is one of
+// allowedResourcePaths. Dot segments, backslashes and '%' are rejected because PI Web API would resolve them to
+// other endpoints (e.g. elements/../batch); valid requests only have WebIDs in the path.
+func allowedResourceURL(resourceURL string) (string, bool) {
+	path, query, hasQuery := strings.Cut(resourceURL, "?")
+	path = strings.Trim(path, "/")
+	if path == "" || strings.ContainsAny(path, `\%#`) {
+		return "", false
+	}
+
+	segments := strings.Split(path, "/")
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", false
+		}
+	}
+
+	for _, allowed := range allowedResourcePaths {
+		if strings.EqualFold(segments[0], allowed) {
+			if hasQuery {
+				return path + "?" + query, true
+			}
+			return path, true
+		}
+	}
+	return "", false
 }

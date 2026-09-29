@@ -126,11 +126,11 @@ func (d *Datasource) getCachedWebID(path string) *WebIDCacheEntry {
 func (d *Datasource) getRequestWebId(path string, isPiPoint bool) string {
 	uri := ""
 	if isPiPoint {
-		uri = `points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=\\`
-		uri += strings.Replace(strings.Replace(path, "|", `\`, -1), ";", `\`, -1)
+		uri = `points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=`
+		uri += queryEscape(`\\` + strings.Replace(strings.Replace(path, "|", `\`, -1), ";", `\`, -1))
 	} else {
-		uri = `attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=\\`
-		uri += path
+		uri = `attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=`
+		uri += queryEscape(`\\` + path)
 	}
 	return uri
 }
@@ -201,7 +201,9 @@ func getValueType(Type string) reflect.Type {
 	case "Blob":
 		dataType = reflect.TypeOf([]byte{})
 	default:
-		dataType = reflect.TypeOf([]string{})
+		// "<Anything>" (empty type, e.g. AF links) or a type the plugin does not know: the type is taken
+		// from the values returned by PI Web API (see inferValueType)
+		dataType = nil
 	}
 	return dataType
 }
@@ -218,82 +220,19 @@ func cleanWebIDCache(cache WebIDCache) {
 	}
 }
 
-func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
+// getWebIDEntry returns the cached metadata of a WebID and extends its expiration time.
+func (d *Datasource) getWebIDEntry(webID string) (WebIDCacheEntry, bool) {
 	d.datasourceMutex.Lock()
 	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Type
-		}
+	if !exists {
+		return WebIDCacheEntry{}, false
 	}
-	// If the specified webID is not found in the webIDCache, return type of string.
-	return reflect.TypeOf([]string{})
-}
-
-func (d *Datasource) getDigitalStateForWebID(webID string) bool {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.DigitalState
-		}
+	entry, exists := d.webIDCache.webIDCache[path]
+	if !exists {
+		return WebIDCacheEntry{}, false
 	}
-	// If the specified webID is not found in the webIDCache, return false
-	return false
-}
-
-func (d *Datasource) getPointTypeForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.PointType
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
-}
-
-func (d *Datasource) getUnitsForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Units
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
-}
-
-func (d *Datasource) getDescriptionForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Description
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
+	entry.ExpTime = time.Now().Add(d.webIDCache.duration)
+	d.webIDCache.webIDCache[path] = entry
+	return entry, true
 }

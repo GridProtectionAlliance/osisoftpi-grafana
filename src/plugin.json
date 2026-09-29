@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "name": "OSIsoft-PI",
   "type": "datasource",
   "id": "gridprotectionalliance-osisoftpi-datasource",
@@ -43,7 +43,7 @@
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=10.1.0",
+    "grafanaDependency": ">=11.6.0",
     "plugins": []
   }
 }

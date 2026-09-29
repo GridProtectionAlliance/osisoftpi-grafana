@@ -18,6 +18,7 @@ lib-cov
 coverage
 
 node_modules
+dist
 vendor
 .tscache
 coverage
@@ -36,11 +37,14 @@ coverage
 
 # Codealike
 codealike.json
+# e2e test directories
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
 
-# Local deployment scripts (not for version control)
-deploy.sh
-
-# yarn lockfile (use npm/package-lock.json instead)
+# yarn lockfile (the project uses npm and package-lock.json)
 yarn.lock
 
 # Local environment / secrets
@@ -48,6 +52,3 @@ yarn.lock
 
 # Docker local overrides
 docker-compose.override.yml
-
-# Copilot session files
-copilot-session-*.mddist
