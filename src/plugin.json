@@ -35,9 +35,10 @@
       }
     ],
     "screenshots": [
-      {"name": "Query Editor", "path": "img/configurator.png"},
+      {"name": "Query Editor", "path": "img/query_editor.png"},
       {"name": "Datasource Configuration", "path": "img/configuration.png"},
-      {"name": "Annotations Editor", "path": "img/annotations.png"}
+      {"name": "Variable Query Editor", "path": "img/variable_query.png"},
+      {"name": "Annotations Editor", "path": "img/annotation_query.png"}
     ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
