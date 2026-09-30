@@ -1246,7 +1246,7 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                 onChange={(event: ChangeEvent<HTMLInputElement>) =>
                   onChange({ ...metricsQuery, expression: event.target.value })
                 }
-                placeholder="'.'*2"
+                placeholder="Expression, e.g. '.' * 2"
               />
             </InlineField>
           </InlineFieldRow>
@@ -1430,8 +1430,9 @@ export class PIWebAPIQueryEditor extends PureComponent<Props, State> {
                   Component={
                     <CustomLabelComponent
                       width={LABEL_WIDTH * 4}
-                      value={{ value: recordedValues?.boundaryType }}
-                      label={recordedValues?.boundaryType}
+                      // the backend uses Inside when the boundary type is not set
+                      value={{ value: recordedValues?.boundaryType ?? 'Inside' }}
+                      label={recordedValues?.boundaryType ?? 'Inside'}
                     />
                   }
                   onChange={this.recordedBoundaryTypeValueChanged}

@@ -74,6 +74,8 @@ export interface PIWebAPIQuery extends DataQuery {
   rawQuery?: boolean;
   query?: string;
   // annotations items
+  // annotations: AF server, database and event frame template
+  afServer?: PiwebapiRsp;
   database?: PiwebapiRsp;
   template?: PiwebapiRsp;
   showEndTime?: boolean;
@@ -129,3 +131,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   useResponseCache?: boolean;
 }
 
+/** A query variable: `query` is written in the variable query language (see variableQuery.ts). */
+export interface PIWebAPIVariableQuery extends DataQuery {
+  query: string;
+}

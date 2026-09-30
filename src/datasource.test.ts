@@ -105,3 +105,96 @@ describe('legacy queries (issue GridProtectionAlliance/osisoftpi-grafana#194)', 
     expect(target).toEqual(saved);
   });
 });
+
+describe('variableQuery', () => {
+  afterAll(() => delete (PiWebAPIDatasource.prototype as any).getResource);
+  // PI Web API responses by request path (without the query string)
+  const responses: Record<string, unknown> = {
+    '/assetservers': { WebId: 'S1', Name: 'AFSIM' },
+    '/assetservers/S1/assetdatabases': { Items: [{ Name: 'TankControlSim' }] },
+    '/assetdatabases': { WebId: 'D1' },
+    '/assetdatabases/D1/elements': { Items: [{ Name: 'P-101' }, { Name: 'T-101' }] },
+    '/elements': { WebId: 'E1' },
+    '/elements/E1/elements': { Items: [{ Name: 'T-101' }] },
+    '/elements/E1/attributes': { Items: [{ Name: 'Level' }] },
+    '/dataservers': { WebId: 'P1' },
+    '/dataservers/P1/points': { Items: [{ Name: 'PIT-100' }, { Name: 'PIT-200' }] },
+  };
+
+  function datasource(jsonData: Partial<PIWebAPIDataSourceJsonData> = {}) {
+    const requests: string[] = [];
+    (PiWebAPIDatasource.prototype as any).getResource = (path: string) => {
+      requests.push(path);
+      return Promise.resolve(responses[path.split('?')[0]] ?? {});
+    };
+    const ds = new PiWebAPIDatasource(
+      { jsonData, uid: 'pi' } as unknown as DataSourceInstanceSettings<PIWebAPIDataSourceJsonData>,
+      templateSrv
+    );
+    requests.length = 0; // the constructor looks up the configured servers
+    return { ds, requests };
+  }
+
+  it('searches the elements of a database with the query options', async () => {
+    const { ds, requests } = datasource();
+    const values = await ds.metricFindQuery(
+      'elements \\\\AFSIM\\TankControlSim nameFilter=P* searchFullHierarchy=true sortOrder=Descending maxCount=5',
+      {}
+    );
+    expect(values.map((v) => v.text)).toEqual(['P-101', 'T-101']);
+    expect(requests).toEqual([
+      '/assetdatabases?path=%5C%5CAFSIM%5CTankControlSim',
+      '/assetdatabases/D1/elements?nameFilter=P*&searchFullHierarchy=true&sortOrder=Descending&maxCount=5',
+    ]);
+  });
+
+  it('searches the child elements and attributes of an element, with template variables', async () => {
+    const { ds, requests } = datasource();
+    expect((await ds.metricFindQuery('elements AFSIM\\DB\\$elem templateName=Tank', {})).map((v) => v.text)).toEqual([
+      'T-101',
+    ]);
+    expect((await ds.metricFindQuery('attributes AFSIM\\DB\\$elem nameFilter=$attr', {})).map((v) => v.text)).toEqual([
+      'Level',
+    ]);
+    expect(requests).toEqual([
+      '/elements?path=%5C%5CAFSIM%5CDB%5CT-101',
+      '/elements/E1/elements?templateName=Tank',
+      '/elements?path=%5C%5CAFSIM%5CDB%5CT-101',
+      '/elements/E1/attributes?nameFilter=Level',
+    ]);
+  });
+
+  it('searches PI points on the configured or given PI server', async () => {
+    const { ds, requests } = datasource({ piserver: 'PISIM' });
+    expect((await ds.metricFindQuery('points PIT-*', {})).map((v) => v.text)).toEqual(['PIT-100', 'PIT-200']);
+    await ds.metricFindQuery('points server=OTHER nameFilter=* startIndex=10', {});
+    expect(requests).toEqual([
+      '/dataservers?name=PISIM',
+      '/dataservers/P1/points?nameFilter=PIT-*',
+      '/dataservers?name=OTHER',
+      '/dataservers/P1/points?nameFilter=*&startIndex=10',
+    ]);
+  });
+
+  it('uses the configured AF server and database by default', async () => {
+    const { ds, requests } = datasource({ afserver: 'AFSIM', afdatabase: 'TankControlSim' });
+    expect((await ds.metricFindQuery('databases', {})).map((v) => v.text)).toEqual(['TankControlSim']);
+    await ds.metricFindQuery('elements', {});
+    expect(requests).toEqual([
+      '/assetservers?path=%5C%5CAFSIM',
+      '/assetservers/S1/assetdatabases',
+      '/assetdatabases?path=%5C%5CAFSIM%5CTankControlSim',
+      '/assetdatabases/D1/elements',
+    ]);
+  });
+
+  it('reports what was not found or is missing', async () => {
+    const { ds } = datasource();
+    (ds as any).getResource = () => Promise.resolve({});
+    await expect(ds.metricFindQuery('attributes AFSIM\\DB\\Missing', {})).rejects.toThrow(
+      'Element not found: AFSIM\\DB\\Missing'
+    );
+    await expect(ds.metricFindQuery('points PIT-*', {})).rejects.toThrow('Set the PI server');
+    await expect(ds.metricFindQuery('elements AFSIM', {})).rejects.toThrow('Set the path of a database or element');
+  });
+});

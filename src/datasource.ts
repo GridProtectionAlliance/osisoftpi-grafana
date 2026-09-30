@@ -16,6 +16,8 @@ import {
 import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
 import { migrateQuery } from './queryVersion';
+import { isVariableQueryLanguage, parseVariableQuery } from './variableQuery';
+import { PiWebAPIVariableSupport } from './variableSupport';
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PIWebAPISelectableValue, PiDataServer, PiwebapiRsp } from './types';
 import {
   buildQueryString,
@@ -53,6 +55,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
     this.useExperimental = instanceSettings.jsonData.useExperimental || false;
     this.useStreaming = instanceSettings.jsonData.useStreaming || false;
+
+    this.variables = new PiWebAPIVariableSupport(this);
 
     this.annotations = {
       QueryEditor: PiWebAPIAnnotationsQueryEditor,
@@ -130,6 +134,9 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    * @memberOf PiWebApiDatasource
    */
   metricFindQuery(query: any, queryOptions: any): Promise<MetricFindValue[]> {
+    if (isVariableQueryLanguage(query)) {
+      return this.variableQuery(query, queryOptions);
+    }
     const ds = this;
     const querydepth = ['servers', 'databases', 'databaseElements', 'elements'];
     if (typeof query === 'string') {
@@ -205,6 +212,74 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       return ds.piPointSearch(query.webId, query.pointName).then(metricQueryTransform);
     }
     return Promise.reject('Bad type');
+  }
+
+  /**
+   * Runs a variable query written in the query language (see variableQuery.ts), e.g.
+   * `elements AFSERVER\Database\Plant nameFilter=Pump* searchFullHierarchy=true`.
+   * Template variables are replaced in the target and in the option values; multi-value variables use their first
+   * value.
+   */
+  async variableQuery(text: string, queryOptions?: any): Promise<MetricFindValue[]> {
+    const query = parseVariableQuery(text);
+    const replace = (value: string) =>
+      firstVariableValue(this.templateSrv.replace(value, queryOptions?.scopedVars, formatVariableValue));
+    const target = query.target !== undefined ? replace(query.target).replace(/^\\+/, '') : undefined;
+    const options: Record<string, string> = {};
+    for (const [name, value] of Object.entries(query.options)) {
+      options[name] = replace(value);
+    }
+    const found = (item: PiwebapiRsp, what: string, name: string | undefined) => {
+      if (!item?.WebId) {
+        throw new Error(`${what} not found: ${name}`);
+      }
+      return item.WebId;
+    };
+
+    switch (query.type) {
+      case 'servers':
+        return metricQueryTransform(await this.getAssetServers());
+      case 'dataservers':
+        return metricQueryTransform(await this.getDataServers());
+      case 'databases': {
+        const name = target || this.afserver.name;
+        if (!name) {
+          throw new Error('Set the AF server, e.g. databases AFSERVER');
+        }
+        const server = await this.getAssetServer(name);
+        return metricQueryTransform(await this.getDatabases(found(server, 'AF server', name)));
+      }
+      case 'elements': {
+        const configured = this.afserver.name && this.afdatabase.name;
+        const path = target || (configured ? this.afserver.name + '\\' + this.afdatabase.name : '');
+        const depth = path.split('\\').length;
+        if (!path || depth < 2) {
+          throw new Error('Set the path of a database or element, e.g. elements AFSERVER\\Database\\Element');
+        }
+        if (depth === 2) {
+          const database = await this.getDatabase(path);
+          return metricQueryTransform(await this.getDatabaseElements(found(database, 'Database', path), options));
+        }
+        const element = await this.getElement(path);
+        return metricQueryTransform(await this.getElements(found(element, 'Element', path), options));
+      }
+      case 'attributes': {
+        const element = await this.getElement(target!);
+        return metricQueryTransform(await this.getAttributes(found(element, 'Element', target), options));
+      }
+      case 'points': {
+        const { server, ...pointOptions } = options;
+        const name = server || this.piserver.name;
+        if (!name) {
+          throw new Error('Set the PI server, e.g. points PIT-* server=PISERVER');
+        }
+        const dataServer = await this.getDataServer(name);
+        const points = await this.restGet(
+          '/dataservers/' + found(dataServer, 'PI server', name) + '/points' + buildQueryString(pointOptions)
+        );
+        return metricQueryTransform(points.Items ?? []);
+      }
+    }
   }
 
   /** PRIVATE SECTION */
@@ -399,7 +474,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     return this.restGet('/dataservers' + buildQueryString({ name })).then((response) => response);
   }
   // Get a list of all asset (AF) servers
-  private getAssetServers(): Promise<PiwebapiRsp[]> {
+  getAssetServers(): Promise<PiwebapiRsp[]> {
     return this.restGet('/assetservers').then((response) => response.Items ?? []);
   }
   getAssetServer(name: string | undefined): Promise<PiwebapiRsp> {
@@ -425,6 +500,16 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       return Promise.resolve({});
     }
     return this.restGet('/elements' + buildQueryString({ path: '\\\\' + path })).then((response) => response);
+  }
+  /** The categories of the database, used for its elements and event frames (e.g. eventframes/{webId}/categories). */
+  getElementCategories(databaseId: string): Promise<PiwebapiRsp[]> {
+    if (!databaseId) {
+      return Promise.resolve([]);
+    }
+    const fields = buildQueryString({ selectedFields: 'Items.Name;Items.WebId;Items.Description' });
+    return this.restGet('/assetdatabases/' + databaseId + '/elementcategories' + fields).then(
+      (response) => response.Items ?? []
+    );
   }
   getEventFrameTemplates(databaseId: string): Promise<PiwebapiRsp[]> {
     if (!databaseId) {
