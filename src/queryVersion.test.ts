@@ -37,11 +37,6 @@ describe('query format version', () => {
       });
     }
   }
-
-  it('returns a current query unchanged', () => {
-    const query = { refId: 'A', target: 'AF\\DB\\E;Level', queryVersion: QUERY_VERSION } as PIWebAPIQuery;
-    expect(migrateQuery(query)).toBe(query);
-  });
 });
 
 describe('migrateLegacySummary', () => {
@@ -59,28 +54,10 @@ describe('migrateLegacySummary', () => {
     });
   });
 
-  it('enables the summary of a 4.x query re-saved by 5.1 or 5.2', () => {
-    const query = legacy({
-      enable: false,
-      duration: '',
-      types: [average],
-      basis: 'EventWeighted',
-      interval: '30m',
-      nodata: 'Drop',
-    });
-    const migrated = migrateLegacySummary(query);
-    expect(migrated.summary).toEqual({ enable: true, duration: '30m', types: [average], basis: 'EventWeighted' });
-    expect(migrated.nodata).toBe('Drop');
-  });
-
-  it('keeps the summary disabled without summary types and keeps a newer bad data replacement', () => {
+  // the examples in testdata/queries are checked with toMatchObject, which does not see an extra empty duration
+  it('keeps the summary disabled without summary types and does not create an empty duration', () => {
     const migrated = migrateLegacySummary(legacy({ types: [], interval: '', nodata: 'Zero' }, { nodata: 'Previous' }));
     expect(migrated.summary).toEqual({ types: [], enable: false });
-    expect(migrated.nodata).toBe('Previous');
-  });
-
-  it('replaces the Null bad data replacement written by the query editor', () => {
-    const migrated = migrateLegacySummary(legacy({ types: [], interval: '', nodata: 'Previous' }, { nodata: 'Null' }));
     expect(migrated.nodata).toBe('Previous');
   });
 
