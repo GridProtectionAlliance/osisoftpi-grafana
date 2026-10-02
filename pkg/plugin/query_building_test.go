@@ -157,3 +157,27 @@ func TestTimeSpansAreSentAsEntered(t *testing.T) {
 		})
 	}
 }
+
+// The query model has fields the backend does not use: Grafana adds the panel's maxDataPoints, and dashboards saved
+// by earlier Grafana versions have the datasource name as a string. Their values must not make the query invalid
+// (the backend reads RefID, MaxDataPoints and the datasource from backend.DataQuery and the settings).
+func TestUnusedQueryModelFieldsAreIgnored(t *testing.T) {
+	d := newFakeDatasource("https://server", PIWebAPIDataSourceJsonData{})
+	for _, extra := range []string{
+		`"maxDataPoints":1234.5`,
+		`"datasource":"PI Web API"`,
+		`"datasourceId":"7"`,
+		`"refId":1`,
+		`"elementPath":{}`,
+	} {
+		t.Run(extra, func(t *testing.T) {
+			processed := d.processQuery([]backend.DataQuery{{
+				RefID: "A",
+				JSON:  json.RawMessage(`{"target":"AF\\DB\\U-100\\P-101;Flow",` + extra + `}`),
+			}}, "uid")
+			if len(processed) != 1 || processed[0].Error != nil {
+				t.Fatalf("expected one valid target, got %+v", processed)
+			}
+		})
+	}
+}

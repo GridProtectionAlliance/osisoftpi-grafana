@@ -8,7 +8,6 @@ import (
 
 type Query struct {
 	RefID         string `json:"RefID"`
-	QueryType     string `json:"QueryType"`
 	MaxDataPoints int    `json:"MaxDataPoints"`
 	Interval      int64  `json:"Interval"`
 	TimeRange     struct {
@@ -24,10 +23,6 @@ type Query struct {
 func (q *Query) isValidQuery() error {
 	if !q.Pi.checkValidTargets() {
 		return fmt.Errorf("no targets found in query")
-	}
-
-	if q.Pi.checkNilSegments() {
-		return fmt.Errorf("no segments found in query")
 	}
 
 	return nil
@@ -79,13 +74,11 @@ func (q *PiProcessedQuery) getNoDataReplace() string {
 	return *q.Nodata
 }
 
+// PIWebAPIQuery is the query saved by the query editor. Only the fields read by the backend are decoded: the saved
+// query also has fields such as refId, hide, datasource or maxDataPoints, which are read from backend.DataQuery or
+// not used, and a field decoded here makes the whole query invalid when its value has an unexpected type.
 type PIWebAPIQuery struct {
-	Attributes []QueryProperties `json:"attributes"`
-	Datasource struct {
-		Type string `json:"type"`
-		UID  string `json:"uid"`
-	} `json:"datasource"`
-	DatasourceID  int `json:"datasourceId"`
+	Attributes    []QueryProperties `json:"attributes"`
 	DigitalStates *struct {
 		Enable *bool `json:"enable"`
 	} `json:"digitalStates"`
@@ -93,22 +86,18 @@ type PIWebAPIQuery struct {
 		Enable *bool `json:"enable"`
 	} `json:"useLastValue"`
 	EnableStreaming *QueryStreaming `json:"EnableStreaming"`
-	ElementPath     string          `json:"elementPath"`
 	Expression      string          `json:"expression"`
-	Hide            bool            `json:"hide"`
 	Interpolate     struct {
 		Enable   bool   `json:"enable"`
 		Interval string `json:"interval"`
 	} `json:"interpolate"`
 	IsPiPoint      bool `json:"isPiPoint"`
 	HideError      bool `json:"hideError"`
-	MaxDataPoints  *int `json:"maxDataPoints"`
 	RecordedValues *struct {
 		Enable       *bool   `json:"enable"`
 		MaxNumber    *int    `json:"maxNumber"`
 		BoundaryType *string `json:"boundaryType"`
 	} `json:"recordedValues"`
-	RefID   *string       `json:"refId"`
 	Regex   *Regex        `json:"regex"`
 	Nodata  *string       `json:"nodata"`
 	Summary *QuerySummary `json:"summary"`
@@ -192,9 +181,7 @@ type PiProcessedQuery struct {
 	Display        *string            `json:"Display"`
 	Nodata         *string            `json:"Nodata"`
 	Regex          *Regex             `json:"Regex"`
-	Summary        *QuerySummary      `json:"Summary"`
 	HashCode       string             `json:"HashCode"`
-	StartTime      time.Time          `json:"StartTime"`
 	EndTime        time.Time          `json:"EndTime"`
 	Resource       string
 	TargetPath     string

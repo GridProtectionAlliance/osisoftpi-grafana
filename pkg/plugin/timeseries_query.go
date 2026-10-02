@@ -96,7 +96,6 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 		}
 		queryBaseURL := baseUrl + PiQuery.getQueryBaseURL()
 		streamable := PiQuery.isStreamable() && d.isUsingStreaming()
-		startTime := PiQuery.TimeRange.From.Truncate(time.Second)
 		endTime := PiQuery.TimeRange.To.Truncate(time.Second)
 		separator := PiQuery.Pi.getTargetPathSeparator()
 
@@ -120,9 +119,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				Display:        PiQuery.Pi.Display,
 				Regex:          PiQuery.Pi.Regex,
 				Nodata:         PiQuery.Pi.Nodata,
-				Summary:        PiQuery.Pi.Summary,
 				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,
-				StartTime:      startTime,
 				EndTime:        endTime,
 				Variable:       target.Variable,
 				MultiVariable:  target.MultiVariable,
@@ -595,10 +592,6 @@ func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	return "|"
 }
 
-func (q *PIWebAPIQuery) checkNilSegments() bool {
-	return q.Target == nil
-}
-
 func (q *PIWebAPIQuery) checkValidTargets() bool {
 	if q.Target == nil {
 		return false
@@ -609,7 +602,7 @@ func (q *PIWebAPIQuery) checkValidTargets() bool {
 		return false
 	}
 	// check if the target provided ends with a semicolon
-	if q.Target == nil || strings.HasSuffix(*q.Target, ";") {
+	if strings.HasSuffix(*q.Target, ";") {
 		return false
 	}
 
