@@ -76,6 +76,8 @@
   - enabled with "Enable Streaming Support" in the datasource configuration and "Enable Streaming" in the query, optionally controlled by a dashboard variable
   - streamed values follow the query settings (Replace Bad Data, Digital States, units); queries with a calculation, a summary, "Use Last Value", "Interpolate" or "Recorded Values" are not streamed, and the query editor only offers streaming, as the last option row, when none is selected
   - streaming resumes by itself after PI Web API was unavailable, and "Fill gaps after reconnect" (on by default) adds the values recorded in the meantime; connections time out after the datasource "Timeout"
+  - only time ranges ending now are streamed; each query result has its own live channel, holding the query result plus the new values
+  - the WebSocket connection uses the datasource authentication, TLS settings (CA, client certificate, TLS versions) and proxy
 - Annotation query editor: the AF server is selected in a new dropdown, and the category is a dropdown of the database categories (element categories, also used by event frames); the AF server and database set in the datasource configuration are pre-selected and cannot be changed
 - Variable queries use a query language: `points PIT-*`, `elements AFSERVER\Database\Plant searchFullHierarchy=true templateName=Pump`, `attributes AFSERVER\Database\Element nameFilter=Fl*` with the PI Web API filters (`nameFilter`, `descriptionFilter`, `categoryName`, `templateName`, `elementType`, `valueType`) and paging (`sortField`, `sortOrder`, `startIndex`, `maxCount`), shown with its help in a new variable query editor; JSON queries of earlier versions keep working
 - Rebuilt the plugin with current Grafana tooling to fix it failing to load on Grafana 12.3 and later - issue GridProtectionAlliance/osisoftpi-grafana#197
@@ -87,6 +89,19 @@
   - series of a path with several variables are named after the element path below the database (e.g. `SiteA\Unit2\Pump|Flow`); with the new data format, AF series have `database` and `path` labels
   - fixed the query editor dropping attributes that use a multi-value variable
   - fixed queries overwriting the template variables saved in the panel (attributes, elements and summary settings)
+  - the display name can use multi-value variables: each series is named with its own values
+  - variables are replaced in every query field (attributes, element path, display name, calculation, periods) also for expressions, alert rules, recorded queries and Explore, not only in the target
+  - PI point searches of the query editor search each value of a multi-value variable
+- Annotations: variables are replaced in the name filter, category and attribute name again (lost in 5.0); attributes missing on some event frames or matched by a wildcard no longer fail the query, and digital states show their name
+- Annotations report PI Web API errors per query instead of an empty result or a generic plugin error; the annotation editor keeps a saved database that differs from the configured one
+- "Forward OAuth Identity" and "Allowed cookies" are now passed to PI Web API
+- A Max Cache Time with decimals (or saved as text by provisioning) no longer breaks the datasource; it is rounded up to whole hours
+- Fixed queries whose name (RefID) contains a dot, bracket, quote or space failing until the WebID was cached
+- Recorded values return up to 1000 values by default (PI Web API's default) instead of the panel's maximum data points
+- Interpolate Period, Summary Period and Sample Interval are sent as entered, so every PI Web API time span works (e.g. `1h30m`, `1.5d`, `2 hours`); unknown values were silently replaced by `30s`
+- Fixed calculations without values in the time range failing every query of the request; calculation + summary returns one series per summary type, and calculation and summary values take the type of their values
+- "Replace Bad Data" = Keep keeps the bad value (state name or code) instead of behaving like `0`; AF attributes of type Byte and Blob return their values
+- The query editor no longer drops saved attributes that the first element of a multi-value variable does not have, and shows failed lookups
 - Fixed backend panics on queries without the optional `recordedValues` or `summary` settings, and on an invalid regex - issue GridProtectionAlliance/osisoftpi-grafana#209
 - Attributes and PI points are read from the query target when the query has no attributes list (API calls, hand-written queries) - issue GridProtectionAlliance/osisoftpi-grafana#209
 - Fixed AF elements, attributes and PI points with `#`, `&`, `+`, `%` or spaces in their names not returning data; calculation expressions and event frame filters are encoded too - issue GridProtectionAlliance/osisoftpi-grafana#186

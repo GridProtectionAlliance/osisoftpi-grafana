@@ -10,7 +10,7 @@
     "lint:fix": "yarn run lint --fix && prettier --write --list-different .",
     "server": "docker compose up --build",
     "sign": "sign-plugin",
-    "start": "yarn watch",
+    "start": "yarn dev",
     "test": "jest --watch --onlyChanged",
     "test:ci": "jest --passWithNoTests --maxWorkers 4",
     "typecheck": "tsc --noEmit",

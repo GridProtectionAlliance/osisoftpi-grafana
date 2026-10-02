@@ -26,15 +26,11 @@ PI Web API simulator). Each item says where the change goes and what it brings.
   `timeEnd < 0` check (`annotation_query.go`, `src/datasource.ts`). Make the end time nullable for open event frames.
 - **Event frame search is capped at PI Web API's default `maxCount` (1000)** without a warning
   (`annotation_query.go`). Page through `Links.Next` or add a configurable maximum and a notice when truncated.
-- **Annotation batch URLs do not normalise the datasource URL** (`annotation_query.go`): with a URL without trailing
-  slash the attribute request is `.../piwebapistreamsets/...`. Use the same base-URL helper as the time series code.
 - **Every failing target is logged at Error level**, also with "Ignore API Error?" on (`processBatchtoFrames`). Log
   hidden errors at Debug and one line per query otherwise.
 - **The call-rate limiter divides by zero** in the first second and sleeps while holding the datasource lock
   (`datasource.go`, `updateRate`). Replace it with `golang.org/x/time/rate` before the request, outside the lock, or
   remove it (it counts QueryData calls, not PI Web API requests).
-- **Credentials embedded in the datasource URL** (`https://user:pass@host/piwebapi`) are logged on WebSocket dial
-  failures; move them to the Authorization header or reject them, and log `url.Redacted()`.
 - **Time series tracing span is named like the annotation span** ("New annotation query recieved"); rename both and
   add attributes (query count, expanded targets, sub-requests, cache hits).
 
@@ -94,10 +90,21 @@ PI Web API simulator). Each item says where the change goes and what it brings.
   Use a per-key in-flight dial.
 - **All streamable WebIDs of a request go into one channel URL**; large expansions can exceed the HTTP.sys request
   line limit (16 KB). Split into connections of at most ~100 WebIDs.
-- **Channel paths only work in the plugin process that served the query** (Grafana HA, plugin restart). Encode the
-  WebID and stream settings in the channel path so any instance can rebuild the stream.
+- **Channel paths only work in the plugin process that served the query** (Grafana HA, plugin restart; a new
+  instance after saving the settings takes over the channels). Encode the WebID and stream settings in the channel
+  path so any instance can rebuild the stream.
+- **One channel per query result**: a refresh or a new time range creates new channels; the old ones close when
+  Grafana unsubscribes and are removed after 2 minutes. A dashboard with many live panels and frequent refreshes can
+  reach Grafana Live's per-connection channel limit (128 by default). Consider a stable channel per panel with a
+  frame that resets the buffer.
 
 ### Security
+
+- **Response cache with forwarded identity**: the experimental response cache is keyed by the query only, so with
+  "Forward OAuth Identity" or forwarded cookies one user can be shown another user's cached response (documented in
+  the README). Key the cache by user (or by a hash of the forwarded headers), or disable it when forwarding is on.
+- **Streaming does not use the forwarded identity**: channels are opened with the datasource credentials only, as
+  `RunStream` has no user headers. Pass the subscriber's forwarded headers (or refuse streaming with forwarding).
 
 - **Resource proxy allow-list** checks only the first path segment. Match the exact paths the editors use
   (collection, optional WebID, allowed child collection).

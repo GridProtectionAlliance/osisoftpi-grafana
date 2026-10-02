@@ -16,8 +16,9 @@ Create a new instance of the data source from the Grafana Data Sources administr
 
 - **URL**: the PI Web API endpoint, e.g. `https://server/piwebapi`.
 - **Authentication**: PI Web API usually needs "Basic" authentication enabled; enter its credentials here. Custom HTTP
-  headers (e.g. a static `Authorization` header) and TLS client certificates are also supported. Kerberos and NTLM are
-  not supported. **Timeout** applies to every PI Web API request.
+  headers (e.g. a static `Authorization` header) and TLS client certificates are also supported, and "Forward OAuth
+  Identity" and "Allowed cookies" pass the Grafana user's token or cookies to PI Web API. Kerberos and NTLM are not
+  supported. **Timeout** applies to every PI Web API request.
 - **Max Cache Time**: how long the WebIDs of PI points and attributes are cached (12 hours by default).
 - **Enable PI Points in Query**: allows queries of PI points (PI Data Archive) in addition to AF attributes.
 - **Enable New Data Format**: series are named after the attribute or point, with `element`, `database`, `path`,
@@ -28,6 +29,8 @@ Create a new instance of the data source from the Grafana Data Sources administr
   changed, in annotations, and are used by variable queries without a server or database.
 - **Enable Experimental Features > Enable Response Cache**: when a PI Web API request fails, the last successful
   response of the same query is shown instead of the error, with its last value extended to the end of the time range.
+  The cache is shared by all users of the datasource: do not enable it with "Forward OAuth Identity" or forwarded
+  cookies when users may see different PI data, as one user could then be shown another user's cached response.
 
 NOTE: If you are using PI Vision (PI-Coresight), it is recommended to create a separate instance of PI Web API for use
 with this plugin. See the [PI Web API documentation](https://docs.aveva.com/bundle/pi-web-api) for more information on
@@ -51,17 +54,20 @@ Query options:
 | Calculation | PI Web API expression applied to every attribute, e.g. `'.' * 2` (`'.'` is the attribute or point). |
 | Use Last Value | Only the value at the end of the time range. `Ignore end time` returns the last value of the stream instead. |
 | Digital States | Shows digital state names instead of their codes. |
-| Replace Bad Data | Replacement of bad values (e.g. `Shutdown`, `Calc Failed`): `Null`, `Drop`, `Previous`, `0` or `Keep`. |
+| Replace Bad Data | Replacement of bad values (e.g. `Shutdown`, `Calc Failed`): `Null`, `Drop`, `Previous`, `0` or `Keep` (the bad value itself: the state name in text series and with Digital States, its code in numeric series). |
 | Use unit from datapoints | Adds the unit of the point or attribute to the series (requires "Enable Unit From Data"). |
 | Interpolate | Interpolated values every `Interpolate Period` (default: time range / panel width). |
-| Recorded Values | Values as recorded in PI, up to `Max Recorded Values`, with the given `Boundary Type` (default `Inside`). |
+| Recorded Values | Values as recorded in PI, up to `Max Recorded Values` (default 1000), with the given `Boundary Type` (default `Inside`). |
 | Summary | Summary values (`Average`, `Maximum`, ...) per `Summary Period`, with the `Summary Basis` of PI Web API. |
 | Enable Streaming | Live values, see [Live streaming](#live-streaming). |
-| Display Name | Name of the series. With `Enable Regex Replace`, the name is changed with a regular expression (`Search`, `Replace`). |
+| Display Name | Name of the series; multi-value variables are replaced with the values of each series, e.g. `${element} ${attribute}`. With `Enable Regex Replace`, the name is changed with a regular expression (`Search`, `Replace`). |
 | Ignore API Error? | Errors of PI Web API are not shown in the panel. |
 
 Without Interpolate, Recorded Values or Summary, the plot values of PI Web API are returned, sized to the panel width
 (with a calculation: the calculated values at each recorded event).
+
+Interpolate Period, Summary Period and Sample Interval are PI Web API time spans, sent as entered: e.g. `30s`, `5m`,
+`1h30m`, `1.5d`, `2 hours`. An invalid value returns PI Web API's error.
 
 ## Querying via the PI Dataserver (PI Points)
 
@@ -87,7 +93,9 @@ The query returns the values of the time range, and new values are then added to
   "Use Last Value", "Interpolate", "Recorded Values" or a summary. While streaming is enabled, these options are hidden.
 - The WebSocket connection uses the datasource's authentication (basic authentication, custom HTTP headers), TLS
   settings and "Timeout" (30 seconds when not set).
-- Live values are added only when the time range ends at "now" (e.g. "Last 6 hours").
+- Live values are added only when the time range ends at "now" (e.g. "Last 6 hours"). Each query result has its own
+  live channel, so a refresh or a new time range starts from the new result, and saving the datasource settings does
+  not stop running panels.
 - When PI Web API is unavailable, streaming resumes by itself once it is back. With "Fill gaps after reconnect" (on by
   default), the values recorded in the meantime are then added to the panel, up to the query's maximum data points;
   when it is off, or for attributes without recorded values, they are shown at the next refresh of the panel.
