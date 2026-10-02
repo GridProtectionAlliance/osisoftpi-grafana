@@ -53,12 +53,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
 
-	var maxDuration int
-	if dataSourceOptions.MaxCacheTime != nil && *dataSourceOptions.MaxCacheTime > 0 {
-		maxDuration = *dataSourceOptions.MaxCacheTime
-	} else {
-		maxDuration = 12
-	}
+	maxDuration := dataSourceOptions.MaxCacheTime.orDefault()
 	webIDCache := newWebIDCache(maxDuration)
 	webCache := newCache[string, PiBatchData]()
 
