@@ -1,4 +1,4 @@
-import { filter, map } from 'lodash';
+import { filter, flatten, map, uniqBy } from 'lodash';
 
 import { Observable, of } from 'rxjs';
 
@@ -21,6 +21,7 @@ import { PiWebAPIVariableSupport } from './variableSupport';
 import { PIWebAPIQuery, PIWebAPIDataSourceJsonData, PIWebAPISelectableValue, PiDataServer, PiwebapiRsp } from './types';
 import {
   buildQueryString,
+  expandVariableValues,
   firstVariableValue,
   formatVariableValue,
   hashCode,
@@ -30,6 +31,9 @@ import {
 } from 'helper';
 
 import { PiWebAPIAnnotationsQueryEditor } from 'query/AnnotationsQueryEditor';
+
+/** The maximum number of PI point searches made for the values of the multi-value variables in a name filter. */
+const MAX_POINT_SEARCHES = 10;
 
 export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
   piserver: PiDataServer;
@@ -277,7 +281,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     } else if (query.type === 'dataserver') {
       return ds.getDataServers().then(metricQueryTransform);
     } else if (query.type === 'pipoint') {
-      return ds.piPointSearch(query.webId, query.pointName).then(metricQueryTransform);
+      return ds.piPointSearch(query.webId, query.pointName, queryOptions).then(metricQueryTransform);
     }
     return Promise.reject('Bad type');
   }
@@ -601,40 +605,23 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
 
   /**
    * Retrieve a list of points on a specified Data Server.
+   * A multi-value variable in the name filter is searched value by value (at most MAX_POINT_SEARCHES searches) and
+   * the points found are merged.
    *
    * @param {string} serverId - The ID of the server. See WebID for more information.
    * @param {string} nameFilter - A query string for filtering by point name. The default is no filter. *, ?, [ab], [!ab]
+   * @param {ScopedVars} scopedVars - The template variables of the panel.
    */
-  private piPointSearch(serverId: string, nameFilter: string): Promise<PiwebapiRsp[]> {
-    let filter1 = this.templateSrv.replace(nameFilter);
-    let filter2 = `${filter1}`;
-    let doFilter = false;
-    if (filter1 !== nameFilter) {
-      const regex = /\{(\w|,)+\}/g;
-      let m;
-      while ((m = regex.exec(filter1)) !== null) {
-        // This is necessary to avoid infinite loops with zero-width matches
-        if (m.index === regex.lastIndex) {
-          regex.lastIndex++;
-        }
-
-        // The result can be accessed through the `m`-variable.
-        m.forEach((match, groupIndex) => {
-          if (groupIndex === 0) {
-            filter1 = filter1.replace(match, match.replace('{', '(').replace('}', ')').replace(',', '|'));
-            filter2 = filter2.replace(match, '*');
-            doFilter = true;
-          }
-        });
-      }
-    }
-    return this.restGet(
-      '/dataservers/' + serverId + '/points' + buildQueryString({ maxCount: 100, nameFilter: filter2 })
-    ).then((results) => {
-      if (!!results && !!results?.Items) {
-        return doFilter ? results.Items.filter((item) => item.Name?.match(filter1)) : results.Items;
-      }
-      return [];
-    });
+  private piPointSearch(serverId: string, nameFilter: string, scopedVars?: ScopedVars): Promise<PiwebapiRsp[]> {
+    const nameFilters = expandVariableValues(
+      this.templateSrv.replace(nameFilter, scopedVars, formatVariableValue),
+      MAX_POINT_SEARCHES
+    );
+    const searches = nameFilters.map((name) =>
+      this.restGet('/dataservers/' + serverId + '/points' + buildQueryString({ maxCount: 100, nameFilter: name })).then(
+        (results) => results?.Items ?? []
+      )
+    );
+    return Promise.all(searches).then((results) => uniqBy(flatten(results), (item) => item.WebId ?? item.Name));
   }
 }

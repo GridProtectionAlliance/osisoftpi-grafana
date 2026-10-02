@@ -1,5 +1,6 @@
 import {
   buildQueryString,
+  expandVariableValues,
   firstVariableValue,
   formatVariableValue,
   removeServerPrefix,
@@ -37,6 +38,24 @@ describe('firstVariableValue', () => {
 
   it('keeps paths without groups', () => {
     expect(firstVariableValue('\\\\AF\\DB\\Site')).toBe('\\\\AF\\DB\\Site');
+  });
+});
+
+describe('expandVariableValues', () => {
+  it('gives every combination of the values of the groups', () => {
+    expect(expandVariableValues('{A,B}-{1,2}*')).toEqual(['A-1*', 'A-2*', 'B-1*', 'B-2*']);
+  });
+
+  it('decodes the values and keeps texts without groups', () => {
+    expect(expandVariableValues(formatVariableValue(['T-101.Level', 'Pump 1, North']) + '*')).toEqual([
+      'T-101.Level*',
+      'Pump 1, North*',
+    ]);
+    expect(expandVariableValues('SINUSOID')).toEqual(['SINUSOID']);
+  });
+
+  it('keeps at most the given number of combinations', () => {
+    expect(expandVariableValues('{A,B,C}{1,2,3}', 4)).toEqual(['A1', 'A2', 'A3', 'B1']);
   });
 });
 

@@ -218,6 +218,45 @@ describe('applyTemplateVariables', () => {
   });
 });
 
+describe('PI point search', () => {
+  afterAll(() => delete (PiWebAPIDatasource.prototype as any).getResource);
+  const points: Record<string, string[]> = {
+    'SINUSOID*': ['SINUSOID', 'SINUSOIDU'],
+    'CDT158*': ['CDT158'],
+    'BA:TEMP.1*': ['BA:TEMP.1'],
+    'T-101*': ['T-101.Level', 'T-101.Volume'],
+    SINUSOID: ['SINUSOID'],
+  };
+
+  function search(pointName: string) {
+    const requests: string[] = [];
+    (PiWebAPIDatasource.prototype as any).getResource = (path: string) => {
+      requests.push(path);
+      const nameFilter = new URLSearchParams(path.split('?')[1]).get('nameFilter') ?? '';
+      return Promise.resolve({ Items: (points[nameFilter] ?? []).map((name) => ({ Name: name, WebId: name })) });
+    };
+    const ds = newDatasource();
+    return ds
+      .metricFindQuery({ type: 'pipoint', webId: 'P1', pointName }, { isPiPoint: true })
+      .then((values) => ({ names: values.map((v) => v.text), requests }));
+  }
+
+  it('searches the points of each value of a multi-value variable', async () => {
+    const { names, requests } = await search('$tags*');
+    expect(names).toEqual(['SINUSOID', 'SINUSOIDU', 'CDT158', 'BA:TEMP.1']);
+    expect(requests).toEqual([
+      '/dataservers/P1/points?maxCount=100&nameFilter=SINUSOID*',
+      '/dataservers/P1/points?maxCount=100&nameFilter=CDT158*',
+      '/dataservers/P1/points?maxCount=100&nameFilter=BA%3ATEMP.1*',
+    ]);
+  });
+
+  it('searches single values and names without variables as they are', async () => {
+    expect((await search('$elem*')).names).toEqual(['T-101.Level', 'T-101.Volume']);
+    expect((await search('SINUSOID')).names).toEqual(['SINUSOID']);
+  });
+});
+
 describe('legacy queries (issue GridProtectionAlliance/osisoftpi-grafana#194)', () => {
   it('sends the summary and bad data replacement of a 4.x query in the current format', () => {
     const target = {
