@@ -20,8 +20,6 @@ func TestAllowedResourceURL(t *testing.T) {
 		{"elements?path=%5C%5CAF%5CDB%5CMachine%231", "elements?path=%5C%5CAF%5CDB%5CMachine%231"},
 		{"/elements/F1EM-_x/attributes?searchFullHierarchy=true", "elements/F1EM-_x/attributes?searchFullHierarchy=true"},
 		{"elements/F1EM/elements", "elements/F1EM/elements"},
-		{"points?path=%5C%5CPI%5CSINUSOID", "points?path=%5C%5CPI%5CSINUSOID"},
-		{"attributes?path=%5C%5CAF%7CLevel", "attributes?path=%5C%5CAF%7CLevel"},
 		// PI Web API paths are case-insensitive
 		{"Elements/F1EM/Attributes", "Elements/F1EM/Attributes"},
 	}
@@ -52,6 +50,12 @@ func TestAllowedResourceURL(t *testing.T) {
 		"elements/%2e%2e/batch",
 		"elements/F1EM#fragment",
 		"?path=elements",
+		// collections the frontend does not read at the top level
+		"points?path=%5C%5CPI%5CSINUSOID",
+		"points/F1DP/value",
+		"attributes?path=%5C%5CAF%7CLevel",
+		"attributes/F1AbE/value",
+		"annotations",
 	}
 	for _, url := range denied {
 		if got, ok := allowedResourceURL(url); ok {
