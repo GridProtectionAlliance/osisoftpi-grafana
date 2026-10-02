@@ -8,7 +8,6 @@ import (
 
 type Query struct {
 	RefID         string `json:"RefID"`
-	QueryType     string `json:"QueryType"`
 	MaxDataPoints int    `json:"MaxDataPoints"`
 	Interval      int64  `json:"Interval"`
 	TimeRange     struct {
@@ -26,10 +25,6 @@ func (q *Query) isValidQuery() error {
 		return fmt.Errorf("no targets found in query")
 	}
 
-	if q.Pi.checkNilSegments() {
-		return fmt.Errorf("no segments found in query")
-	}
-
 	return nil
 }
 
@@ -38,25 +33,6 @@ func (q *Query) getIntervalTime() string {
 		return q.Pi.Interpolate.Interval
 	}
 	return fmt.Sprintf("%dms", q.Interval/1e6)
-}
-
-func (q *Query) getWindowedTimeStampURI() string {
-	// Potential Improvement: Make windowWidth a user input
-	windowWidth := q.getMaxDataPoints()
-	fromTime := q.TimeRange.From.Truncate(time.Second)
-	toTime := q.TimeRange.To.Truncate(time.Second)
-
-	diff := toTime.Sub(fromTime).Nanoseconds() / int64(windowWidth)
-	timeQuery := "time=" + fromTime.Format(time.RFC3339)
-
-	for i := 1; i < windowWidth; i++ {
-		newTime := fromTime.Add(time.Duration(i * int(diff)))
-		timeQuery += "&time=" + newTime.Format(time.RFC3339)
-	}
-
-	timeQuery += "&time=" + toTime.Format(time.RFC3339)
-
-	return "/times?" + timeQuery
 }
 
 func (q *Query) getTimeRangeURIComponent() string {
@@ -76,19 +52,20 @@ func (q *Query) isstreamingEnabled() bool {
 	return streamingEnabled
 }
 
-func (q *Query) isStreamable() bool {
-	return !q.Pi.isExpression() && q.isstreamingEnabled()
+// isStreamFillGaps returns true when "Fill gaps after reconnect" is on (the default): after the stream reconnects,
+// the values recorded while it was disconnected are sent to the panel.
+func (q *Query) isStreamFillGaps() bool {
+	return q.Pi.EnableStreaming == nil || q.Pi.EnableStreaming.FillGaps == nil || *q.Pi.EnableStreaming.FillGaps
 }
 
-// func (q *PiProcessedQuery) isSummary() bool {
-// 	if q.Summary == nil {
-// 		return false
-// 	}
-// 	if q.Summary.Types == nil {
-// 		return false
-// 	}
-// 	return *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
-// }
+// isStreamable returns true when the query can be updated with the values streamed by PI Web API channels: these
+// are raw values, so calculations, summaries, last values, interpolated and recorded values are not streamed (the
+// query editor hides the streaming settings when one of them is selected).
+func (q *Query) isStreamable() bool {
+	summaryEnabled := q.Pi.Summary != nil && q.Pi.Summary.Enable != nil && *q.Pi.Summary.Enable
+	return !q.Pi.isExpression() && !q.Pi.isSummary() && !summaryEnabled && !q.Pi.isUseLastValue() &&
+		!q.Pi.isInterpolated() && !q.Pi.isRecordedValues() && q.isstreamingEnabled()
+}
 
 func (q *PiProcessedQuery) getNoDataReplace() string {
 	if q.Nodata == nil {
@@ -97,41 +74,32 @@ func (q *PiProcessedQuery) getNoDataReplace() string {
 	return *q.Nodata
 }
 
+// PIWebAPIQuery is the query saved by the query editor. Only the fields read by the backend are decoded: the saved
+// query also has fields such as refId, hide, datasource or maxDataPoints, which are read from backend.DataQuery or
+// not used, and a field decoded here makes the whole query invalid when its value has an unexpected type.
 type PIWebAPIQuery struct {
-	Attributes []QueryProperties `json:"attributes"`
-	Datasource struct {
-		Type string `json:"type"`
-		UID  string `json:"uid"`
-	} `json:"datasource"`
-	DatasourceID  int `json:"datasourceId"`
+	Attributes    []QueryProperties `json:"attributes"`
 	DigitalStates *struct {
 		Enable *bool `json:"enable"`
 	} `json:"digitalStates"`
 	UseLastValue *struct {
 		Enable *bool `json:"enable"`
 	} `json:"useLastValue"`
-	EnableStreaming *struct {
-		Enable *bool `json:"enable"`
-	} `json:"EnableStreaming"`
-	ElementPath string `json:"elementPath"`
-	Expression  string `json:"expression"`
-	Hide        bool   `json:"hide"`
-	Interpolate struct {
+	EnableStreaming *QueryStreaming `json:"EnableStreaming"`
+	Expression      string          `json:"expression"`
+	Interpolate     struct {
 		Enable   bool   `json:"enable"`
 		Interval string `json:"interval"`
 	} `json:"interpolate"`
 	IsPiPoint      bool `json:"isPiPoint"`
 	HideError      bool `json:"hideError"`
-	MaxDataPoints  *int `json:"maxDataPoints"`
 	RecordedValues *struct {
 		Enable       *bool   `json:"enable"`
 		MaxNumber    *int    `json:"maxNumber"`
 		BoundaryType *string `json:"boundaryType"`
 	} `json:"recordedValues"`
-	RefID  *string `json:"refId"`
-	Regex  *Regex  `json:"regex"`
-	Nodata *string `json:"nodata"`
-	// Segments *[]string     `json:"segments"`
+	Regex   *Regex        `json:"regex"`
+	Nodata  *string       `json:"nodata"`
 	Summary *QuerySummary `json:"summary"`
 	Target  *string       `json:"target"`
 	Display *string       `json:"display"`
@@ -139,6 +107,17 @@ type PIWebAPIQuery struct {
 		Enable *bool `json:"enable"`
 	} `json:"useUnit"`
 	HashCode string `json:"hashCode"`
+	// QueryVersion is the format version of the saved query (see queryVersion); 0 when saved before 6.0
+	QueryVersion int `json:"queryVersion"`
+	// PluginVersion is the version of the plugin that last saved the query, for information only
+	PluginVersion string `json:"pluginVersion"`
+}
+
+// QueryStreaming holds the streaming options of a query.
+type QueryStreaming struct {
+	Enable *bool `json:"enable"`
+	// FillGaps is "Fill gaps after reconnect"; on when not set
+	FillGaps *bool `json:"fillGaps"`
 }
 
 type QuerySummary struct {
@@ -148,6 +127,9 @@ type QuerySummary struct {
 	Types              *[]SummaryType `json:"types"`
 	SampleTypeInterval *bool          `json:"sampleTypeInterval"`
 	SampleInterval     *string        `json:"sampleInterval"`
+	// Interval and Nodata are only in queries saved by versions 4.x and 5.0 (see migrateLegacySummary)
+	Interval *string `json:"interval,omitempty"`
+	Nodata   *string `json:"nodata,omitempty"`
 }
 
 type QueryPropertiesValue struct {
@@ -185,34 +167,36 @@ type FrameProcessed struct {
 }
 
 type PiProcessedQuery struct {
-	Label               string             `json:"Label"`
-	WebID               string             `json:"WebID"`
-	UID                 string             `json:"-"`
-	IntervalNanoSeconds int64              `json:"IntervalNanoSeconds"`
-	IsPIPoint           bool               `json:"IsPiPoint"`
-	HideError           bool               `json:"HideError"`
-	Streamable          bool               `json:"isStreamable"`
-	FullTargetPath      string             `json:"FullTargetPath"`
-	ResponseUnits       string             `json:"ResponseUnits"`
-	BatchRequest        BatchSubRequestMap `json:"BatchRequest"`
-	Response            PiBatchData        `json:"ResponseData"`
-	UseUnit             bool               `json:"UseUnit"`
-	DigitalStates       bool               `json:"DigitalStates"`
-	Display             *string            `json:"Display"`
-	Nodata              *string            `json:"Nodata"`
-	Regex               *Regex             `json:"Regex"`
-	Summary             *QuerySummary      `json:"Summary"`
-	HashCode            string             `json:"HashCode"`
-	StartTime           time.Time          `json:"StartTime"`
-	EndTime             time.Time          `json:"EndTime"`
-	Resource            string
-	TargetPath          string
-	Variable            string
-	RefID               string
-	Error               error
-	Status              int
-	Cached              bool
-	Index               int
+	Label          string             `json:"Label"`
+	WebID          string             `json:"WebID"`
+	UID            string             `json:"-"`
+	IsPIPoint      bool               `json:"IsPiPoint"`
+	HideError      bool               `json:"HideError"`
+	Streamable     bool               `json:"isStreamable"`
+	FullTargetPath string             `json:"FullTargetPath"`
+	BatchRequest   BatchSubRequestMap `json:"BatchRequest"`
+	Response       PiBatchData        `json:"ResponseData"`
+	UseUnit        bool               `json:"UseUnit"`
+	DigitalStates  bool               `json:"DigitalStates"`
+	Display        *string            `json:"Display"`
+	Nodata         *string            `json:"Nodata"`
+	Regex          *Regex             `json:"Regex"`
+	HashCode       string             `json:"HashCode"`
+	StartTime      time.Time          `json:"StartTime"`
+	EndTime        time.Time          `json:"EndTime"`
+	Resource       string
+	TargetPath     string
+	Variable       string
+	MultiVariable  bool
+	PluginVersion  string
+	// StreamFillGaps and MaxDataPoints are used to fill the gap in the stream after a reconnect
+	StreamFillGaps bool
+	MaxDataPoints  int
+	RefID          string
+	Error          error
+	Status         int
+	Cached         bool
+	Index          int
 }
 
 type Links struct {

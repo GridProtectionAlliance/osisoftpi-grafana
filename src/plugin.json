@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "name": "OSIsoft-PI",
   "type": "datasource",
   "id": "gridprotectionalliance-osisoftpi-datasource",
@@ -8,7 +8,7 @@
   "metrics": true,
   "annotations": true,
   "alerting": true,
-  "streaming": false,
+  "streaming": true,
   "info": {
     "description": "Datasource plugin for OSIsoft PI Web API",
     "author": {
@@ -35,15 +35,16 @@
       }
     ],
     "screenshots": [
-      {"name": "Query Editor", "path": "img/configurator.png"},
+      {"name": "Query Editor", "path": "img/query_editor.png"},
       {"name": "Datasource Configuration", "path": "img/configuration.png"},
-      {"name": "Annotations Editor", "path": "img/annotations.png"}
+      {"name": "Variable Query Editor", "path": "img/variable_query.png"},
+      {"name": "Annotations Editor", "path": "img/annotation_query.png"}
     ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=10.1.0",
+    "grafanaDependency": ">=11.6.0",
     "plugins": []
   }
 }
