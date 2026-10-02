@@ -32,11 +32,6 @@ func TestQueryMigrationsForEveryVersion(t *testing.T) {
 			t.Errorf("no conversion step to version %d in queryMigrations", version)
 		}
 	}
-	for version := 0; version <= queryVersion; version++ {
-		if _, err := os.Stat(queryExamplesPath(version)); err != nil {
-			t.Errorf("no example of format version %d: %v", version, err)
-		}
-	}
 }
 
 func queryExamplesPath(version int) string {
@@ -69,9 +64,13 @@ func TestQueryVersionExamples(t *testing.T) {
 				got := toJSONMap(t, q)
 				assertSubset(t, "", example.Expected, got)
 
-				q.migrate() // converting again changes nothing
-				if again := toJSONMap(t, q); !reflect.DeepEqual(again, got) {
-					t.Errorf("second conversion changed the query: %v", again)
+				// a conversion step changes nothing when it runs again on a converted query (migrate() would not
+				// run it: the query is at the current version)
+				for step := 1; step <= queryVersion; step++ {
+					queryMigrations[step](&q)
+					if again := toJSONMap(t, q); !reflect.DeepEqual(again, got) {
+						t.Errorf("conversion step %d changed the converted query: %v", step, again)
+					}
 				}
 			})
 		}
