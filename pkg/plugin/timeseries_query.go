@@ -95,7 +95,8 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 			baseUrl += "/"
 		}
 		queryBaseURL := baseUrl + PiQuery.getQueryBaseURL()
-		streamable := PiQuery.isStreamable() && d.isUsingStreaming()
+		streamable := PiQuery.isStreamable() && d.isUsingStreaming() && rangeEndsNow(PiQuery.TimeRange.To)
+		startTime := PiQuery.TimeRange.From.Truncate(time.Second)
 		endTime := PiQuery.TimeRange.To.Truncate(time.Second)
 		separator := PiQuery.Pi.getTargetPathSeparator()
 
@@ -120,6 +121,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				Regex:          PiQuery.Pi.Regex,
 				Nodata:         PiQuery.Pi.Nodata,
 				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,
+				StartTime:      startTime,
 				EndTime:        endTime,
 				Variable:       target.Variable,
 				MultiVariable:  target.MultiVariable,
@@ -373,22 +375,17 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 		}
 	}
 	var connectionKey string
+	var connectionWebIDs []string
 	if len(streamableWebIDs) > 0 {
 		sort.Strings(streamableWebIDs)
 		// Deduplicate (same tag may appear in multiple summary types)
-		uniq := streamableWebIDs[:0]
+		connectionWebIDs = streamableWebIDs[:0]
 		for i, id := range streamableWebIDs {
 			if i == 0 || id != streamableWebIDs[i-1] {
-				uniq = append(uniq, id)
+				connectionWebIDs = append(connectionWebIDs, id)
 			}
 		}
-		connectionKey = strings.Join(uniq, "|")
-		// Copy to break the reference to the local slice's backing array before long-term storage.
-		webIDsCopy := make([]string, len(uniq))
-		copy(webIDsCopy, uniq)
-		d.datasourceMutex.Lock()
-		d.connectionKeyWebIDs[connectionKey] = webIDsCopy
-		d.datasourceMutex.Unlock()
+		connectionKey = strings.Join(connectionWebIDs, "|")
 	}
 
 	for RefID, query := range processedQuery {
@@ -414,50 +411,10 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 				frame.Meta.ExecutedQueryString = strings.ReplaceAll(q.Resource, "{0}", q.WebID)
 
 				// If the query is streamable, register a channel so Grafana subscribes to
-				// the live WebSocket stream for this tag. A generation counter is embedded in
-				// the key: while the subscription is alive the generation stays constant
-				// (repeated QueryData calls reuse the same centrifuge subscription, preventing
-				// accumulation past ClientChannelLimit=128). When a subscription ends the
-				// generation is incremented in sendStreamData, so the next QueryData call
-				// returns a new channel URI → Grafana creates a fresh LiveDataStream →
-				// panels recover from the "streaming channel error: expired" state.
+				// the live WebSocket stream for this tag.
 				if q.Streamable {
-					settings := streamSettings(&q)
-					genKey := q.WebID + "|" + settings
-					d.datasourceMutex.Lock()
-					gen := d.channelGenerations[genKey]
-					channelKey := channelKeyFor(q.WebID, settings, gen)
-					_, exists := d.channelConstruct[channelKey]
-					d.datasourceMutex.Unlock()
-					channelURI := "ds/" + q.UID + "/" + channelKey
-					if !exists {
-						// buildStreamFrameCache acquires datasourceMutex internally
-						// (via WebID cache lookups), so it must be called outside the lock.
-						// the stream converts only the new values: without the query response, which is not kept
-						streamQuery := q
-						streamQuery.Response = nil
-						streamQuery.Cached = false
-						channel := StreamChannelConstruct{
-							WebID:         q.WebID,
-							ConnectionKey: connectionKey,
-							query:         &streamQuery,
-							frameCache:    buildStreamFrameCache(d, &q),
-							generationKey: genKey,
-						}
-						d.datasourceMutex.Lock()
-						// Re-check after building: a concurrent goroutine may have registered
-						// first, or sendStreamData may have incremented the generation.
-						// Read the latest gen and recompute key to avoid registering stale entries.
-						gen = d.channelGenerations[genKey]
-						channelKey = channelKeyFor(q.WebID, settings, gen)
-						channelURI = "ds/" + q.UID + "/" + channelKey
-						if _, exists = d.channelConstruct[channelKey]; !exists {
-							channel.generationKey = genKey
-							d.channelConstruct[channelKey] = channel
-						}
-						d.datasourceMutex.Unlock()
-					}
-					frame.Meta.Channel = channelURI
+					channelKey := d.registerStreamChannel(&q, *q.Response.getItems(SummaryType), connectionKey, connectionWebIDs)
+					frame.Meta.Channel = "ds/" + q.UID + "/" + channelKey
 				}
 
 				subResponse.Frames = append(subResponse.Frames, frame)
@@ -478,14 +435,13 @@ func streamSettings(q *PiProcessedQuery) string {
 	return fmt.Sprintf("digitalStates=%t|nodata=%s|fillGaps=%t", q.DigitalStates, q.getNoDataReplace(), q.StreamFillGaps)
 }
 
-// channelKeyFor returns a stable, deterministic 16-char hex key for a streaming channel.
-// The generation parameter is incremented each time a subscription ends (see sendStreamData),
-// so a recovered or expired subscription gets a new key → new Grafana LiveDataStream →
-// panel recovers. While a subscription is alive the generation stays constant, so repeated
-// QueryData calls (e.g. on time-range changes) reuse the same centrifuge subscription and
-// never accumulate past ClientChannelLimit (128).
-func channelKeyFor(webID, settings string, gen uint32) string {
-	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d", webID, settings, gen)))
+// channelKeyFor returns the channel path of a query's PI tag: a 16-char hex key of the tag, the stream settings,
+// and the time range and maximum data points of the query. Each query result gets its own channel: Grafana keeps
+// the buffer of a channel it already streams and ignores the frame of a new query result (e.g. after a time range
+// change or a refresh), and the panels using a channel share its buffer.
+func channelKeyFor(q *PiProcessedQuery) string {
+	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d|%d|%d", q.WebID, streamSettings(q),
+		q.StartTime.UnixNano(), q.EndTime.UnixNano(), q.MaxDataPoints)))
 	return hex.EncodeToString(h[:8])
 }
 

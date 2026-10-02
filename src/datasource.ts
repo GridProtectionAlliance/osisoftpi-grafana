@@ -12,6 +12,7 @@ import {
   DataQueryRequest,
   DataQueryResponse,
   SelectableValue,
+  StreamingFrameAction,
 } from '@grafana/data';
 import { getTemplateSrv, TemplateSrv, DataSourceWithBackend } from '@grafana/runtime';
 
@@ -55,6 +56,16 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
     this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
     this.useStreaming = instanceSettings.jsonData.useStreaming || false;
+    // The live buffer keeps the whole query result (plot queries return more rows than maxDataPoints) and room for
+    // as many live values; a range ending now keeps its length.
+    this.streamOptionsProvider = (request, frame) => {
+      const maxDataPoints = request.maxDataPoints ?? 500;
+      return {
+        maxLength: Math.max(frame.length, maxDataPoints) + maxDataPoints,
+        action: StreamingFrameAction.Append,
+        ...(request.rangeRaw?.to === 'now' && { maxDelta: request.range.to.valueOf() - request.range.from.valueOf() }),
+      };
+    };
 
     this.variables = new PiWebAPIVariableSupport(this);
 

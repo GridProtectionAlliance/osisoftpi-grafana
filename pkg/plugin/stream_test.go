@@ -3,8 +3,12 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -17,10 +21,8 @@ func newTestDatasource() *Datasource {
 		datasourceMutex:           &sync.Mutex{},
 		websocketConnectionsMutex: &sync.Mutex{},
 		channelConstruct:          make(map[string]StreamChannelConstruct),
-		channelGenerations:        make(map[string]uint32),
 		websocketConnections:      make(map[string]*websocket.Conn),
 		senderChannels:            make(map[string]map[*backend.StreamSender]chan StreamData),
-		connectionKeyWebIDs:       make(map[string][]string),
 		webIDCache:                newWebIDCache(12),
 		dataSourceOptions:         &PIWebAPIDataSourceJsonData{},
 	}
@@ -89,7 +91,7 @@ func TestSubscribeStream_PermissionDenied(t *testing.T) {
 
 func TestSubscribeStream_OK(t *testing.T) {
 	ds := newTestDatasource()
-	ds.channelConstruct["test-uuid"] = StreamChannelConstruct{WebID: "WEBID1"}
+	ds.channelConstruct["test-uuid"] = StreamChannelConstruct{WebID: "WEBID1", state: &streamChannelState{}}
 
 	resp, err := ds.SubscribeStream(context.Background(), &backend.SubscribeStreamRequest{
 		Path: "test-uuid",
@@ -118,62 +120,30 @@ func TestPublishStream_AlwaysDenied(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// addStreamSender / removeStreamSender / fan-out
+// addStreamSender / removeStreamSender
 // ---------------------------------------------------------------------------
 
 func TestAddStreamSender_CreatesChannel(t *testing.T) {
 	ds := newTestDatasource()
 	sender := &backend.StreamSender{}
-	ch := ds.addStreamSender("WEBID1", sender)
+	ch := ds.addStreamSender("K", "WEBID1", sender)
 	if ch == nil {
 		t.Fatal("expected non-nil channel")
 	}
 
 	ds.datasourceMutex.Lock()
 	defer ds.datasourceMutex.Unlock()
-	if _, ok := ds.senderChannels["WEBID1"][sender]; !ok {
+	if _, ok := ds.senderChannels[senderKey("K", "WEBID1")][sender]; !ok {
 		t.Error("sender not registered in senderChannels")
-	}
-}
-
-func TestAddStreamSender_FanOut(t *testing.T) {
-	ds := newTestDatasource()
-	s1 := &backend.StreamSender{}
-	s2 := &backend.StreamSender{}
-
-	ch1 := ds.addStreamSender("WEBID1", s1)
-	ch2 := ds.addStreamSender("WEBID1", s2)
-
-	item := StreamData{WebId: "WEBID1", Name: "TestTag"}
-
-	// Simulate what readWebsocketMessages does: deliver StreamData to all sender channels.
-	ds.datasourceMutex.Lock()
-	for _, ch := range ds.senderChannels["WEBID1"] {
-		select {
-		case ch <- item:
-		default:
-		}
-	}
-	ds.datasourceMutex.Unlock()
-
-	// Both subscribers must receive the item independently.
-	got1 := <-ch1
-	got2 := <-ch2
-
-	if got1.WebId != item.WebId {
-		t.Errorf("subscriber 1 got WebId %q, want %q", got1.WebId, item.WebId)
-	}
-	if got2.WebId != item.WebId {
-		t.Errorf("subscriber 2 got WebId %q, want %q", got2.WebId, item.WebId)
 	}
 }
 
 func TestRemoveStreamSender_ClosesChannel(t *testing.T) {
 	ds := newTestDatasource()
 	sender := &backend.StreamSender{}
-	ch := ds.addStreamSender("WEBID1", sender)
+	ch := ds.addStreamSender("K", "WEBID1", sender)
 
-	ds.removeStreamSender("WEBID1", sender)
+	ds.removeStreamSender("K", "WEBID1", sender)
 
 	// The channel must be closed — reading from it must return immediately with ok==false.
 	select {
@@ -188,7 +158,7 @@ func TestRemoveStreamSender_ClosesChannel(t *testing.T) {
 	// The sender must be removed from the map.
 	ds.datasourceMutex.Lock()
 	defer ds.datasourceMutex.Unlock()
-	if _, ok := ds.senderChannels["WEBID1"][sender]; ok {
+	if _, ok := ds.senderChannels[senderKey("K", "WEBID1")]; ok {
 		t.Error("sender still present in senderChannels after removal")
 	}
 }
@@ -196,129 +166,171 @@ func TestRemoveStreamSender_ClosesChannel(t *testing.T) {
 func TestRemoveStreamSender_Idempotent(t *testing.T) {
 	ds := newTestDatasource()
 	sender := &backend.StreamSender{}
-	ds.addStreamSender("WEBID1", sender)
-	ds.removeStreamSender("WEBID1", sender)
+	ds.addStreamSender("K", "WEBID1", sender)
+	ds.removeStreamSender("K", "WEBID1", sender)
 
 	// A second call must not panic (channel is already closed / deleted).
-	ds.removeStreamSender("WEBID1", sender)
+	ds.removeStreamSender("K", "WEBID1", sender)
 }
 
 // ---------------------------------------------------------------------------
-// checkForOrphanedWebSocket
+// readWebsocketMessages / checkForOrphanedWebSocket
 // ---------------------------------------------------------------------------
 
-func TestCheckForOrphanedWebSocket_NoSubscribers_ClosesConn(t *testing.T) {
-	// Set up a pair of connected WebSocket pipes using gorilla's test helpers.
-	// We need an actual net.Conn to verify Close() is called.  Using a simple
-	// channel-backed mock would require a custom type; instead we assert that
-	// after the call the connection is removed from the map.
+// testWebsocket is a WebSocket connection to a test server.
+type testWebsocket struct {
+	client *websocket.Conn
+	server *websocket.Conn
+	closed chan struct{} // closed when the server sees the connection close
+}
+
+func newTestWebsocket(t *testing.T) *testWebsocket {
+	t.Helper()
+	ws := &testWebsocket{closed: make(chan struct{})}
+	accepted := make(chan *websocket.Conn, 1)
+	upgrader := websocket.Upgrader{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		accepted <- conn
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				close(ws.closed)
+				return
+			}
+		}
+	}))
+	t.Cleanup(server.Close)
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	ws.client, ws.server = client, <-accepted
+	return ws
+}
+
+// receive returns the next item sent to a subscriber, and false when its channel is closed.
+func receive(t *testing.T, ch <-chan StreamData) (StreamData, bool) {
+	t.Helper()
+	select {
+	case item, ok := <-ch:
+		return item, ok
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing received")
+		return StreamData{}, false
+	}
+}
+
+// Each item of a channel message goes to the subscribers of its WebId on that connection; when the connection is
+// lost, their channels are closed so that they reconnect.
+func TestReadWebsocketMessagesRoutesItems(t *testing.T) {
 	ds := newTestDatasource()
-	webID := "WEBID_ORPHAN"
-	connectionKey := webID
+	ws := newTestWebsocket(t)
+	const key = "W1|W2"
+	w1a := ds.addStreamSender(key, "W1", &backend.StreamSender{})
+	w1b := ds.addStreamSender(key, "W1", &backend.StreamSender{})
+	w2 := ds.addStreamSender(key, "W2", &backend.StreamSender{})
+	otherConnection := ds.addStreamSender("W1|W3", "W1", &backend.StreamSender{})
+	ds.websocketConnections[key] = ws.client
+	go ds.readWebsocketMessages(ws.client, key, []string{"W1", "W2"})
 
-	// Register the connection key mapping.
-	ds.connectionKeyWebIDs[connectionKey] = []string{webID}
+	items := func(webIDs ...string) map[string]interface{} {
+		var streams []map[string]interface{}
+		for _, webID := range webIDs {
+			streams = append(streams, map[string]interface{}{"WebId": webID, "Items": []interface{}{}})
+		}
+		return map[string]interface{}{"Items": streams}
+	}
+	if err := ws.server.WriteJSON(items("W1", "W2", "UNKNOWN")); err != nil {
+		t.Fatal(err)
+	}
+	for name, ch := range map[string]chan StreamData{"W1 subscriber 1": w1a, "W1 subscriber 2": w1b, "W2 subscriber": w2} {
+		want := name[:2]
+		if item, _ := receive(t, ch); item.WebId != want {
+			t.Errorf("%s got %q, want %q", name, item.WebId, want)
+		}
+	}
+	// a message that cannot be read is skipped
+	if err := ws.server.WriteMessage(websocket.TextMessage, []byte("not json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.server.WriteJSON(items("W2")); err != nil {
+		t.Fatal(err)
+	}
+	if item, _ := receive(t, w2); item.WebId != "W2" {
+		t.Errorf("W2 subscriber got %q after an unreadable message", item.WebId)
+	}
 
-	// Register a fake (nil) websocket conn — checkForOrphanedWebSocket only calls
-	// conn.Close() and deletes the entry; it does not read/write, so nil is fine here.
-	ds.websocketConnections[connectionKey] = (*websocket.Conn)(nil)
-
-	// No subscribers registered — orphan check should remove the connection.
-	// (We cannot call ws.Close() on nil, so we just verify the map entry is removed
-	// without the function panicking on a real nil close.  In production the conn is
-	// always non-nil; this test guards the map-cleanup path.)
-	func() {
-		defer func() {
-			// nil.Close() panics — that is expected for this mock. The important
-			// assertion is that the entry was deleted before Close() was called.
-			_ = recover()
-		}()
-		ds.checkForOrphanedWebSocket(webID, connectionKey)
-	}()
-
+	// the connection is lost
+	_ = ws.server.Close()
+	for name, ch := range map[string]chan StreamData{"W1 subscriber 1": w1a, "W1 subscriber 2": w1b, "W2 subscriber": w2} {
+		if _, ok := receive(t, ch); ok {
+			t.Errorf("%s: unexpected value after the connection was lost", name)
+		}
+	}
 	ds.websocketConnectionsMutex.Lock()
-	defer ds.websocketConnectionsMutex.Unlock()
-	if _, ok := ds.websocketConnections[connectionKey]; ok {
+	_, registered := ds.websocketConnections[key]
+	ds.websocketConnectionsMutex.Unlock()
+	if registered {
+		t.Error("the lost connection is still registered")
+	}
+	select {
+	case item, ok := <-otherConnection:
+		t.Errorf("the subscriber of another connection got %v (open %v)", item, ok)
+	default:
+	}
+}
+
+func TestCheckForOrphanedWebSocket_NoSubscribers_ClosesConn(t *testing.T) {
+	ds := newTestDatasource()
+	ws := newTestWebsocket(t)
+	ds.websocketConnections["W1|W2"] = ws.client
+	// a subscriber of W1 on another connection does not keep this one open
+	ds.addStreamSender("W1", "W1", &backend.StreamSender{})
+
+	ds.checkForOrphanedWebSocket("W1|W2", []string{"W1", "W2"})
+
+	select {
+	case <-ws.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the connection was not closed")
+	}
+	if _, ok := ds.websocketConnections["W1|W2"]; ok {
 		t.Error("websocket connection should have been removed from the map")
 	}
 }
 
 func TestCheckForOrphanedWebSocket_WithSubscribers_KeepsConn(t *testing.T) {
 	ds := newTestDatasource()
-	webID := "WEBID_KEEP"
-	connectionKey := webID
-	sender := &backend.StreamSender{}
+	ws := newTestWebsocket(t)
+	ds.websocketConnections["W1|W2"] = ws.client
+	ds.addStreamSender("W1|W2", "W2", &backend.StreamSender{})
 
-	ds.connectionKeyWebIDs[connectionKey] = []string{webID}
-	ds.addStreamSender(webID, sender)
+	ds.checkForOrphanedWebSocket("W1|W2", []string{"W1", "W2"})
 
-	ds.websocketConnections[connectionKey] = (*websocket.Conn)(nil)
-
-	ds.checkForOrphanedWebSocket(webID, connectionKey)
-
-	ds.websocketConnectionsMutex.Lock()
-	defer ds.websocketConnectionsMutex.Unlock()
-	if _, ok := ds.websocketConnections[connectionKey]; !ok {
+	if _, ok := ds.websocketConnections["W1|W2"]; !ok {
 		t.Error("websocket connection should NOT have been removed while subscribers remain")
 	}
-}
-
-// ---------------------------------------------------------------------------
-// Deterministic channel key (stable across repeated queries)
-// ---------------------------------------------------------------------------
-
-// TestStableChannelKey_SameInputSameKey verifies that the same WebID + SummaryType
-// always produces the same channel key, so repeated queries reuse the same
-// centrifuge subscription instead of creating a new one each time.
-func TestStableChannelKey_SameInputSameKey(t *testing.T) {
-	key1 := channelKeyFor("PI_WEBID_ABC", "", 0)
-	key2 := channelKeyFor("PI_WEBID_ABC", "", 0)
-	if key1 != key2 {
-		t.Errorf("expected same key for same input, got %q and %q", key1, key2)
+	select {
+	case <-ws.closed:
+		t.Error("the connection was closed while subscribers remain")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
-// TestStableChannelKey_DifferentSettings verifies that the same WebID with
-// different query settings produces distinct channel keys.
-func TestStableChannelKey_DifferentSettings(t *testing.T) {
-	keyNull := channelKeyFor("PI_WEBID_ABC", "digitalStates=false|nodata=Null", 0)
-	keyPrevious := channelKeyFor("PI_WEBID_ABC", "digitalStates=false|nodata=Previous", 0)
-	if keyNull == keyPrevious {
-		t.Errorf("expected different keys for different settings, both got %q", keyNull)
-	}
-}
+// ---------------------------------------------------------------------------
+// Channel key
+// ---------------------------------------------------------------------------
 
-// TestStableChannelKey_DifferentWebIDs verifies that different WebIDs produce
-// distinct channel keys even when the settings are the same.
-func TestStableChannelKey_DifferentWebIDs(t *testing.T) {
-	key1 := channelKeyFor("PI_WEBID_ABC", "", 0)
-	key2 := channelKeyFor("PI_WEBID_XYZ", "", 0)
+// Different PI tags get different channels for the same query settings and time range.
+func TestChannelKey_DifferentWebIDs(t *testing.T) {
+	key1 := channelKeyFor(&PiProcessedQuery{WebID: "PI_WEBID_ABC"})
+	key2 := channelKeyFor(&PiProcessedQuery{WebID: "PI_WEBID_XYZ"})
 	if key1 == key2 {
 		t.Errorf("expected different keys for different WebIDs, both got %q", key1)
-	}
-}
-
-// TestStableChannelKey_GenerationChangesKey verifies that incrementing the generation
-// produces a different key, ensuring panels get a fresh LiveDataStream after expiry.
-func TestStableChannelKey_GenerationChangesKey(t *testing.T) {
-	key0 := channelKeyFor("PI_WEBID_ABC", "", 0)
-	key1 := channelKeyFor("PI_WEBID_ABC", "", 1)
-	if key0 == key1 {
-		t.Errorf("expected different keys for different generations, both got %q", key0)
-	}
-}
-
-func TestSubscribeStream_StableKeyFound(t *testing.T) {
-	ds := newTestDatasource()
-	key := channelKeyFor("PI_WEBID_ABC", "", 0)
-	ds.channelConstruct[key] = StreamChannelConstruct{WebID: "PI_WEBID_ABC"}
-
-	resp, err := ds.SubscribeStream(context.Background(), &backend.SubscribeStreamRequest{Path: key})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if resp.Status != backend.SubscribeStreamStatusOK {
-		t.Errorf("expected OK, got %v", resp.Status)
 	}
 }
 
@@ -346,28 +358,6 @@ func TestIsUsingStreaming_WithoutExperimentalFeatures(t *testing.T) {
 	}
 }
 
-// A summary series (e.g. 1 min averages) must not stream: PI Web API channels send the raw values, which would be
-// appended to the averages.
-func TestIsStreamable_NotForSummaries(t *testing.T) {
-	on, off := true, false
-	basis := "TimeWeighted"
-	types := []SummaryType{{Label: "Average", Value: SummaryTypeValue{Value: "Average"}}}
-	streaming := &QueryStreaming{Enable: &on}
-
-	plain := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming}}
-	if !plain.isStreamable() {
-		t.Error("a query with streaming enabled must be streamable")
-	}
-	summary := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming, Summary: &QuerySummary{Enable: &on, Basis: &basis, Types: &types}}}
-	if summary.isStreamable() {
-		t.Error("a summary query must not be streamable")
-	}
-	disabled := Query{Pi: PIWebAPIQuery{EnableStreaming: streaming, Summary: &QuerySummary{Enable: &off, Basis: &basis, Types: &types}}}
-	if !disabled.isStreamable() {
-		t.Error("a query with the summary disabled must be streamable")
-	}
-}
-
 // Streaming sends raw values, so the query options returning other values are not streamed. The query editor hides
 // the streaming settings when one of them is selected.
 func TestIsStreamable_NotForOtherValueTypes(t *testing.T) {
@@ -377,6 +367,7 @@ func TestIsStreamable_NotForOtherValueTypes(t *testing.T) {
 		"interpolated":    `"interpolate":{"enable":true}`,
 		"recorded values": `"recordedValues":{"enable":true}`,
 		"summary":         `"summary":{"enable":true,"basis":"EventWeighted","types":[]}`,
+		"summary average": `"summary":{"enable":true,"basis":"TimeWeighted","types":[{"value":{"value":"Average"}}]}`,
 	}
 	for name, option := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -391,7 +382,8 @@ func TestIsStreamable_NotForOtherValueTypes(t *testing.T) {
 	}
 	var q Query
 	if err := json.Unmarshal([]byte(`{"EnableStreaming":{"enable":true},"useLastValue":{"enable":false},
-		"interpolate":{"enable":false},"recordedValues":{"enable":false},"summary":{"enable":false}}`), &q.Pi); err != nil {
+		"interpolate":{"enable":false},"recordedValues":{"enable":false},
+		"summary":{"enable":false,"basis":"TimeWeighted","types":[{"value":{"value":"Average"}}]}}`), &q.Pi); err != nil {
 		t.Fatal(err)
 	}
 	if !q.isStreamable() {

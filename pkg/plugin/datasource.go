@@ -55,6 +55,10 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	if err != nil {
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
+	websocketTLS, websocketDial, err := websocketTransport(opts)
+	if err != nil {
+		return nil, fmt.Errorf("websocket transport: %w", err)
+	}
 
 	maxDuration := dataSourceOptions.MaxCacheTime.orDefault()
 	webIDCache := newWebIDCache(maxDuration)
@@ -72,13 +76,12 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 		websocketConnectionsMutex: &sync.Mutex{},
 		datasourceMutex:           &sync.Mutex{},
 		channelConstruct:          make(map[string]StreamChannelConstruct),
-		channelGenerations:        make(map[string]uint32),
 		websocketConnections:      make(map[string]*websocket.Conn),
 		senderChannels:            make(map[string]map[*backend.StreamSender]chan StreamData),
-		connectionKeyWebIDs:       make(map[string][]string),
 		dataSourceOptions:         &dataSourceOptions,
-		tlsInsecureSkipVerify:     opts.TLS != nil && opts.TLS.InsecureSkipVerify,
 		websocketHeader:           websocketHeader(opts),
+		websocketTLS:              websocketTLS,
+		websocketDial:             websocketDial,
 		websocketTimeout:          websocketTimeout(opts),
 		initalTime:                time.Now(),
 		totalCalls:                0,
@@ -89,6 +92,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	ds.queryMux = ds.newQueryMux()
 	_, _ = scheduler.Every(maxDuration).Hour().Do(ds.cleanWebIDCache)
 	scheduler.StartAsync()
+	ds.takeOverStreamChannels()
 
 	log.DefaultLogger.Info("PIWebAPI Datasource Created", "UID", settings.UID, "Name", settings.Name)
 
@@ -101,6 +105,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 func (d *Datasource) Dispose() {
 	d.scheduler.Stop()
 	d.httpClient.CloseIdleConnections()
+	d.releaseStreamChannels()
 }
 
 // update call rate - enforce max call rate of 500 req/s
