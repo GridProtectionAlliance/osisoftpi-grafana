@@ -86,9 +86,11 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
 
   /**
    * This method overrides the applyTemplateVariables() method from the DataSourceWithBackend class.
-   * It is responsible for replacing the template variables in the query configuration prior
-   * to sending the query to the backend. Templated variables are not able to be used for alerts
-   * or public facing dashboards.
+   * It replaces the template variables in every field of the query before it is sent to the backend. Grafana calls
+   * it for each query sent by query(), and also directly (interpolateVariablesInQueries) for queries that do not go
+   * through query(): panels with expressions, Explore opened from a panel and alert rules created from a panel.
+   * Templated variables are not able to be used for alerts or public facing dashboards.
+   * The query is not modified: the result is a copy.
    *
    * @param {PIWebAPIQuery} query - The raw query configuration from the frontend as defined in the query editor.
    * @param {ScopedVars} scopedVars - The template variables that are defined in the query editor and dashboard.
@@ -96,13 +98,79 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
    *
    * @memberOf PiWebApiDatasource
    */
-  applyTemplateVariables(query: PIWebAPIQuery, scopedVars: ScopedVars) {
-    return {
-      ...query,
-      target: query.target
-        ? removeServerPrefix(this.templateSrv.replace(query.target, scopedVars, formatVariableValue))
-        : '',
+  applyTemplateVariables(query: PIWebAPIQuery, scopedVars: ScopedVars): PIWebAPIQuery {
+    const replace = (text: string | undefined, format?: string | Function) =>
+      this.templateSrv.replace(text, scopedVars, format);
+    const target = query.target ? removeServerPrefix(replace(query.target, formatVariableValue)) : '';
+
+    if (query.isAnnotation) {
+      // the name filter and category are PI Web API name filters (glob, as in 4.x); the backend splits the
+      // attribute names on commas
+      return {
+        ...query,
+        target,
+        nameFilter: query.nameFilter ? replace(query.nameFilter, 'glob') : query.nameFilter,
+        categoryName: query.categoryName ? replace(query.categoryName, 'glob') : query.categoryName,
+        attribute: query.attribute?.name
+          ? { ...query.attribute, name: replace(query.attribute.name, 'csv') }
+          : query.attribute,
+      };
+    }
+
+    // copies a segment or attribute with its template variables replaced, so the saved query keeps the variables
+    const replaceSegment = (segment: SelectableValue<PIWebAPISelectableValue>) =>
+      segment.value
+        ? { ...segment, value: { ...segment.value, value: replace(segment.value.value, formatVariableValue) } }
+        : segment;
+
+    const migrated = migrateQuery(query);
+    const tar = {
+      enableStreaming: (() => {
+        const es = migrated.enableStreaming ?? { enable: false };
+        if (es.variable && es.variable.trim() !== '') {
+          const resolved = replace(es.variable.trim()).toLowerCase();
+          return { ...es, enable: resolved === 'true' || resolved === '1' || resolved === 'yes' };
+        }
+        return es;
+      })(),
+      target,
+      elementPath: replace(migrated.elementPath, formatVariableValue),
+      attributes: map(migrated.attributes, replaceSegment),
+      segments: map(migrated.segments, replaceSegment),
+      isAnnotation: !!migrated.isAnnotation,
+      // formatted like the target, so that a multi-value variable gives the same {value1,value2} group
+      display: !!migrated.display ? replace(migrated.display, formatVariableValue) : undefined,
+      refId: migrated.refId,
+      hide: migrated.hide,
+      interpolate: !!migrated.interpolate
+        ? { ...migrated.interpolate, interval: replace(migrated.interpolate.interval) }
+        : { enable: false },
+      useLastValue: migrated.useLastValue || { enable: false },
+      useUnit: migrated.useUnit || { enable: false },
+      recordedValues: migrated.recordedValues || { enable: false },
+      digitalStates: migrated.digitalStates || { enable: false },
+      regex: migrated.regex || { enable: false },
+      expression: migrated.expression ? replace(migrated.expression) : '',
+      summary: { ...(migrated.summary || { enable: false, types: [] }) },
+      nodata: migrated.nodata,
+      isPiPoint: !!migrated.isPiPoint,
+      hideError: !!migrated.hideError,
+      queryVersion: migrated.queryVersion,
+      pluginVersion: migrated.pluginVersion,
+      hashCode: '',
     };
+
+    if (tar.summary.enable) {
+      tar.summary.duration = !!tar.summary.duration ? replace(tar.summary.duration) : tar.summary.duration;
+      tar.summary.sampleTypeInterval = !!tar.summary.sampleTypeInterval;
+      tar.summary.sampleInterval = !!tar.summary.sampleInterval
+        ? replace(tar.summary.sampleInterval)
+        : tar.summary.sampleInterval;
+    }
+
+    tar.hashCode = hashCode(removeTime(tar));
+
+    return { ...migrated, ...tar };
   }
 
   /**
@@ -285,7 +353,8 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
   /** PRIVATE SECTION */
 
   /**
-   * Builds the PIWebAPI query parameters.
+   * Removes the queries that cannot be run and limits the number of data points. The template variables are
+   * replaced afterwards by applyTemplateVariables, which DataSourceWithBackend.query calls for each query.
    *
    * @param {any} options - Grafana query and panel options.
    * @returns - PIWebAPI query parameters.
@@ -303,80 +372,6 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     if (options.maxDataPoints) {
       options.maxDataPoints = options.maxDataPoints > 30000 ? 30000 : options.maxDataPoints;
     }
-    // copies a segment or attribute with its template variables replaced, so the saved query keeps the variables
-    const replaceSegment = (segment: SelectableValue<PIWebAPISelectableValue>) =>
-      segment.value
-        ? {
-            ...segment,
-            value: {
-              ...segment.value,
-              value: this.templateSrv.replace(segment.value.value, options.scopedVars, formatVariableValue),
-            },
-          }
-        : segment;
-
-    options.targets = map(options.targets, (savedTarget) => {
-      const target = migrateQuery(savedTarget);
-      const tar = {
-        enableStreaming: (() => {
-          const es = target.enableStreaming ?? { enable: false };
-          if (es.variable && es.variable.trim() !== '') {
-            const resolved = this.templateSrv.replace(es.variable.trim(), options.scopedVars).toLowerCase();
-            return { ...es, enable: resolved === 'true' || resolved === '1' || resolved === 'yes' };
-          }
-          return es;
-        })(),
-        target: this.templateSrv.replace(target.target, options.scopedVars, formatVariableValue),
-        elementPath: this.templateSrv.replace(target.elementPath, options.scopedVars, formatVariableValue),
-        attributes: map(target.attributes, replaceSegment),
-        segments: map(target.segments, replaceSegment),
-        isAnnotation: !!target.isAnnotation,
-        display: !!target.display ? this.templateSrv.replace(target.display, options.scopedVars) : undefined,
-        refId: target.refId,
-        hide: target.hide,
-        interpolate: !!target.interpolate
-          ? {
-              ...target.interpolate,
-              interval: this.templateSrv.replace(target.interpolate.interval, options.scopedVars),
-            }
-          : { enable: false },
-        useLastValue: target.useLastValue || { enable: false },
-        useUnit: target.useUnit || { enable: false },
-        recordedValues: target.recordedValues || { enable: false },
-        digitalStates: target.digitalStates || { enable: false },
-        webid: target.webid ?? '',
-        regex: target.regex || { enable: false },
-        expression: target.expression || '',
-        summary: { ...(target.summary || { enable: false, types: [] }) },
-        nodata: target.nodata,
-        startTime: options.range.from,
-        endTime: options.range.to,
-        isPiPoint: !!target.isPiPoint,
-        hideError: !!target.hideError,
-        queryVersion: target.queryVersion,
-        pluginVersion: target.pluginVersion,
-        scopedVars: options.scopedVars,
-        hashCode: '',
-      };
-
-      if (tar.expression) {
-        tar.expression = this.templateSrv.replace(tar.expression, options.scopedVars);
-      }
-
-      if (tar.summary.enable) {
-        tar.summary.duration = !!tar.summary.duration
-          ? this.templateSrv.replace(tar.summary.duration, options.scopedVars)
-          : tar.summary.duration;
-        tar.summary.sampleTypeInterval = !!tar.summary.sampleTypeInterval;
-        tar.summary.sampleInterval = !!tar.summary.sampleInterval
-          ? this.templateSrv.replace(tar.summary.sampleInterval, options.scopedVars)
-          : tar.summary.sampleInterval;
-      }
-
-      tar.hashCode = hashCode(removeTime(tar));
-
-      return tar;
-    });
 
     return options;
   }
