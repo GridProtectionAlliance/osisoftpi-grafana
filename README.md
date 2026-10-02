@@ -16,7 +16,9 @@ Create a new instance of the data source from the Grafana Data Sources administr
 
 - **URL**: the PI Web API endpoint, e.g. `https://server/piwebapi`.
 - **Authentication**: PI Web API usually needs "Basic" authentication enabled; enter its credentials here. Custom HTTP
-  headers (e.g. an `Authorization` header) are also supported. **Timeout** applies to every PI Web API request.
+  headers (e.g. a static `Authorization` header) and TLS client certificates are also supported, and "Forward OAuth
+  Identity" and "Allowed cookies" pass the Grafana user's token or cookies to PI Web API. Kerberos and NTLM are not
+  supported. **Timeout** applies to every PI Web API request.
 - **Max Cache Time**: how long the WebIDs of PI points and attributes are cached (12 hours by default).
 - **Enable PI Points in Query**: allows queries of PI points (PI Data Archive) in addition to AF attributes.
 - **Enable New Data Format**: series are named after the attribute or point, with `element`, `database`, `path`,
@@ -25,6 +27,10 @@ Create a new instance of the data source from the Grafana Data Sources administr
 - **Enable Streaming Support**: allows live streaming (see [Live streaming](#live-streaming)).
 - **PI Server, AF Server, AF Database**: the defaults of the query editor. They are pre-selected, and cannot be
   changed, in annotations, and are used by variable queries without a server or database.
+- **Enable Experimental Features > Enable Response Cache**: when a PI Web API request fails, the last successful
+  response of the same query is shown instead of the error, with its last value extended to the end of the time range.
+  The cache is shared by all users of the datasource: do not enable it with "Forward OAuth Identity" or forwarded
+  cookies when users may see different PI data, as one user could then be shown another user's cached response.
 
 NOTE: If you are using PI Vision (PI-Coresight), it is recommended to create a separate instance of PI Web API for use
 with this plugin. See the [PI Web API documentation](https://docs.aveva.com/bundle/pi-web-api) for more information on
@@ -45,19 +51,23 @@ Query options:
 
 | Option | Description |
 | --- | --- |
-| Calculation | PI Web API expression applied to every attribute, e.g. `'.' * 2` (`'.'` is the attribute). Without attributes, the expression is calculated on the element. |
+| Calculation | PI Web API expression applied to every attribute, e.g. `'.' * 2` (`'.'` is the attribute or point). |
 | Use Last Value | Only the value at the end of the time range. `Ignore end time` returns the last value of the stream instead. |
 | Digital States | Shows digital state names instead of their codes. |
-| Replace Bad Data | Replacement of bad values (e.g. `Shutdown`, `Calc Failed`): `Null`, `Drop`, `Previous`, `0` or `Keep`. |
+| Replace Bad Data | Replacement of bad values (e.g. `Shutdown`, `Calc Failed`): `Null`, `Drop`, `Previous`, `0` or `Keep` (the bad value itself: the state name in text series and with Digital States, its code in numeric series). |
 | Use unit from datapoints | Adds the unit of the point or attribute to the series (requires "Enable Unit From Data"). |
 | Interpolate | Interpolated values every `Interpolate Period` (default: time range / panel width). |
-| Recorded Values | Values as recorded in PI, up to `Max Recorded Values`, with the given `Boundary Type` (default `Inside`). |
+| Recorded Values | Values as recorded in PI, up to `Max Recorded Values` (default 1000), with the given `Boundary Type` (default `Inside`). |
 | Summary | Summary values (`Average`, `Maximum`, ...) per `Summary Period`, with the `Summary Basis` of PI Web API. |
 | Enable Streaming | Live values, see [Live streaming](#live-streaming). |
-| Display Name | Name of the series. With `Enable Regex Replace`, the name is changed with a regular expression (`Search`, `Replace`). |
+| Display Name | Name of the series; multi-value variables are replaced with the values of each series, e.g. `${element} ${attribute}`. With `Enable Regex Replace`, the name is changed with a regular expression (`Search`, `Replace`). |
 | Ignore API Error? | Errors of PI Web API are not shown in the panel. |
 
-Without Interpolate, Recorded Values or Summary, the plot values of PI Web API are returned, sized to the panel width.
+Without Interpolate, Recorded Values or Summary, the plot values of PI Web API are returned, sized to the panel width
+(with a calculation: the calculated values at each recorded event).
+
+Interpolate Period, Summary Period and Sample Interval are PI Web API time spans, sent as entered: e.g. `30s`, `5m`,
+`1h30m`, `1.5d`, `2 hours`. An invalid value returns PI Web API's error.
 
 ## Querying via the PI Dataserver (PI Points)
 
@@ -81,15 +91,18 @@ The query returns the values of the time range, and new values are then added to
 
 - PI Web API channels send raw values, so "Enable Streaming" is only offered for queries without a calculation,
   "Use Last Value", "Interpolate", "Recorded Values" or a summary. While streaming is enabled, these options are hidden.
-- The WebSocket connection uses the datasource's basic authentication and custom HTTP headers, and its "Timeout"
-  (30 seconds when not set). Other authentication methods (e.g. Kerberos) are not supported for streaming.
+- The WebSocket connection uses the datasource's authentication (basic authentication, custom HTTP headers), TLS
+  settings and "Timeout" (30 seconds when not set).
+- Live values are added only when the time range ends at "now" (e.g. "Last 6 hours"). Each query result has its own
+  live channel, so a refresh or a new time range starts from the new result, and saving the datasource settings does
+  not stop running panels.
 - When PI Web API is unavailable, streaming resumes by itself once it is back. With "Fill gaps after reconnect" (on by
   default), the values recorded in the meantime are then added to the panel, up to the query's maximum data points;
   when it is off, or for attributes without recorded values, they are shown at the next refresh of the panel.
 
 # Template Variables
 
-Query variables list AF servers, databases, elements, attributes, PI servers and PI points. The query is written as
+Query variables list AF servers, databases, elements, attributes, PI servers and PI points with a short query language:
 
 ```
 <type> [target] [option=value ...]
@@ -97,49 +110,22 @@ Query variables list AF servers, databases, elements, attributes, PI servers and
 
 ![variable_query.png](https://github.com/GridProtectionAlliance/osisoftpi-grafana/raw/master/docs/img/variable_query.png)
 
-| Type | Target | Options (PI Web API query parameters) |
-| --- | --- | --- |
-| `servers` | | AF servers |
-| `databases` | AF server (default: the AF server of the datasource) | |
-| `elements` | AF path of a database or element (default: the AF database of the datasource) | `nameFilter`, `descriptionFilter`, `categoryName`, `templateName`, `elementType`, `searchFullHierarchy`, `sortField`, `sortOrder`, `startIndex`, `maxCount` |
-| `attributes` | AF path of an element | `nameFilter`, `categoryName`, `templateName`, `valueType`, `searchFullHierarchy`, `showExcluded`, `showHidden`, `sortField`, `sortOrder`, `startIndex`, `maxCount` |
-| `dataservers` | | PI servers |
-| `points` | point name filter | `server` (default: the PI server of the datasource), `nameFilter`, `startIndex`, `maxCount` |
-
-- `elements` returns the child elements of the target, or all the elements below it with `searchFullHierarchy=true`.
-- Filters accept the PI Web API wildcards `*` and `?`. `sortOrder` is `Ascending` or `Descending`; `startIndex` and
-  `maxCount` page through long lists.
-- Values with spaces are quoted: `categoryName="Rotating Equipment"`.
-- Template variables can be used in the target and in the values, e.g. `elements AFSERVER\Database\$site`.
-
-Examples:
-
-| Query | Values |
+| Example | Values |
 | --- | --- |
-| `points PIT-*` | PI points of the PI server of the datasource whose name starts with `PIT-` |
-| `points server=PISRV nameFilter=*.PV maxCount=100` | the first 100 `.PV` points of another PI server |
-| `elements AFSERVER\Database` | root elements of a database |
-| `elements AFSERVER\Database\Plant searchFullHierarchy=true templateName=Pump sortOrder=Descending` | every pump below `Plant`, sorted from Z to A |
-| `elements AFSERVER\Database categoryName="Rotating Equipment" nameFilter=P-*` | root elements of a category |
-| `elements AFSERVER\Database\$site startIndex=0 maxCount=20` | the first 20 child elements of the selected site |
-| `attributes AFSERVER\Database\Plant\T-101 valueType=Double` | numeric attributes of an element |
+| `points PIT-*` | PI points whose name starts with `PIT-` |
+| `elements AFSERVER\Database\Plant searchFullHierarchy=true templateName=Pump` | every pump below `Plant` |
+| `attributes AFSERVER\Database\Plant\$tank valueType=Double` | numeric attributes of the selected tank |
 
-Variable queries of earlier versions, as JSON (`{"path": "AFSERVER\\Database\\ElementNameWithChildren"}`), keep
-working and return the child elements of the path.
+The types are `servers`, `databases`, `elements`, `attributes`, `dataservers` and `points`; the options are the PI Web
+API search parameters (name, category and template filters, sorting and paging). JSON variable queries of earlier
+versions keep working.
 
-## Using variables in queries
+Variables can be used in the element path, attributes, PI point names, calculation, periods and display name.
+Multi-value variables are expanded into one series per value, and every combination when several are used (at most
+1000 per query); the display name, e.g. `${unit} ${attribute}`, names each series with its own values.
 
-Variables can be used in the AF element path, in attributes and in PI point names.
-Multi-value variables (and the `All` option) are expanded into one series for every selected value:
-
-- Several variables can be used in the element path, e.g. `AFSERVER\DB\${site}\${unit}`.
-  Every combination of the selected values is queried.
-- A variable used as an attribute (e.g. `${attribute}`) or as a PI point name expands into one attribute or point per value.
-- Element and attribute variables are combined, so `${site}` (2 values) x `${unit}` (2 values) x `${attribute}` (2 values) returns 8 series.
-- When the element path uses more than one variable, series are named after the element path below the database and the attribute, e.g. `SiteA\Unit2\Pump|Temperature`. With "Enable New Data Format", AF series have `database` and `path` (element path below the database) labels.
-- A single query can expand into at most 1000 element/attribute combinations; larger expansions return an error.
-
-Variables with a custom `All` value are sent as that value and are not expanded.
+See [Template variables](https://github.com/GridProtectionAlliance/osisoftpi-grafana/blob/master/docs/template-variables.md)
+for every query type and option, chained variables, series names and labels, annotations and more examples.
 
 # Event Frames and Annotations
 
@@ -163,12 +149,15 @@ Add an annotation query with this datasource:
 
 # Installation
 
-Install using the grafana-cli or clone the repository directly
-into your Grafana plugin directory.
+Install the plugin from the Grafana plugin catalog (Administration > Plugins and data > Plugins), or with the Grafana
+CLI:
 
 ```
-grafana-cli plugins install gridprotectionalliance-osisoftpi-datasource
+grafana cli plugins install gridprotectionalliance-osisoftpi-datasource
 ```
+
+The signed plugin zip is also attached to each [GitHub release](https://github.com/GridProtectionAlliance/osisoftpi-grafana/releases):
+unzip it into the Grafana plugins directory. To build the plugin from source, see [CONTRIBUTING.md](https://github.com/GridProtectionAlliance/osisoftpi-grafana/blob/master/CONTRIBUTING.md).
 
 # Trademarks
 
