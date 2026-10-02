@@ -34,14 +34,14 @@ func TestStreamKeepaliveAddsNoValues(t *testing.T) {
 	query := makeTestQuery("W1")
 	recorder := &countingSender{}
 	sender := backend.NewStreamSender(recorder)
-	construct := StreamChannelConstruct{WebID: "W1", query: query, frameCache: buildStreamFrameCache(d, query)}
-	d.channelConstruct["path"] = construct
+	construct := StreamChannelConstruct{WebID: "W1", query: query, frameCache: buildStreamFrameCache(d, query),
+		state: &streamChannelState{}}
 
 	values := make(chan StreamData, 1)
 	values <- StreamData{WebId: "W1", Items: []PiBatchContentItem{{Timestamp: time.Now(), Value: 1.0, Good: true}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	errchan := make(chan error, 1)
-	go d.sendStreamData(ctx, sender, "path", errchan, values, construct)
+	go func() { errchan <- d.sendStreamData(ctx, sender, "path", values, construct) }()
 
 	time.Sleep(300 * time.Millisecond) // several keepalive intervals
 	cancel()

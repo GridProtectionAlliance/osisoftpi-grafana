@@ -182,6 +182,7 @@ type PiProcessedQuery struct {
 	Nodata         *string            `json:"Nodata"`
 	Regex          *Regex             `json:"Regex"`
 	HashCode       string             `json:"HashCode"`
+	StartTime      time.Time          `json:"StartTime"`
 	EndTime        time.Time          `json:"EndTime"`
 	Resource       string
 	TargetPath     string

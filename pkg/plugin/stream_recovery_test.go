@@ -32,24 +32,19 @@ func TestStreamRecoversAfterLongOutage(t *testing.T) {
 	d := newTestDatasource()
 	d.settings = backend.DataSourceInstanceSettings{URL: "http://" + addr + "/piwebapi"}
 	const path, webID = "channel", "W1"
-	construct := StreamChannelConstruct{WebID: webID, ConnectionKey: webID, generationKey: webID + "|"}
+	construct := StreamChannelConstruct{WebID: webID, ConnectionKey: webID, connectionWebIDs: []string{webID},
+		state: &streamChannelState{}}
 	d.channelConstruct[path] = construct
-	d.connectionKeyWebIDs[webID] = []string{webID}
 	sender := &backend.StreamSender{}
 
 	// the connection was lost: the subscriber's channel is closed
 	lost := make(chan StreamData)
 	close(lost)
-	errchan := make(chan error, 1)
-	d.sendStreamData(context.Background(), sender, path, errchan, lost, construct)
-	if err := <-errchan; err == nil {
+	if err := d.sendStreamData(context.Background(), sender, path, lost, construct); err == nil {
 		t.Fatal("expected an error after the reconnect attempts")
 	}
 	if _, ok := d.channelConstruct[path]; !ok {
 		t.Fatal("the channel is no longer registered: Grafana cannot run the stream again")
-	}
-	if d.channelGenerations[construct.generationKey] != 0 {
-		t.Error("the channel key changed: the panel's subscription no longer matches")
 	}
 
 	// PI Web API is back: the next run of the stream by Grafana connects
@@ -72,8 +67,8 @@ func TestStreamRecoversAfterLongOutage(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	errchan = make(chan error, 1)
-	d.subscribeToWebsocketChannel(ctx, path, sender, errchan)
+	errchan := make(chan error, 1)
+	go func() { errchan <- d.RunStream(ctx, &backend.RunStreamRequest{Path: path}, sender) }()
 	select {
 	case <-connected:
 	case err := <-errchan:

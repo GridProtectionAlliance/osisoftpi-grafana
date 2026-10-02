@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -23,35 +24,29 @@ type Datasource struct {
 	webIDCache       WebIDCache
 	webCache         *Cache[string, PiBatchData]
 	channelConstruct map[string]StreamChannelConstruct
-	// channelGenerations tracks a per-(webID,summaryType) counter that is incremented
-	// each time a subscription ends. channelKeyFor embeds the generation so that after
-	// expiry the next QueryData call produces a new channel URI, forcing Grafana to
-	// create a fresh LiveDataStream and recover from the "streaming channel error: expired"
-	// state that would otherwise be replayed indefinitely by ReplaySubject(1).
-	channelGenerations        map[string]uint32
+	// datasourceMutex guards the maps and the streaming state of the instance, except websocketConnections, which
+	// websocketConnectionsMutex guards (acquired first when both are needed).
 	datasourceMutex           *sync.Mutex
 	scheduler                 *gocron.Scheduler
 	websocketConnectionsMutex *sync.Mutex
 	websocketConnections      map[string]*websocket.Conn
-	// senderChannels holds a private buffered channel for each active subscriber per WebID.
-	// Each RunStream goroutine reads exclusively from its own channel; readWebsocketMessages
+	// senderChannels holds a private buffered channel for each active subscriber per connection and WebID (see
+	// senderKey). Each RunStream goroutine reads exclusively from its own channel; readWebsocketMessages
 	// dispatches pre-parsed StreamData items by WebId so each sender only sees its own tag.
 	senderChannels map[string]map[*backend.StreamSender]chan StreamData
-	// connectionKeyWebIDs maps a connection key (sorted WebIDs joined by "|") to the
-	// ordered WebID slice used to build the streamsets/channel WebSocket URL.
-	connectionKeyWebIDs map[string][]string
-	dataSourceOptions   *PIWebAPIDataSourceJsonData
-	// tlsInsecureSkipVerify mirrors the datasource's TLS skip-verify setting so the
-	// WebSocket dialer can skip certificate verification for self-signed PI Web API certs.
-	tlsInsecureSkipVerify bool
+	// previous is the previous instance of the datasource until previousUntil, whose streaming channels this
+	// instance takes over (see takeOverStreamChannels).
+	previous          *Datasource
+	previousUntil     time.Time
+	dataSourceOptions *PIWebAPIDataSourceJsonData
+	// websocketTLS and websocketDial are the TLS configuration and the network dialer of the WebSocket connections
+	// (see websocketTransport); websocketDial is nil for a direct connection.
+	websocketTLS  *tls.Config
+	websocketDial websocketDialContext
 	// websocketHeader holds the authentication and custom headers sent when opening a WebSocket connection.
 	websocketHeader http.Header
-	// streamLastTimes holds the time of the last value sent on each streaming channel (by channel path), to fill the
-	// gap after a reconnect. It survives the stream being run again by Grafana; guarded by datasourceMutex.
-	streamLastTimes map[string]time.Time
-	// streamFilledUntil holds, by channel path, the time of the last value sent by fillStreamGap until the live values
-	// are past it (see newStreamItems); guarded by datasourceMutex.
-	streamFilledUntil map[string]time.Time
+	// streamChannelsCleaned is when removeUnusedStreamChannels last ran.
+	streamChannelsCleaned time.Time
 	// websocketTimeout is the timeout for opening a WebSocket connection (see websocketTimeout).
 	websocketTimeout time.Duration
 	initalTime       time.Time
