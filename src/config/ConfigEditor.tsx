@@ -6,16 +6,13 @@ import { PIWebAPIDataSourceJsonData } from '../types';
 
 interface Props extends DataSourcePluginOptionsEditorProps<PIWebAPIDataSourceJsonData, {}> {}
 
-const coerceOptions = (
-  options: DataSourceSettings<PIWebAPIDataSourceJsonData, {}>
-): DataSourceSettings<PIWebAPIDataSourceJsonData, {}> => {
-  return {
-    ...options,
-    jsonData: {
-      ...options.jsonData,
-      url: options.url,
-    },
-  };
+/**
+ * The backend reads the max cache time as a whole number of hours: a decimal value would stop the datasource from
+ * loading, so it is rounded. An empty or invalid value is left out and the backend uses its default.
+ */
+const parseMaxCacheTime = (value: string): number | undefined => {
+  const hours = Number(value);
+  return value.trim() === '' || !Number.isFinite(hours) ? undefined : Math.max(0, Math.round(hours));
 };
 
 interface State {}
@@ -50,7 +47,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
 
   onHttpOptionsChange = (options: DataSourceSettings<PIWebAPIDataSourceJsonData, {}>) => {
     const { onOptionsChange } = this.props;
-    onOptionsChange(coerceOptions(options));
+    onOptionsChange(options);
   };
 
   onPiPointChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -76,7 +73,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
     const { onOptionsChange, options } = this.props;
     const jsonData = {
       ...options.jsonData,
-      maxCacheTime: Number(event.target.value),
+      maxCacheTime: parseMaxCacheTime(event.target.value),
     };
     onOptionsChange({ ...options, jsonData });
   };
@@ -118,8 +115,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   };
 
   render() {
-    const { options: originalOptions } = this.props;
-    const options = coerceOptions(originalOptions);
+    const { options } = this.props;
 
     return (
       <div>
@@ -147,8 +143,10 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
                 id="config-max-cache-time"
                 width={24}
                 type="number"
+                min={0}
+                step={1}
                 onChange={this.onMaxCacheTimeChange}
-                value={options.jsonData.maxCacheTime}
+                value={options.jsonData.maxCacheTime ?? ''}
                 placeholder="Cache in hours"
               />
             </InlineField>

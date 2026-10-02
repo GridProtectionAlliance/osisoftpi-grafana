@@ -66,7 +66,6 @@ export interface PIWebAPIQuery extends DataQuery {
   elementPath?: string;
   hideError?: boolean;
   isAnnotation?: boolean;
-  webid?: string;
   display?: any;
   nodata?: string,
   enableStreaming?: any;
@@ -117,8 +116,6 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
  * These are options configured for each DataSource instance
  */
 export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
-  url?: string;
-  access?: string;
   piserver?: string;
   afserver?: string;
   afdatabase?: string;

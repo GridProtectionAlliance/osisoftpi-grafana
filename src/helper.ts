@@ -34,9 +34,31 @@ export function formatVariableValue(value: unknown): string {
  * Used when browsing the AF hierarchy, which needs a single concrete path.
  */
 export function firstVariableValue(path: string): string {
-  return path.replace(/\{([^{}]*)\}/g, (_: string, values: string) =>
-    values.split(',')[0].replace(/%2C/g, ',').replace(/%7B/g, '{').replace(/%7D/g, '}').replace(/%25/g, '%')
-  );
+  return path.replace(/\{([^{}]*)\}/g, (_: string, values: string) => decodeVariableValue(values.split(',')[0]));
+}
+
+/**
+ * Expands every `{value1,value2}` group created by formatVariableValue into the combinations of its values,
+ * e.g. `{A,B}-{1,2}` gives `A-1`, `A-2`, `B-1` and `B-2`, keeping at most `limit` of them. A text without groups
+ * gives itself.
+ */
+export function expandVariableValues(text: string, limit = Infinity): string[] {
+  const group = /\{([^{}]*)\}/;
+  let results = [''];
+  let rest = text;
+  let match: RegExpExecArray | null;
+  while ((match = group.exec(rest)) !== null) {
+    const before = rest.slice(0, match.index);
+    const values = match[1].split(',').map(decodeVariableValue);
+    results = results.flatMap((result) => values.map((value) => result + before + value)).slice(0, limit);
+    rest = rest.slice(match.index + match[0].length);
+  }
+  return results.map((result) => result + rest);
+}
+
+/** Decodes a value of a `{value1,value2}` group created by formatVariableValue. */
+function decodeVariableValue(value: string): string {
+  return value.replace(/%2C/g, ',').replace(/%7B/g, '{').replace(/%7D/g, '}').replace(/%25/g, '%');
 }
 
 /** Removes the leading `\\` of a UNC-style target (`\\AFServer\DB\Element;Attr`): the backend adds it. */
@@ -50,7 +72,6 @@ export function removeTime(s: any): string {
   delete temp.endTime;
   delete temp.scopedVars;
   delete temp.hashCode;
-  delete temp.webid;
   return JSON.stringify(temp);
 }
 
