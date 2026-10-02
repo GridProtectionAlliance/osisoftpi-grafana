@@ -180,15 +180,13 @@ func getValueType(Type string) reflect.Type {
 	switch Type {
 	case "Boolean":
 		dataType = reflect.TypeOf([]bool{})
-	case "Byte":
-		dataType = reflect.TypeOf([]byte{})
 	case "DateTime":
 		dataType = reflect.TypeOf([]time.Time{})
 	case "Single", "Double", "Float16", "Float32", "Float64":
 		dataType = reflect.TypeOf([]float64{})
 	case "GUID":
 		dataType = reflect.TypeOf([]string{})
-	case "Int16", "Int32", "EnumerationValue":
+	case "Byte", "Int16", "Int32", "EnumerationValue": // a byte slice cannot hold the JSON numbers (see compatible)
 		dataType = reflect.TypeOf([]int32{})
 	case "Int64":
 		dataType = reflect.TypeOf([]int64{})
@@ -198,11 +196,9 @@ func getValueType(Type string) reflect.Type {
 		dataType = reflect.TypeOf([]time.Time{})
 	case "Digital":
 		dataType = reflect.TypeOf([]int32{})
-	case "Blob":
-		dataType = reflect.TypeOf([]byte{})
 	default:
-		// "<Anything>" (empty type, e.g. AF links) or a type the plugin does not know: the type is taken
-		// from the values returned by PI Web API (see inferValueType)
+		// "<Anything>" (empty type, e.g. AF links), "Blob" (no numeric value) or a type the plugin does not know:
+		// the type is taken from the values returned by PI Web API (see inferValueType)
 		dataType = nil
 	}
 	return dataType

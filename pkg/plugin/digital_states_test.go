@@ -30,6 +30,11 @@ func TestDigitalStatesWithBadValues(t *testing.T) {
 		{attribute: "Status", nodata: "Null", wantType: data.FieldTypeNullableString, want: []interface{}{nil, "Running", nil, "Stopped"}},
 		{attribute: "Status", nodata: "Previous", wantType: data.FieldTypeNullableString, want: []interface{}{nil, "Running", "Running", "Stopped"}},
 		{attribute: "Status", nodata: "Drop", wantType: data.FieldTypeNullableString, want: []interface{}{"Running", "Stopped"}},
+		// "Keep" shows the bad value's own state, not the state of code 0 ("Stopped") as "0" does
+		{attribute: "Status", nodata: "Keep", wantType: data.FieldTypeNullableString, want: []interface{}{"Shutdown", "Running", "Shutdown", "Stopped"}},
+		{attribute: "Status", nodata: "0", wantType: data.FieldTypeNullableString, want: []interface{}{"Stopped", "Running", "Stopped", "Stopped"}},
+		{attribute: "Unknown", nodata: "Keep", wantType: data.FieldTypeNullableString, want: []interface{}{"Running", "Shutdown"}},
+		{attribute: "Flow", nodata: "Keep", wantType: data.FieldTypeNullableFloat64, want: []interface{}{1.5, 254.0}},
 		{attribute: "Unknown", nodata: "Null", wantType: data.FieldTypeNullableString, want: []interface{}{"Running", nil}},
 		// a numeric attribute whose last value is bad is not a digital state
 		{attribute: "Flow", nodata: "Null", wantType: data.FieldTypeNullableFloat64, want: []interface{}{1.5, nil}},
