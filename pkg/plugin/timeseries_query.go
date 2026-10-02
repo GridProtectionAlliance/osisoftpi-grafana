@@ -117,7 +117,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				TargetPath:     targetBasePath,
 				UseUnit:        UseUnit,
 				DigitalStates:  DigitalStates,
-				Display:        PiQuery.Pi.Display,
+				Display:        target.resolveDisplay(PiQuery.Pi.Display),
 				Regex:          PiQuery.Pi.Regex,
 				Nodata:         PiQuery.Pi.Nodata,
 				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,

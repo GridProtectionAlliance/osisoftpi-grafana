@@ -204,3 +204,54 @@ func TestProcessQueryExpandsVariables(t *testing.T) {
 		t.Errorf("first target path = %q", processed[0].FullTargetPath)
 	}
 }
+
+func TestProcessQueryResolvesDisplayPerTarget(t *testing.T) {
+	d := &Datasource{
+		settings:          backend.DataSourceInstanceSettings{URL: "https://server/piwebapi"},
+		webIDCache:        newWebIDCache(1),
+		datasourceMutex:   &sync.Mutex{},
+		dataSourceOptions: &PIWebAPIDataSourceJsonData{},
+	}
+
+	queryJSON, _ := json.Marshal(map[string]interface{}{
+		"target": `\\AF\DB\U-100\{T-101,T-102}`,
+		"attributes": []map[string]interface{}{
+			{"value": map[string]interface{}{"value": "{Level,Volume}"}},
+		},
+		// {A,B} matches no variable of the query and stays as typed
+		"display":  "{T-101,T-102} {Level,Volume} {A,B}",
+		"hashCode": "h",
+	})
+	now := time.Now()
+	queries := []backend.DataQuery{
+		{RefID: "A", JSON: queryJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
+	}
+
+	processed := d.processQuery(queries, "uid")
+	got := make([]string, 0, len(processed))
+	for _, q := range processed {
+		got = append(got, *q.Display)
+	}
+	want := []string{"T-101 Level {A,B}", "T-101 Volume {A,B}", "T-102 Level {A,B}", "T-102 Volume {A,B}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("display names = %q, want %q", got, want)
+	}
+}
+
+func TestResolveDisplay(t *testing.T) {
+	target := expandedTarget{Choices: []variableChoice{{Options: []string{"a,1", "b"}, Value: "a,1"}}}
+	tests := map[string]string{
+		"plain name":         "plain name",
+		"{a%2C1,b} value":    "a,1 value",
+		"unbalanced {a%2C1,": "unbalanced {a%2C1,",
+		"{x}{a%2C1,b}{y,z}!": "{x}a,1{y,z}!",
+	}
+	for display, want := range tests {
+		if got := *target.resolveDisplay(&display); got != want {
+			t.Errorf("resolveDisplay(%q) = %q, want %q", display, got, want)
+		}
+	}
+	if target.resolveDisplay(nil) != nil {
+		t.Error("resolveDisplay(nil) should be nil")
+	}
+}
