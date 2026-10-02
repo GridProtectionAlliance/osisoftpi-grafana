@@ -1,44 +1,11 @@
 package plugin
 
 import (
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
-	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
-
-// newTestDatasourceWithWebID returns a Datasource with a pre-populated WebID cache entry
-// for the given webID and PI point type string (e.g. "Float32", "Int32", "Digital").
-func newTestDatasourceWithWebID(webID, pointType string) *Datasource {
-	ds := &Datasource{
-		datasourceMutex:           &sync.Mutex{},
-		websocketConnectionsMutex: &sync.Mutex{},
-		channelConstruct:          make(map[string]StreamChannelConstruct),
-		websocketConnections:      make(map[string]*websocket.Conn),
-		senderChannels:            make(map[string]map[*backend.StreamSender]chan StreamData),
-		webIDCache:                newWebIDCache(12),
-		dataSourceOptions:         &PIWebAPIDataSourceJsonData{},
-	}
-
-	// Directly seed the WebID cache so the datasource methods return deterministic values.
-	entry := WebIDCacheEntry{
-		Path:         `PISERVER\TestTag`,
-		WebID:        webID,
-		Type:         getValueType(pointType),
-		DigitalState: pointType == "Digital",
-		PointType:    pointType,
-		Units:        "rpm",
-		Description:  "Test tag",
-		ExpTime:      time.Now().Add(12 * time.Hour),
-	}
-	ds.webIDCache.webIDCache[entry.Path] = entry
-	ds.webIDCache.webIDPaths[webID] = entry.Path
-
-	return ds
-}
 
 // makeTestQuery returns a minimal PiProcessedQuery for the given webID.
 func makeTestQuery(webID string) *PiProcessedQuery {
@@ -59,7 +26,7 @@ func makeTestQuery(webID string) *PiProcessedQuery {
 
 func TestConvertStreamItemsToFrame_Float64(t *testing.T) {
 	webID := "webid-float"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
+	ds := newTestDatasource()
 	query := makeTestQuery(webID)
 
 	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -109,7 +76,7 @@ func TestConvertStreamItemsToFrame_Float64(t *testing.T) {
 
 func TestConvertStreamItemsToFrame_EmptyItems(t *testing.T) {
 	webID := "webid-empty"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
+	ds := newTestDatasource()
 	query := makeTestQuery(webID)
 
 	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
@@ -123,6 +90,9 @@ func TestConvertStreamItemsToFrame_EmptyItems(t *testing.T) {
 	if frame.Fields[0].Len() != 0 {
 		t.Errorf("expected 0 rows, got %d", frame.Fields[0].Len())
 	}
+	if frame.Meta == nil {
+		t.Error("frame.Meta must not be nil (Grafana requires it for streaming frames)")
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +101,7 @@ func TestConvertStreamItemsToFrame_EmptyItems(t *testing.T) {
 
 func TestConvertStreamItemsToFrame_NilValue(t *testing.T) {
 	webID := "webid-nil"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
+	ds := newTestDatasource()
 	query := makeTestQuery(webID)
 
 	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -156,7 +126,7 @@ func TestConvertStreamItemsToFrame_NilValue(t *testing.T) {
 
 func TestConvertStreamItemsToFrame_NodataDrop(t *testing.T) {
 	webID := "webid-drop"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
+	ds := newTestDatasource()
 
 	nodata := "Drop"
 	query := &PiProcessedQuery{
@@ -188,7 +158,7 @@ func TestConvertStreamItemsToFrame_NodataDrop(t *testing.T) {
 
 func TestConvertStreamItemsToFrame_NodataPrevious(t *testing.T) {
 	webID := "webid-prev"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
+	ds := newTestDatasource()
 
 	nodata := "Previous"
 	query := &PiProcessedQuery{
@@ -223,88 +193,41 @@ func TestConvertStreamItemsToFrame_NodataPrevious(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// convertStreamItemsToFrame – digital state
+// convertStreamItemsToFrame – WebID metadata
 // ---------------------------------------------------------------------------
 
-func TestConvertStreamItemsToFrame_DigitalState(t *testing.T) {
-	webID := "webid-digital"
-	ds := newTestDatasourceWithWebID(webID, "Digital")
-
-	nodata := "Null"
-	query := &PiProcessedQuery{
-		WebID:          webID,
-		Label:          "TestTag",
-		FullTargetPath: `PISERVER\TestTag`,
-		IsPIPoint:      true,
-		Nodata:         &nodata,
-		DigitalStates:  true,
-		RefID:          "A",
+// The streamed values use the type, units and description of the WebID, like the query frames: an Int32 point
+// streams integers, not the float64 type of the JSON values.
+func TestConvertStreamItemsToFrame_CachedMetadata(t *testing.T) {
+	webID := "webid-int"
+	ds := newTestDatasource()
+	enabled := true
+	ds.dataSourceOptions.UseUnit = &enabled
+	entry := WebIDCacheEntry{
+		Path:        `PISERVER\TestTag`,
+		WebID:       webID,
+		Type:        getValueType("Int32"),
+		PointType:   "Int32",
+		Units:       "rpm",
+		Description: "Test tag",
+		ExpTime:     time.Now().Add(12 * time.Hour),
 	}
+	ds.webIDCache.webIDCache[entry.Path] = entry
+	ds.webIDCache.webIDPaths[webID] = entry.Path
+	query := makeTestQuery(webID)
+	query.UseUnit = true
 
 	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	// PI Web API encodes digital state values as JSON objects.
-	items := []PiBatchContentItem{
-		{
-			Timestamp: ts,
-			Value:     map[string]interface{}{"IsSystem": false, "Name": "Active", "Value": float64(1)},
-			Good:      true,
-		},
-		{
-			Timestamp: ts.Add(time.Second),
-			Value:     map[string]interface{}{"IsSystem": false, "Name": "Inactive", "Value": float64(0)},
-			Good:      true,
-		},
-	}
-
-	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
-	if len(frame.Fields) != 2 {
-		t.Fatalf("expected 2 fields, got %d", len(frame.Fields))
-	}
-	if frame.Fields[0].Len() != 2 {
-		t.Fatalf("expected 2 rows, got %d", frame.Fields[0].Len())
-	}
-
-	// Value field for digital states is a []string of state names.
-	v0, _ := frame.Fields[1].ConcreteAt(0)
-	name, ok := v0.(string)
-	if !ok {
-		t.Fatalf("expected string value for digital state, got %T", v0)
-	}
-	if name != "Active" {
-		t.Errorf("digital state name: got %q, want %q", name, "Active")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// convertStreamItemsToFrame – frame metadata
-// ---------------------------------------------------------------------------
-
-func TestConvertStreamItemsToFrame_MetaNotNil(t *testing.T) {
-	webID := "webid-meta"
-	ds := newTestDatasourceWithWebID(webID, "Float32")
-	query := makeTestQuery(webID)
-
-	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
-	if frame.Meta == nil {
-		t.Error("frame.Meta must not be nil (Grafana requires it for streaming frames)")
-	}
-}
-
-// ---------------------------------------------------------------------------
-// convertStreamItemsToFrame – <Anything> value type
-// ---------------------------------------------------------------------------
-
-// An attribute of type <Anything> has no type in the WebID cache: the stream takes it from the values, as the query
-// responses do (issue GridProtectionAlliance/osisoftpi-grafana#173).
-func TestConvertStreamItemsToFrame_AnythingType(t *testing.T) {
-	webID := "webid-anything"
-	ds := newTestDatasourceWithWebID(webID, "")
-	query := makeTestQuery(webID)
-
-	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{{Timestamp: ts, Value: float64(2), Good: true}}},
+	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{{Timestamp: ts, Value: float64(3), Good: true}}},
 		buildStreamFrameCache(ds, query))
-	if v, ok := frame.Fields[1].ConcreteAt(0); !ok || v != float64(2) {
-		t.Errorf("value = %v (%v), want 2", v, ok)
+	field := frame.Fields[1]
+	if field.Type() != data.FieldTypeNullableInt32 {
+		t.Errorf("field type = %s, want %s", field.Type(), data.FieldTypeNullableInt32)
+	}
+	if v, ok := field.ConcreteAt(0); !ok || v != int32(3) {
+		t.Errorf("value = %v (%v), want 3", v, ok)
+	}
+	if field.Config == nil || field.Config.Unit != "rpm" || field.Config.Description != "Test tag" {
+		t.Errorf("config = %+v, want unit rpm and description Test tag", field.Config)
 	}
 }

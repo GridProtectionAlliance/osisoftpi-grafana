@@ -17,24 +17,62 @@ type PiBatchSummaryItem struct {
 	Value PiBatchContentItem `json:"Value"`
 }
 
-func (p PiBatchDataSummaryItems) getUnits(typeFilter string) string {
-	var units string
-	if len(typeFilter) == 0 {
-		return ""
-	}
+// PiBatchDataCalculationSummaryItems is the response of calculation/summary: the values of every summary type are
+// listed directly, not inside a stream as in the stream set summaries.
+type PiBatchDataCalculationSummaryItems struct {
+	Links map[string]interface{} `json:"Links"`
+	Items []PiBatchSummaryItem   `json:"Items"`
+}
 
-	for _, item := range p.Items[0].Items {
-		if item.Type == typeFilter {
-			units = item.Value.UnitsAbbreviation
-			break
-		}
+// summaryItems returns the values of the stream (the only one of the request).
+func (p PiBatchDataSummaryItems) summaryItems() []PiBatchSummaryItem {
+	if len(p.Items) == 0 {
+		return nil
 	}
-	return units
+	return p.Items[0].Items
+}
+
+func (p PiBatchDataSummaryItems) getUnits(typeFilter string) string {
+	return summaryUnits(p.summaryItems(), typeFilter)
 }
 
 func (p PiBatchDataSummaryItems) getItems(typeFilter string) *[]PiBatchContentItem {
+	return summaryValues(p.summaryItems(), typeFilter)
+}
+
+func (p PiBatchDataSummaryItems) getSummaryTypes() *[]string {
+	return summaryTypes(p.summaryItems())
+}
+
+func (p PiBatchDataCalculationSummaryItems) getUnits(typeFilter string) string {
+	return summaryUnits(p.Items, typeFilter)
+}
+
+func (p PiBatchDataCalculationSummaryItems) getItems(typeFilter string) *[]PiBatchContentItem {
+	return summaryValues(p.Items, typeFilter)
+}
+
+func (p PiBatchDataCalculationSummaryItems) getSummaryTypes() *[]string {
+	return summaryTypes(p.Items)
+}
+
+// summaryUnits returns the units of the values of one summary type.
+func summaryUnits(summaryItems []PiBatchSummaryItem, typeFilter string) string {
+	if len(typeFilter) == 0 {
+		return ""
+	}
+	for _, item := range summaryItems {
+		if item.Type == typeFilter {
+			return item.Value.UnitsAbbreviation
+		}
+	}
+	return ""
+}
+
+// summaryValues returns the values of one summary type.
+func summaryValues(summaryItems []PiBatchSummaryItem, typeFilter string) *[]PiBatchContentItem {
 	var items []PiBatchContentItem
-	for _, item := range p.Items[0].Items {
+	for _, item := range summaryItems {
 		if item.Type == typeFilter {
 			items = append(items, item.Value)
 		}
@@ -42,11 +80,12 @@ func (p PiBatchDataSummaryItems) getItems(typeFilter string) *[]PiBatchContentIt
 	return &items
 }
 
-func (p PiBatchDataSummaryItems) getSummaryTypes() *[]string {
-	var types []string
+// summaryTypes returns the summary types in the order of the response, one series each.
+func summaryTypes(summaryItems []PiBatchSummaryItem) *[]string {
+	types := []string{}
 	seenTypes := make(map[string]bool)
-	for _, item := range p.Items[0].Items {
-		if _, exists := seenTypes[item.Type]; !exists {
+	for _, item := range summaryItems {
+		if !seenTypes[item.Type] {
 			types = append(types, item.Type)
 			seenTypes[item.Type] = true
 		}

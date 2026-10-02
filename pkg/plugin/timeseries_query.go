@@ -7,9 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -98,7 +96,6 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 		}
 		queryBaseURL := baseUrl + PiQuery.getQueryBaseURL()
 		streamable := PiQuery.isStreamable() && d.isUsingStreaming()
-		startTime := PiQuery.TimeRange.From.Truncate(time.Second)
 		endTime := PiQuery.TimeRange.To.Truncate(time.Second)
 		separator := PiQuery.Pi.getTargetPathSeparator()
 
@@ -119,12 +116,10 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				TargetPath:     targetBasePath,
 				UseUnit:        UseUnit,
 				DigitalStates:  DigitalStates,
-				Display:        PiQuery.Pi.Display,
+				Display:        target.resolveDisplay(PiQuery.Pi.Display),
 				Regex:          PiQuery.Pi.Regex,
 				Nodata:         PiQuery.Pi.Nodata,
-				Summary:        PiQuery.Pi.Summary,
 				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,
-				StartTime:      startTime,
 				EndTime:        endTime,
 				Variable:       target.Variable,
 				MultiVariable:  target.MultiVariable,
@@ -139,7 +134,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 			// initialize maps
 			piQuery.BatchRequest = make(map[string]BatchSubRequest)
 
-			dataId := fmt.Sprintf("%s_Req%d_Data", piQuery.RefID, piQuery.Index)
+			dataId := piQuery.dataRequestKey()
 			if WebID != nil && WebID.WebID != "" {
 				piQuery.WebID = WebID.WebID
 				// DATA FETCH
@@ -153,7 +148,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 				piQuery.Resource = batchSubRequest.Resource
 				piQuery.BatchRequest[dataId] = batchSubRequest
 			} else {
-				parentId := fmt.Sprintf("%s_Req%d", piQuery.RefID, piQuery.Index)
+				parentId := piQuery.webIDRequestKey()
 				parameter := "$." + parentId + ".Content.WebId"
 				// WEBID FETCH
 				piQuery.BatchRequest[parentId] = BatchSubRequest{
@@ -252,7 +247,7 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 		// map the response back to the original query
 		for i, query := range processedQuery {
 			// WEBID
-			var key = fmt.Sprintf("%s_Req%d", RefID, query.Index)
+			var key = query.webIDRequestKey()
 			WebIdData, ok := tempresponse[key]
 			if ok {
 				if WebIdData.Status == http.StatusOK {
@@ -281,7 +276,7 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 				}
 			}
 			// DATA
-			key = fmt.Sprintf("%s_Req%d_Data", RefID, query.Index)
+			key = query.dataRequestKey()
 			ResponseData, ok := tempresponse[key]
 			if ok {
 				if ResponseData.Status == http.StatusOK {
@@ -334,6 +329,18 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 	return PIWebAPIQueries
 }
 
+// webIDRequestKey is the key of the batch request that looks up the target's WebID, and dataRequestKey the key of
+// the request of its data. They are built from Index only, which is unique within the batch: the RefID is any text
+// the user typed, and in the JSONPath that passes the WebID to the data request, dots, brackets, quotes or spaces
+// are read as JSONPath syntax.
+func (q *PiProcessedQuery) webIDRequestKey() string {
+	return fmt.Sprintf("Req%d", q.Index)
+}
+
+func (q *PiProcessedQuery) dataRequestKey() string {
+	return fmt.Sprintf("Req%d_Data", q.Index)
+}
+
 // logFields returns the fields logged when the target fails: enough to reproduce the failing requests.
 func (q *PiProcessedQuery) logFields() []any {
 	fields := []any{"RefID", q.RefID, "target", q.FullTargetPath, "status", q.Status, "error", q.Error, "hideError", q.HideError}
@@ -346,8 +353,7 @@ func (q *PiProcessedQuery) logFields() []any {
 	if q.Resource != "" {
 		fields = append(fields, "request", strings.ReplaceAll(q.Resource, "{0}", q.WebID))
 	}
-	lookupKey := fmt.Sprintf("%s_Req%d", q.RefID, q.Index)
-	if lookup, ok := q.BatchRequest[lookupKey]; ok {
+	if lookup, ok := q.BatchRequest[q.webIDRequestKey()]; ok {
 		fields = append(fields, "webIdRequest", lookup.Resource)
 	}
 	return fields
@@ -524,63 +530,11 @@ func (q *PiProcessedQuery) isRegexQuery() bool {
 	return true
 }
 
-// getSummaryDuration returns the summary duration in the format piwebapi expects
-// The summary duration is provided by the frontend in the format: <number><short_name>
-// The short name can be one of the following: ms, s, m, h, d, mo, w, wd, yd
-// A default of 30s is returned if the summary duration is not provided by the frontend
-// or if the format is invalid
-func (q *PIWebAPIQuery) getSummaryDuration() string {
-	// Return the default value if the summary is not provided by the frontend
-	if q.Summary == nil || q.Summary.Duration == nil || *q.Summary.Duration == "" {
-		return "30s"
-	}
-	return _getDurationBase(*q.Summary.Duration)
-}
-
-func (q *PIWebAPIQuery) getSampleInterval() string {
-	// Return the default value if the summary is not provided by the frontend
-	if q.Summary == nil || q.Summary.SampleInterval == nil || *q.Summary.SampleInterval == "" {
-		return "30s"
-	}
-	return _getDurationBase(*q.Summary.SampleInterval)
-}
-
-func _getDurationBase(duration string) string {
-	// If the summary duration is provided, then validate the format piwebapi expects
-	// Regular expression to match the format: <number><short_name>
-	pattern := `^(\d+(\.\d+)?)\s*(ms|s|m|h|d|mo|w|wd|yd)$`
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(duration)
-
-	if len(matches) != 4 {
-		return "30s" // Return the default value if the format is invalid
-	}
-
-	// Extract the numeric part and the short name from the interval
-	numericPartStr := matches[1]
-	shortName := matches[3]
-
-	// Convert the numeric part to a float64
-	numericPart, err := strconv.ParseFloat(numericPartStr, 64)
-	if err != nil {
-		return "30s" // Return the default value if conversion fails
-	}
-
-	// Check if the short name is valid and whether fractions are allowed for that time unit
-	switch shortName {
-	case "ms", "s", "m", "h":
-		// Fractions allowed for millisecond, second, minute, and hour
-		return duration
-	case "d", "mo", "w", "wd", "yd":
-		// No fractions allowed for day, month, week, weekday, yearday
-		if numericPart == float64(int64(numericPart)) {
-			return duration
-		}
-	default:
-		return "30s" // Return the default value if the short name or fractions are not allowed
-	}
-
-	return "30s" // Return the default value if the short name or fractions are not allowed
+// timeSpanParameter returns a time span (summary duration, sample interval or interpolation interval) as a URL query
+// parameter value. It is sent as entered: PI Web API accepts many AFTimeSpan forms ("1y", "1.5d", "2 hours",
+// "1h30m"...) and returns its own error for an invalid one.
+func timeSpanParameter(span string) string {
+	return queryEscape(strings.TrimSpace(span))
 }
 
 func (q *PIWebAPIQuery) getSummaryURIComponent() string {
@@ -592,12 +546,12 @@ func (q *PIWebAPIQuery) getSummaryURIComponent() string {
 		uri += "&summaryType=" + t.Value.Value
 	}
 	uri += "&calculationBasis=" + *q.Summary.Basis
-	if q.Summary.Duration != nil && *q.Summary.Duration != "" {
-		uri += "&summaryDuration=" + q.getSummaryDuration()
+	if q.Summary.Duration != nil && strings.TrimSpace(*q.Summary.Duration) != "" {
+		uri += "&summaryDuration=" + timeSpanParameter(*q.Summary.Duration)
 	}
 	if q.Summary.SampleTypeInterval != nil && *q.Summary.SampleTypeInterval &&
-		q.Summary.SampleInterval != nil && *q.Summary.SampleInterval != "" {
-		uri += "&sampleType=Interval&sampleInterval=" + q.getSampleInterval()
+		q.Summary.SampleInterval != nil && strings.TrimSpace(*q.Summary.SampleInterval) != "" {
+		uri += "&sampleType=Interval&sampleInterval=" + timeSpanParameter(*q.Summary.SampleInterval)
 	}
 	return uri
 }
@@ -638,10 +592,6 @@ func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	return "|"
 }
 
-func (q *PIWebAPIQuery) checkNilSegments() bool {
-	return q.Target == nil
-}
-
 func (q *PIWebAPIQuery) checkValidTargets() bool {
 	if q.Target == nil {
 		return false
@@ -652,7 +602,7 @@ func (q *PIWebAPIQuery) checkValidTargets() bool {
 		return false
 	}
 	// check if the target provided ends with a semicolon
-	if q.Target == nil || strings.HasSuffix(*q.Target, ";") {
+	if strings.HasSuffix(*q.Target, ";") {
 		return false
 	}
 
@@ -669,11 +619,21 @@ func (q *PIWebAPIQuery) isUseLastValue() bool {
 	return *q.UseLastValue.Enable
 }
 
+// getMaxDataPoints returns the panel's max data points.
 func (q *Query) getMaxDataPoints() int {
-	if q.Pi.RecordedValues != nil && q.Pi.RecordedValues.MaxNumber != nil {
+	return q.MaxDataPoints
+}
+
+// defaultMaxRecordedValues is the number of recorded values returned when "Max Recorded Values" is not set: the
+// default maxCount of PI Web API, and the placeholder of the query editor.
+const defaultMaxRecordedValues = 1000
+
+// getMaxRecordedValues returns "Max Recorded Values", or defaultMaxRecordedValues when it is not set.
+func (q *Query) getMaxRecordedValues() int {
+	if q.Pi.RecordedValues != nil && q.Pi.RecordedValues.MaxNumber != nil && *q.Pi.RecordedValues.MaxNumber > 0 {
 		return *q.Pi.RecordedValues.MaxNumber
 	}
-	return q.MaxDataPoints
+	return defaultMaxRecordedValues
 }
 
 func (q *Query) getBoundaryType() string {
@@ -694,7 +654,7 @@ func (q Query) getQueryBaseURL() string {
 				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
 				uri += "/intervals" + q.getTimeRangeURIComponent()
-				uri += fmt.Sprintf("&sampleInterval=%s", q.getIntervalTime())
+				uri += "&sampleInterval=" + timeSpanParameter(q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			} else {
@@ -715,9 +675,9 @@ func (q Query) getQueryBaseURL() string {
 			if q.Pi.isSummary() {
 				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
-				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
+				uri += "/interpolated" + q.getTimeRangeURIComponent() + "&interval=" + timeSpanParameter(q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
-				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=" + q.getBoundaryType()
+				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxRecordedValues()) + "&boundaryType=" + q.getBoundaryType()
 			} else {
 				uri += "/plot" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 			}

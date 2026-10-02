@@ -40,6 +40,8 @@ func TestAttributeValueTypeFromValues(t *testing.T) {
 		`\\AF\DB\E|Unknown type`:        {valueType: strPtr("SomeNewType"), values: []interface{}{7.5, 8.5}},
 		`\\AF\DB\E|Single`:              {valueType: strPtr("Single")},
 		`\\AF\DB\E|String`:              {valueType: strPtr("String"), values: []interface{}{"a", "b"}},
+		`\\AF\DB\E|Byte`:                {valueType: strPtr("Byte"), values: []interface{}{5, 255}},
+		`\\AF\DB\E|Blob`:                {valueType: strPtr("Blob"), values: []interface{}{"blob"}},
 	}}
 	server := fake.start(t)
 
@@ -63,6 +65,10 @@ func TestAttributeValueTypeFromValues(t *testing.T) {
 		// declared types are unchanged
 		{attribute: "Single", wantType: data.FieldTypeNullableFloat64, want: []interface{}{1.5, 2.5}},
 		{attribute: "String", wantType: data.FieldTypeNullableString, want: []interface{}{"a", "b"}},
+		// JSON numbers cannot be converted to the unsigned type of a byte slice
+		{attribute: "Byte", wantType: data.FieldTypeNullableInt32, want: []interface{}{int32(5), int32(255)}},
+		// a blob has no numeric value: its type is taken from the values
+		{attribute: "Blob", wantType: data.FieldTypeNullableString, want: []interface{}{"blob"}},
 	}
 	for _, tt := range tests {
 		name := tt.attribute

@@ -96,33 +96,62 @@ func TestGetExpandedTargets(t *testing.T) {
 	}
 }
 
-func TestGetExpandedTargetsLimit(t *testing.T) {
-	values := make([]string, 0, 101)
-	for i := 0; i <= 100; i++ {
-		values = append(values, fmt.Sprintf("E%d", i))
+// variableGroup returns a multi-value variable of n values ("{P0,P1,...}"), or a plain name when n is 1.
+func variableGroup(prefix string, n int) string {
+	if n == 1 {
+		return prefix
 	}
-	group := "{" + strings.Join(values, ",") + "}"
-	q := newVariablesTestQuery(`\\AF\DB\`+group, group[:len(group)-len(",E100}")]+"}")
-
-	_, err := q.getExpandedTargets()
-	if !errors.Is(err, errTooManyTargets) {
-		t.Fatalf("expected errTooManyTargets for 101 x 100 targets, got %v", err)
+	values := make([]string, n)
+	for i := range values {
+		values[i] = fmt.Sprintf("%s%d", prefix, i)
 	}
+	return "{" + strings.Join(values, ",") + "}"
 }
 
-func TestDataLabelsWithVariables(t *testing.T) {
-	multi := &PiProcessedQuery{
-		Label: "Temperature", FullTargetPath: `\\AF\DB\S1\U2|Temperature`, TargetPath: `\\AF\DB\S1\U2`,
-		Variable: `S1\U2`, MultiVariable: true,
+// A query expands into at most maxExpandedTargets (1000) element/attribute combinations, counting the values of every
+// attribute. The limit is enforced before the combinations are built: three "All" variables of 100 values are a
+// million combinations, which used to be allocated in full (~150 MB) only to return the error.
+func TestGetExpandedTargetsLimit(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		attributes []string
+		want       int
+	}{
+		{name: "10 elements x 100 attributes", target: `\\AF\DB\` + variableGroup("E", 10), attributes: []string{variableGroup("A", 100)}, want: 1000},
+		{name: "1000 elements", target: `\\AF\DB\` + variableGroup("E", 1000), attributes: []string{"Temp"}, want: 1000},
+		{name: "1000 attributes in two groups", target: `\\AF\DB\E`, attributes: []string{variableGroup("A", 500), variableGroup("B", 500)}, want: 1000},
+		{name: "1001 elements", target: `\\AF\DB\` + variableGroup("E", 1001), attributes: []string{"Temp"}, want: 1001},
+		{name: "7 elements x 143 attributes", target: `\\AF\DB\` + variableGroup("E", 7), attributes: []string{variableGroup("A", 143)}, want: 1001},
+		{name: "1001 attributes in three groups", target: `\\AF\DB\E`, attributes: []string{variableGroup("A", 500), variableGroup("B", 500), "Temp"}, want: 1001},
+		{name: "100^3 element paths", target: `AF\DB\` + variableGroup("V", 100) + `\` + variableGroup("V", 100) + `\` + variableGroup("V", 100), attributes: []string{"Temp"}, want: 1000000},
 	}
-	if got := getDataLabels(false, multi, "Float32", "", "", "")["name"]; got != `S1\U2|Temperature` {
-		t.Errorf("multi-variable label = %q", got)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			q := newVariablesTestQuery(tt.target, tt.attributes...)
 
-	// a single variable keeps the existing label format
-	single := &PiProcessedQuery{Label: "Temperature", FullTargetPath: `\\AF\DB\S1|Temperature`, Variable: "S1"}
-	if got := getDataLabels(false, single, "Float32", "", "", "")["name"]; got != "S1|S1|Temperature" {
-		t.Errorf("single-variable label = %q", got)
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			targets, err := q.getExpandedTargets()
+			runtime.ReadMemStats(&after)
+
+			if tt.want <= 1000 { // the documented limit
+				if err != nil || len(targets) != tt.want {
+					t.Fatalf("expected %d targets, got %d (error %v)", tt.want, len(targets), err)
+				}
+				return
+			}
+			if !errors.Is(err, errTooManyTargets) {
+				t.Fatalf("expected errTooManyTargets, got %d targets (error %v)", len(targets), err)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf(" %d targets", tt.want)) {
+				t.Errorf("error should report the number of targets: %v", err)
+			}
+			if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
+				t.Errorf("allocated %d MB before rejecting the query", allocated>>20)
+			}
+		})
 	}
 }
 
@@ -141,26 +170,19 @@ func TestProcessQueryExpandsVariables(t *testing.T) {
 		},
 		"hashCode": "h",
 	})
-	tooManyJSON, _ := json.Marshal(map[string]interface{}{
-		"target": `\\AF\DB\{` + strings.Repeat("E,", 1000) + `E}`,
-		"attributes": []map[string]interface{}{
-			{"value": map[string]interface{}{"value": "Temp"}},
-		},
-	})
 	now := time.Now()
 	queries := []backend.DataQuery{
 		{RefID: "A", JSON: queryJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
-		{RefID: "B", JSON: tooManyJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
 	}
 
 	processed := d.processQuery(queries, "uid")
-	if len(processed) != 9 { // 8 targets for A + 1 error for B
-		t.Fatalf("expected 9 processed queries, got %d", len(processed))
+	if len(processed) != 8 { // 4 element paths x 2 attributes
+		t.Fatalf("expected 8 processed queries, got %d", len(processed))
 	}
 
 	keys := map[string]bool{}
 	hashes := map[string]bool{}
-	for _, q := range processed[:8] {
+	for _, q := range processed {
 		if q.Error != nil || q.RefID != "A" {
 			t.Fatalf("unexpected query: %+v", q)
 		}
@@ -181,36 +203,55 @@ func TestProcessQueryExpandsVariables(t *testing.T) {
 	if processed[0].FullTargetPath != `\\AF\DB\S1\U1|Temp` {
 		t.Errorf("first target path = %q", processed[0].FullTargetPath)
 	}
+}
 
-	last := processed[8]
-	if last.RefID != "B" || !errors.Is(last.Error, errTooManyTargets) {
-		t.Errorf("expected too many targets error for B, got %+v", last)
+func TestProcessQueryResolvesDisplayPerTarget(t *testing.T) {
+	d := &Datasource{
+		settings:          backend.DataSourceInstanceSettings{URL: "https://server/piwebapi"},
+		webIDCache:        newWebIDCache(1),
+		datasourceMutex:   &sync.Mutex{},
+		dataSourceOptions: &PIWebAPIDataSourceJsonData{},
+	}
+
+	queryJSON, _ := json.Marshal(map[string]interface{}{
+		"target": `\\AF\DB\U-100\{T-101,T-102}`,
+		"attributes": []map[string]interface{}{
+			{"value": map[string]interface{}{"value": "{Level,Volume}"}},
+		},
+		// {A,B} matches no variable of the query and stays as typed
+		"display":  "{T-101,T-102} {Level,Volume} {A,B}",
+		"hashCode": "h",
+	})
+	now := time.Now()
+	queries := []backend.DataQuery{
+		{RefID: "A", JSON: queryJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
+	}
+
+	processed := d.processQuery(queries, "uid")
+	got := make([]string, 0, len(processed))
+	for _, q := range processed {
+		got = append(got, *q.Display)
+	}
+	want := []string{"T-101 Level {A,B}", "T-101 Volume {A,B}", "T-102 Level {A,B}", "T-102 Volume {A,B}"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("display names = %q, want %q", got, want)
 	}
 }
 
-// The target limit must be enforced before the combinations are built: three "All" variables of 100 values
-// are a million combinations, which used to be allocated in full (~150 MB) only to return the error.
-func TestGetExpandedTargetsLimitWithoutExpanding(t *testing.T) {
-	values := make([]string, 100)
-	for i := range values {
-		values[i] = fmt.Sprintf("V%d", i)
+func TestResolveDisplay(t *testing.T) {
+	target := expandedTarget{Choices: []variableChoice{{Options: []string{"a,1", "b"}, Value: "a,1"}}}
+	tests := map[string]string{
+		"plain name":         "plain name",
+		"{a%2C1,b} value":    "a,1 value",
+		"unbalanced {a%2C1,": "unbalanced {a%2C1,",
+		"{x}{a%2C1,b}{y,z}!": "{x}a,1{y,z}!",
 	}
-	group := "{" + strings.Join(values, ",") + "}"
-	q := newVariablesTestQuery(`AF\DB\`+group+`\`+group+`\`+group, "Temp")
-
-	var before, after runtime.MemStats
-	runtime.GC()
-	runtime.ReadMemStats(&before)
-	_, err := q.getExpandedTargets()
-	runtime.ReadMemStats(&after)
-
-	if !errors.Is(err, errTooManyTargets) {
-		t.Fatalf("expected errTooManyTargets, got %v", err)
+	for display, want := range tests {
+		if got := *target.resolveDisplay(&display); got != want {
+			t.Errorf("resolveDisplay(%q) = %q, want %q", display, got, want)
+		}
 	}
-	if !strings.Contains(err.Error(), "1000000 targets") {
-		t.Errorf("error should report the number of targets: %v", err)
-	}
-	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
-		t.Errorf("allocated %d MB before rejecting the query", allocated>>20)
+	if target.resolveDisplay(nil) != nil {
+		t.Error("resolveDisplay(nil) should be nil")
 	}
 }

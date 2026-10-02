@@ -82,6 +82,9 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 	req.Header.Set("X-Requested-With", "message/http")
 	req.Header.Set("X-PIWEBAPI-HTTP-METHOD", "GET")
 	req.Header.Set("X-PIWEBAPI-RESOURCE-ADDRESS", uri)
+	// The batch only contains GET sub-requests, so it can be sent again. A nil Idempotency-Key is not sent, but lets
+	// the HTTP client retry the request once when the server closed a reused keep-alive connection (EOF, reset).
+	req.Header["Idempotency-Key"] = nil
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
@@ -114,173 +117,14 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 // badValues are nil.
 func convertSliceToPointers(slice interface{}, badValues []int) interface{} {
 	s := reflect.ValueOf(slice)
-	t := reflect.TypeOf(slice).Elem()
-
-	switch t.Kind() {
-	case reflect.Int:
-		pointers := make([]*int, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*int)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Int8:
-		pointers := make([]*int8, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*int8)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Int16:
-		pointers := make([]*int16, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*int16)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Int32:
-		pointers := make([]*int32, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*int32)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Int64:
-		pointers := make([]*int64, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*int64)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Uint8:
-		pointers := make([]*uint8, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*uint8)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Uint16:
-		pointers := make([]*uint16, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*uint16)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Uint32:
-		pointers := make([]*uint32, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*uint32)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Uint64:
-		pointers := make([]*uint64, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*uint64)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Float32:
-		pointers := make([]*float32, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*float32)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Float64:
-		pointers := make([]*float64, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*float64)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.String:
-		pointers := make([]*string, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*string)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Bool:
-		pointers := make([]*bool, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			pointers[i] = s.Index(i).Addr().Interface().(*bool)
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
-	case reflect.Struct:
-		if t == reflect.TypeOf(time.Time{}) {
-			// Handle time.Time
-			pointers := make([]*time.Time, s.Len())
-			for i := 0; i < s.Len(); i++ {
-				pointers[i] = s.Index(i).Addr().Interface().(*time.Time)
-			}
-			for _, badValue := range badValues {
-				pointers[badValue] = nil
-			}
-			return pointers
-		}
-		return nil
-	default:
-		pointers := make([]interface{}, s.Len())
-		for i := 0; i < s.Len(); i++ {
-			v := s.Index(i)
-			pointers[i] = v.Addr().Interface()
-		}
-		for _, badValue := range badValues {
-			pointers[badValue] = nil
-		}
-		return pointers
+	pointers := reflect.MakeSlice(reflect.SliceOf(reflect.PointerTo(s.Type().Elem())), s.Len(), s.Len())
+	for i := 0; i < s.Len(); i++ {
+		pointers.Index(i).Set(s.Index(i).Addr())
 	}
-}
-
-func parseTimestampValue(val reflect.Value) (reflect.Value, error) {
-	if val.Kind() != reflect.String {
-		return reflect.Value{}, fmt.Errorf("timestamp value must be a string")
+	for _, badValue := range badValues {
+		pointers.Index(badValue).SetZero()
 	}
-
-	ts, err := getTimeStamp(val)
-	// If time.Parse returns an error, return the error immediately.
-	if err != nil {
-		return reflect.Value{}, fmt.Errorf("error parsing timestamp value: %v", err)
-	}
-
-	// Return an error if the timestamp value is invalid.
-	if !ts.IsValid() {
-		return reflect.Value{}, fmt.Errorf("error parsing timestamp value: invalid timestamp")
-	}
-
-	if ts.Kind() == reflect.Interface && ts.Interface() != nil {
-		return reflect.Value{}, fmt.Errorf("error parsing timestamp value")
-	}
-
-	return ts, nil
+	return pointers.Interface()
 }
 
 func updateBadData(fp FrameProcessed, timestamp time.Time, noDataReplace string) FrameProcessed {
@@ -291,12 +135,9 @@ func updateBadData(fp FrameProcessed, timestamp time.Time, noDataReplace string)
 	position := valuesValue.Len()
 	// update
 	switch noDataReplace {
-	case "Null":
+	case "Null", "Keep": // "Keep" keeps the bad values in itemsToFrame; here there is no value to keep (see keepBadValue)
 		fp.timestamps = append(fp.timestamps, timestamp)
 		fp.badValues = append(fp.badValues, position)
-		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
-	case "Keep":
-		fp.timestamps = append(fp.timestamps, timestamp)
 		fp.values = reflect.Append(valuesValue, zeroVal).Interface()
 	case "0":
 		fp.timestamps = append(fp.timestamps, timestamp)
@@ -317,6 +158,30 @@ func updateBadData(fp FrameProcessed, timestamp time.Time, noDataReplace string)
 	}
 	log.DefaultLogger.Debug("Update bad data", "no_replace", noDataReplace, "zero", zeroVal.Interface())
 	return fp
+}
+
+// keepBadValue adds a bad value with Replace Bad Data = "Keep": the value returned by PI Web API is kept, as with
+// the 4.x frontend. A system state (e.g. {"Name": "Shutdown", "Value": 254}) is kept as its name in text series and
+// as its code in numeric and digital state series; the returned name is shown instead of the code when "Digital
+// States" is on (see digitalStateNames). A value that the series cannot hold (e.g. a state in a time series) is null.
+func keepBadValue(fp FrameProcessed, item PiBatchContentItem) (FrameProcessed, string) {
+	elem := fp.sliceType.Elem()
+	value := reflect.ValueOf(item.Value)
+	var name string
+	if state, isState := item.Value.(map[string]interface{}); isState {
+		name, _ = state["Name"].(string)
+		if elem.Kind() == reflect.String {
+			value = reflect.ValueOf(name)
+		} else {
+			value = reflect.ValueOf(state["Value"])
+		}
+	}
+	if !value.IsValid() || (value.Kind() != elem.Kind() && !compatible(value.Type(), elem)) {
+		return updateBadData(fp, item.Timestamp, "Null"), name
+	}
+	fp.timestamps = append(fp.timestamps, item.Timestamp)
+	fp.values = reflect.Append(reflect.ValueOf(fp.values), value.Convert(elem)).Interface()
+	return fp, name
 }
 
 func compatible(actual reflect.Type, expected reflect.Type) bool {
@@ -406,12 +271,15 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) *data.Frame {
 	// when the WebID is not cached, the type is taken from the values and the metadata is empty
 	metadata, _ := d.getWebIDEntry(processedQuery.WebID)
+	// calculations list their values directly; calculation/summary responses are summaries
+	_, isCalculation := processedQuery.Response.(PiBatchDataWithFloatItem)
 	return itemsToFrame(processedQuery, *processedQuery.Response.getItems(SummaryType), frameOptions{
-		metadata:      metadata,
-		responseUnits: processedQuery.Response.getUnits(SummaryType),
-		summaryType:   SummaryType,
-		newFormat:     d.isUsingNewFormat(),
-		units:         d.isUsingUnits(),
+		metadata:       metadata,
+		responseUnits:  processedQuery.Response.getUnits(SummaryType),
+		summaryType:    SummaryType,
+		newFormat:      d.isUsingNewFormat(),
+		units:          d.isUsingUnits(),
+		typeFromValues: isCalculation || SummaryType != "",
 	})
 }
 
@@ -433,6 +301,9 @@ type frameOptions struct {
 	summaryType   string
 	newFormat     bool // "Enable New Data Format"
 	units         bool // "Enable Unit From Data"
+	// typeFromValues is set for calculations and summaries: their values have their own type (the text result of
+	// an expression on a numeric point, the average of an integer point), not the type of the point or attribute
+	typeFromValues bool
 }
 
 // itemsToFrame converts the values of a PI point or AF attribute to a data frame.
@@ -444,7 +315,13 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 	noDataReplace := processedQuery.getNoDataReplace()
 
 	stateNames := map[int64]string{} // digital state code -> name, from the good values
+	keptNames := map[int]string{}    // position -> name of the system states kept with Replace Bad Data = "Keep"
 	sliceType := metadata.Type
+	digitalState := metadata.DigitalState
+	if o.typeFromValues {
+		sliceType = nil
+		digitalState = false // set from the values
+	}
 	if sliceType == nil {
 		sliceType = inferValueType(items)
 	}
@@ -464,7 +341,6 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 		metadata.Description, units, o.summaryType)
 
 	var labels map[string]string
-	digitalState := metadata.DigitalState
 
 	frame := data.NewFrame("")
 	if o.newFormat {
@@ -478,34 +354,28 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 			continue
 		}
 
+		// a value decoded from JSON: float64, string, bool or map (digital state)
 		fP.val = reflect.ValueOf(item.Value)
-
-		if !fP.val.IsValid() {
-			log.DefaultLogger.Debug("Convert items to frames - invalid", "value", item.Value, "item", item)
-			fP = updateBadData(fP, item.Timestamp, noDataReplace)
-			continue
-		}
-
-		// if the value is valid, get the underlying value
-		// we need to complete both checks to prevent a panic on a null value
-		if fP.val.IsValid() && fP.val.Kind() == reflect.Pointer {
-			fP.val = fP.val.Elem()
-		}
 
 		// handle value being a timestamp, the PIWab API returns a timestamp as a string
 		// we need to convert it to a time.Time
 		if fP.sliceType == reflect.TypeOf([]time.Time{}) && item.isGood() {
 			var err error
-			fP.val, err = parseTimestampValue(fP.val)
+			fP.val, err = getTimeStamp(fP.val)
 			if err != nil {
-				log.DefaultLogger.Error("Convert items to frames - parseTimestampValue", "error", err.Error(), "item", item)
+				log.DefaultLogger.Error("Convert items to frames - timestamp value", "error", err.Error(), "item", item)
 				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				continue
 			}
 		}
 
 		_, isState := item.Value.(map[string]interface{})
-		if !item.isGood() { // bad values are system states such as "Shutdown"
+		if !item.isGood() && noDataReplace == "Keep" {
+			var name string
+			if fP, name = keepBadValue(fP, item); name != "" {
+				keptNames[len(fP.timestamps)-1] = name
+			}
+		} else if !item.isGood() { // bad values are system states such as "Shutdown"
 			fP = updateBadData(fP, item.Timestamp, noDataReplace)
 		} else if isState { // digital state
 			var pds PointDigitalState
@@ -575,7 +445,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 	}
 	values := valuepointers
 	if digitalState && digitalStates {
-		values = digitalStateNames(fP.values, fP.badValues, stateNames)
+		values = digitalStateNames(fP.values, fP.badValues, stateNames, keptNames)
 	}
 	valueField := data.NewField(frameLabel["name"], labels, values)
 	valueField.SetConfig(fieldConfig)
@@ -628,8 +498,9 @@ func inferValueType(items []PiBatchContentItem) reflect.Type {
 }
 
 // digitalStateNames returns the state name of each digital state code in values, or nil for a bad value (or a
-// code without a known name). It has one entry per value, so the frame fields keep the same length.
-func digitalStateNames(values any, badValues []int, stateNames map[int64]string) []*string {
+// code without a known name). Bad values kept with Replace Bad Data = "Keep" have their own name in keptNames
+// (e.g. "Shutdown"). It has one entry per value, so the frame fields keep the same length.
+func digitalStateNames(values any, badValues []int, stateNames map[int64]string, keptNames map[int]string) []*string {
 	bad := make(map[int]bool, len(badValues))
 	for _, i := range badValues {
 		bad[i] = true
@@ -637,6 +508,10 @@ func digitalStateNames(values any, badValues []int, stateNames map[int64]string)
 	v := reflect.ValueOf(values)
 	names := make([]*string, v.Len())
 	for i := range names {
+		if name, ok := keptNames[i]; ok {
+			names[i] = &name
+			continue
+		}
 		if bad[i] {
 			continue
 		}

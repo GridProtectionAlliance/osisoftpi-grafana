@@ -43,8 +43,10 @@ type PiBatchData interface {
 // Custom unmarshaler to unmarshal PIBatchResponse to the correct struct type.
 // If the first item in the Items array has a WebId, then we have a PiBatchDataWithSubItems
 // If the first item in the Items array does not have a WebId, then we have a PiBatchDataWithoutSubItems
-// If the first item is a Value then we have a PiBatchDataWithSingleItem
+// If the first item is a Value then we have a PiBatchDataWithSingleItem, or a PiBatchDataWithFloatItem for calculations
+// If the first item has a Type and a Value, then we have a PiBatchDataCalculationSummaryItems
 // If the first item in the Items array has a Type property, then we have a PiBatchDataSummaryItems
+// An empty Items array (a calculation without values) is a PiBatchDataWithFloatItem without items
 // All other formations will return an PiBatchDataError
 func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 	var PIBatchResponseBase PIBatchResponseBase
@@ -67,9 +69,8 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 
 	if p.Status != http.StatusOK {
 		var errors *[]string
-		_, ok := rawData["Content"].(map[string]string)
-		if ok { // error is a string inside content
-			errors = &[]string{rawData["Content"].(string)}
+		if message, ok := rawData["Content"].(string); ok { // error is a string inside content
+			errors = &[]string{message}
 		} else {
 			_, ok := Content["Message"].(string)
 			if ok {
@@ -109,6 +110,12 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
+	// A calculation without values in the time range returns no items: no series, and no error
+	if len(parentItems) == 0 {
+		p.Content = PiBatchDataWithFloatItem{}
+		return nil
+	}
+
 	parentItem, ok := parentItems[0].(map[string]interface{})
 	if !ok {
 		backend.Logger.Error("key '0' not found in 'Items'", "Items", parentItems)
@@ -118,8 +125,23 @@ func (p *PIBatchResponse) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	// Check if the response contained a value or a subitems array of values
+	// Summaries of a calculation list the values of every summary type directly (Items[].Type and Items[].Value)
 	value, exists := parentItem["Value"]
+	if _, isSummary := parentItem["Type"]; isSummary && exists {
+		ResContent := PiBatchDataCalculationSummaryItems{}
+		err = json.Unmarshal(rawContent, &ResContent)
+		if err != nil {
+			backend.Logger.Error("Error unmarshalling batch response 2", "error", err.Error())
+			//Return an error Batch Data Response to the user is notified
+			errMessages := &[]string{"Could not process response from PI Web API"}
+			p.Content = createPiBatchDataError(errMessages)
+			return nil
+		}
+		p.Content = ResContent
+		return nil
+	}
+
+	// Check if the response contained a value or a subitems array of values
 	if exists {
 		_, isFloat := value.(float64)
 		// Calculations list the values directly (Items[].Timestamp), whatever their type: text, boolean or a

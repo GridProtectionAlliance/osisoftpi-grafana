@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 )
 
@@ -20,6 +21,14 @@ type expandedValue struct {
 	Value string
 	// Variables holds the value chosen from each group, in order of appearance.
 	Variables []string
+	// Choices holds the options of each group with the value chosen from it, in order of appearance.
+	Choices []variableChoice
+}
+
+// variableChoice is the value chosen from one {a,b,...} group of a multi-value variable.
+type variableChoice struct {
+	Options []string
+	Value   string
 }
 
 // variableValueDecoder decodes the characters the frontend escapes inside a multi-value group
@@ -75,16 +84,19 @@ func productOf[T any](items []T, size func(T) int) int {
 // `\\AF\DB\{SiteA,SiteB}\{Unit1,Unit2}` expands into four paths.
 func expandVariables(text string) []expandedValue {
 	literals, groups := splitVariableGroups(text)
-	results := []expandedValue{{Value: literals[0], Variables: []string{}}}
+	results := []expandedValue{{Value: literals[0], Variables: []string{}, Choices: []variableChoice{}}}
 	for i, options := range groups {
 		next := make([]expandedValue, 0, len(results)*len(options))
 		for _, result := range results {
 			for _, option := range options {
 				variables := make([]string, len(result.Variables), len(result.Variables)+1)
 				copy(variables, result.Variables)
+				choices := make([]variableChoice, len(result.Choices), len(result.Choices)+1)
+				copy(choices, result.Choices)
 				next = append(next, expandedValue{
 					Value:     result.Value + option + literals[i+1],
 					Variables: append(variables, option),
+					Choices:   append(choices, variableChoice{Options: options, Value: option}),
 				})
 			}
 		}
@@ -102,6 +114,47 @@ type expandedTarget struct {
 	Variable string
 	// MultiVariable is true when the element path used more than one multi-value variable.
 	MultiVariable bool
+	// Choices holds the values chosen from the multi-value variables of the element path and the attribute.
+	Choices []variableChoice
+}
+
+// resolveDisplay replaces each {a,b,...} group of a display name with the value this target uses from the
+// multi-value variable with the same values, so `{$element} {$attribute}` names each expanded series after its
+// own element and attribute. A group that matches no variable of the target is kept as it is.
+func (t expandedTarget) resolveDisplay(display *string) *string {
+	if display == nil || !strings.Contains(*display, "{") {
+		return display
+	}
+	literals, groups := splitVariableGroups(*display)
+	if len(groups) == 0 {
+		return display
+	}
+	var b strings.Builder
+	rest := *display
+	for i, options := range groups {
+		b.WriteString(literals[i])
+		rest = rest[len(literals[i]):]
+		end := strings.Index(rest, "}") + 1
+		if value, ok := t.choiceFor(options); ok {
+			b.WriteString(value)
+		} else {
+			b.WriteString(rest[:end])
+		}
+		rest = rest[end:]
+	}
+	b.WriteString(rest)
+	resolved := b.String()
+	return &resolved
+}
+
+// choiceFor returns the value chosen from the variable with exactly these options.
+func (t expandedTarget) choiceFor(options []string) (string, bool) {
+	for _, choice := range t.Choices {
+		if slices.Equal(choice.Options, options) {
+			return choice.Value, true
+		}
+	}
+	return "", false
 }
 
 // getExpandedTargets returns every element/attribute combination of the query after expanding
@@ -128,11 +181,9 @@ func (q *PIWebAPIQuery) getExpandedTargets() ([]expandedTarget, error) {
 	}
 
 	basePaths := expandVariables(q.getBasePath())
-	attributes := make([]string, 0, attributeCount)
+	attributes := make([]expandedValue, 0, attributeCount)
 	for _, name := range names {
-		for _, expanded := range expandVariables(name) {
-			attributes = append(attributes, expanded.Value)
-		}
+		attributes = append(attributes, expandVariables(name)...)
 	}
 
 	targets := make([]expandedTarget, 0, total)
@@ -140,9 +191,10 @@ func (q *PIWebAPIQuery) getExpandedTargets() ([]expandedTarget, error) {
 		for _, attribute := range attributes {
 			targets = append(targets, expandedTarget{
 				BasePath:      basePath.Value,
-				Attribute:     attribute,
+				Attribute:     attribute.Value,
 				Variable:      strings.Join(basePath.Variables, `\`),
 				MultiVariable: len(basePath.Variables) > 1,
+				Choices:       append(slices.Clip(basePath.Choices), attribute.Choices...),
 			})
 		}
 	}
