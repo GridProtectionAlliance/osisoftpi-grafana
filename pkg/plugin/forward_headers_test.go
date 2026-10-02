@@ -9,6 +9,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/genproto/pluginv2"
+	"github.com/prometheus/client_golang/prometheus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -43,6 +44,10 @@ func TestForwardHTTPHeaders(t *testing.T) {
 	}
 	address := listener.Addr().String()
 	_ = listener.Close()
+	// the SDK metrics middleware registers its metrics: use a new registry so the test can run more than once
+	registerer := prometheus.DefaultRegisterer
+	prometheus.DefaultRegisterer = prometheus.NewRegistry()
+	t.Cleanup(func() { prometheus.DefaultRegisterer = registerer })
 	grpcServer, err := backend.TestStandaloneServe(backend.ServeOpts{
 		QueryDataHandler: d, CallResourceHandler: d, CheckHealthHandler: d,
 	}, address)
