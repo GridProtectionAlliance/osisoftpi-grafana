@@ -72,7 +72,6 @@ export function removeTime(s: any): string {
   delete temp.endTime;
   delete temp.scopedVars;
   delete temp.hashCode;
-  delete temp.webid;
   return JSON.stringify(temp);
 }
 

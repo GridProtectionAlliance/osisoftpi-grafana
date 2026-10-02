@@ -37,12 +37,10 @@ const MAX_POINT_SEARCHES = 10;
 
 export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIWebAPIDataSourceJsonData> {
   piserver: PiDataServer;
-  afserver: PiDataServer;
-  afdatabase: PiDataServer;
+  afserver: Pick<PiDataServer, 'name'>;
+  afdatabase: Pick<PiDataServer, 'name'>;
   piPointConfig: boolean;
-  newFormatConfig: boolean;
   useUnitConfig: boolean;
-  useExperimental: boolean;
   useStreaming: boolean;
 
   constructor(
@@ -52,12 +50,10 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     super(instanceSettings);
 
     this.piserver = { name: (instanceSettings.jsonData || {}).piserver, webid: undefined };
-    this.afserver = { name: (instanceSettings.jsonData || {}).afserver, webid: undefined };
-    this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase, webid: undefined };
+    this.afserver = { name: (instanceSettings.jsonData || {}).afserver };
+    this.afdatabase = { name: (instanceSettings.jsonData || {}).afdatabase };
     this.piPointConfig = instanceSettings.jsonData.pipoint || false;
-    this.newFormatConfig = instanceSettings.jsonData.newFormat || false;
     this.useUnitConfig = instanceSettings.jsonData.useUnit || false;
-    this.useExperimental = instanceSettings.jsonData.useExperimental || false;
     this.useStreaming = instanceSettings.jsonData.useStreaming || false;
 
     this.variables = new PiWebAPIVariableSupport(this);
@@ -79,13 +75,10 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
       },
     };
 
-    Promise.all([
-      this.getDataServer(this.piserver.name).then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId)),
-      this.getAssetServer(this.afserver.name).then((result: PiwebapiRsp) => (this.afserver.webid = result.WebId)),
-      this.getDatabase(
-        this.afserver.name && this.afdatabase.name ? this.afserver.name + '\\' + this.afdatabase.name : undefined
-      ).then((result: PiwebapiRsp) => (this.afdatabase.webid = result.WebId)),
-    ]);
+    // the query editor uses the WebId of the configured PI server; a wrong name only leaves it unset
+    this.getDataServer(this.piserver.name)
+      .then((result: PiwebapiRsp) => (this.piserver.webid = result.WebId))
+      .catch(() => undefined);
   }
 
   /**
@@ -241,11 +234,11 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
             .then(metricQueryTransform)
         : ds.getAssetServers().then(metricQueryTransform);
     } else if (query.type === 'databases' && !!query.afServerWebId) {
-      return ds.getDatabases(query.afServerWebId, {}).then(metricQueryTransform);
+      return ds.getDatabases(query.afServerWebId).then(metricQueryTransform);
     } else if (query.type === 'databases') {
       return ds
         .getAssetServer(query.path)
-        .then((server) => ds.getDatabases(server.WebId ?? '', {}))
+        .then((server) => ds.getDatabases(server.WebId ?? ''))
         .then(metricQueryTransform);
     } else if (query.type === 'databaseElements') {
       return ds
@@ -488,7 +481,7 @@ export class PiWebAPIDatasource extends DataSourceWithBackend<PIWebAPIQuery, PIW
     }
     return this.restGet('/assetdatabases' + buildQueryString({ path: '\\\\' + path })).then((response) => response);
   }
-  getDatabases(serverId: string, options?: any): Promise<PiwebapiRsp[]> {
+  getDatabases(serverId: string): Promise<PiwebapiRsp[]> {
     if (!serverId) {
       return Promise.resolve([]);
     }

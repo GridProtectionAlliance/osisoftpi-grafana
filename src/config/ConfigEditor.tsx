@@ -6,18 +6,6 @@ import { PIWebAPIDataSourceJsonData } from '../types';
 
 interface Props extends DataSourcePluginOptionsEditorProps<PIWebAPIDataSourceJsonData, {}> {}
 
-const coerceOptions = (
-  options: DataSourceSettings<PIWebAPIDataSourceJsonData, {}>
-): DataSourceSettings<PIWebAPIDataSourceJsonData, {}> => {
-  return {
-    ...options,
-    jsonData: {
-      ...options.jsonData,
-      url: options.url,
-    },
-  };
-};
-
 interface State {}
 
 export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
@@ -50,7 +38,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
 
   onHttpOptionsChange = (options: DataSourceSettings<PIWebAPIDataSourceJsonData, {}>) => {
     const { onOptionsChange } = this.props;
-    onOptionsChange(coerceOptions(options));
+    onOptionsChange(options);
   };
 
   onPiPointChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -118,8 +106,7 @@ export class PIWebAPIConfigEditor extends PureComponent<Props, State> {
   };
 
   render() {
-    const { options: originalOptions } = this.props;
-    const options = coerceOptions(originalOptions);
+    const { options } = this.props;
 
     return (
       <div>

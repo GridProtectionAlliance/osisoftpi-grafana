@@ -257,6 +257,23 @@ describe('PI point search', () => {
   });
 });
 
+describe('constructor', () => {
+  afterAll(() => delete (PiWebAPIDatasource.prototype as any).getResource);
+
+  it('only looks up the WebId of the configured PI server, and ignores a failed lookup', async () => {
+    const requests: string[] = [];
+    (PiWebAPIDatasource.prototype as any).getResource = (path: string) => {
+      requests.push(path);
+      return Promise.reject(new Error('Not found'));
+    };
+    const ds = newDatasource({ piserver: 'PISIM', afserver: 'AFSIM', afdatabase: 'TankControlSim' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requests).toEqual(['/dataservers?name=PISIM']);
+    expect(ds.piserver.webid).toBeUndefined();
+    expect(ds.afserver.name).toBe('AFSIM');
+  });
+});
+
 describe('legacy queries (issue GridProtectionAlliance/osisoftpi-grafana#194)', () => {
   it('sends the summary and bad data replacement of a 4.x query in the current format', () => {
     const target = {
