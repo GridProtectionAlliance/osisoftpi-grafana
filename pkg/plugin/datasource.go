@@ -366,15 +366,13 @@ func (d *Datasource) isUsingResponseCache() bool {
 }
 
 // allowedResourcePaths are the PI Web API collections the frontend may read through CallResource
-// while configuring the datasource, queries and annotations.
+// while configuring the datasource, queries and annotations (src/datasource.ts restGet). Points and attributes are
+// only read as sub-collections (dataservers/{webId}/points, elements/{webId}/attributes).
 var allowedResourcePaths = []string{
 	"assetdatabases",
 	"elements",
 	"assetservers",
-	"points",
-	"attributes",
 	"dataservers",
-	"annotations",
 }
 
 // allowedResourceURL returns the resource URL to forward to PI Web API when its first path segment is one of
