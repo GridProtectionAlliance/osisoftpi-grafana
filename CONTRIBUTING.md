@@ -3,7 +3,7 @@
 ## Development
 
 - Frontend: `yarn install`, `yarn dev` (watch) or `yarn build`; checks: `yarn typecheck`, `yarn lint`, `yarn test:ci`
-- Backend: `mage -v build:linux` (or `mage -v` for every platform); checks: `golangci-lint run ./...`, `go test ./pkg/...`
+- Backend: `mage -v build:linux` (or `mage -v` for every platform); checks: `golangci-lint run ./pkg/...`, `go test ./pkg/...`
 - End-to-end tests: `yarn server` starts Grafana with the plugin, then `yarn e2e`
 
 ## Releasing

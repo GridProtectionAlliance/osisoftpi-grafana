@@ -68,7 +68,8 @@ jobs:
         uses: golangci/golangci-lint-action@82606bf257cbaff209d206a39f5134f0cfbfd2ee # v9.2.1
         with:
           version: latest
-          args: ./...
+          # ./... would include the Go package shipped in node_modules/flatted
+          args: ./pkg/...
 
       - name: Build backend
         if: steps.check-for-backend.outputs.has-backend == 'true'

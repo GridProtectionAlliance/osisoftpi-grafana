@@ -51,6 +51,7 @@ body:
         - AF query (elements and attributes)
         - PI point query
         - Calculation (expression)
+        - Live streaming
         - Template variables
         - Annotations (event frames)
         - Alerting
