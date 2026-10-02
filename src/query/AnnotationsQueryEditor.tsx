@@ -1,7 +1,7 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 
 import { AnnotationQuery, QueryEditorProps } from '@grafana/data';
-import { Combobox, ComboboxOption, InlineField, InlineFieldRow, InlineSwitch, Input } from '@grafana/ui';
+import { Button, Combobox, ComboboxOption, InlineField, InlineFieldRow, InlineSwitch, Input } from '@grafana/ui';
 
 import { PiWebAPIDatasource } from 'datasource';
 import { PIWebAPIDataSourceJsonData, PIWebAPIQuery, PiwebapiRsp } from 'types';
@@ -23,12 +23,23 @@ const summary = (item: PiwebapiRsp): PiwebapiRsp => ({ WebId: item.WebId, Name: 
 /** The AF server of a database path, e.g. `\\AFSERVER\Database` -> `AFSERVER`. */
 const serverOfPath = (path?: string) => (path ?? '').replace(/^\\+/, '').split('\\')[0] || undefined;
 
+/** Whether a saved database is the database `server\database`. */
+const isDatabase = (item: PiwebapiRsp, server: string, database: string) => {
+  const path = (item.Path ?? '').replace(/^\\+/, '');
+  return path
+    ? path.toLowerCase() === `${server}\\${database}`.toLowerCase()
+    : item.Name?.toLowerCase() === database.toLowerCase();
+};
+
 export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQueryEditor(props: Props) {
   const { query, datasource, annotation, onChange, onRunQuery } = props;
 
   // AF server and database set in the datasource configuration: pre-selected and cannot be changed
   const configServer = datasource.afserver.name;
   const configDatabase = configServer ? datasource.afdatabase.name : undefined;
+  // an annotation saved with another database (e.g. before 6.0) keeps it, and it can be changed
+  const otherDatabase =
+    !!configDatabase && !!query.database?.WebId && !isDatabase(query.database, configServer!, configDatabase);
 
   const [server, setServer] = useState<PiwebapiRsp>(query.afServer ?? {});
   // Combobox values must be scalars, so options are keyed by WebId and the full PI Web API object is looked up here.
@@ -37,7 +48,9 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
   latestQuery.current = query;
 
   useEffect(() => {
-    const serverName = configServer ?? query.afServer?.Name ?? serverOfPath(query.database?.Path);
+    const serverName = otherDatabase
+      ? (query.afServer?.Name ?? serverOfPath(query.database?.Path))
+      : (configServer ?? query.afServer?.Name ?? serverOfPath(query.database?.Path));
     if (!serverName) {
       return;
     }
@@ -47,24 +60,43 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
       }
       setServer(found);
       const current = latestQuery.current;
-      if (!configDatabase) {
+      if (!configDatabase || otherDatabase) {
         if (current.afServer?.WebId !== found.WebId) {
           onChange({ ...current, afServer: summary(found) });
         }
         return;
       }
-      datasource.getDatabase(configServer + '\\' + configDatabase).then((database) => {
-        const sameDatabase = !!database.WebId && current.database?.WebId === database.WebId;
-        if (database.WebId && (!sameDatabase || current.afServer?.WebId !== found.WebId)) {
-          // a template or category of another database does not apply
-          const keep = sameDatabase ? {} : { template: undefined, categoryName: undefined };
-          onChange({ ...current, ...keep, afServer: summary(found), database: summary(database) });
+      if (current.database?.WebId) {
+        if (current.afServer?.WebId !== found.WebId) {
+          onChange({ ...current, afServer: summary(found) });
         }
-      });
+        return;
+      }
+      // the configured database is pre-selected only for an annotation without a database
+      selectConfiguredDatabase(found);
     });
     // only when the editor opens: later changes come from the dropdowns
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasource]);
+
+  /** Selects the database of the datasource configuration. A template or category of another database does not apply. */
+  const selectConfiguredDatabase = (configured?: PiwebapiRsp) => {
+    const found = configured ? Promise.resolve(configured) : datasource.getAssetServer(configServer);
+    found.then((afServer) => {
+      if (!afServer.WebId) {
+        return;
+      }
+      setServer(afServer);
+      datasource.getDatabase(configServer + '\\' + configDatabase).then((database) => {
+        if (!database.WebId) {
+          return;
+        }
+        const current = latestQuery.current;
+        const keep = current.database?.WebId === database.WebId ? {} : { template: undefined, categoryName: undefined };
+        onChange({ ...current, ...keep, afServer: summary(afServer), database: summary(database) });
+      });
+    });
+  };
 
   // this should never happen, but we want to keep typescript happy
   if (annotation === undefined) {
@@ -107,7 +139,10 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
             disabled={!!configServer}
           >
             {configServer ? (
-              <Input id="annotation-af-server" value={configServer} />
+              <Input
+                id="annotation-af-server"
+                value={otherDatabase ? (server.Name ?? query.afServer?.Name) : configServer}
+              />
             ) : (
               <Combobox
                 id="annotation-af-server"
@@ -132,10 +167,16 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
             label="Database"
             labelWidth={LABEL_WIDTH}
             grow={true}
-            tooltip={configDatabase ? 'Set in the datasource configuration.' : undefined}
-            disabled={!!configDatabase || !server.WebId}
+            tooltip={
+              otherDatabase
+                ? `The annotation uses another database than the datasource configuration (${configDatabase}).`
+                : configDatabase
+                  ? 'Set in the datasource configuration.'
+                  : undefined
+            }
+            disabled={(!!configDatabase && !otherDatabase) || !server.WebId}
           >
-            {configDatabase ? (
+            {configDatabase && !otherDatabase ? (
               <Input id="annotation-database" value={configDatabase} />
             ) : (
               <Combobox
@@ -151,6 +192,11 @@ export const PiWebAPIAnnotationsQueryEditor = memo(function PiWebAPIAnnotationQu
               />
             )}
           </InlineField>
+          {otherDatabase && (
+            <Button variant="secondary" onClick={() => selectConfiguredDatabase()}>
+              Use configured database
+            </Button>
+          )}
         </InlineFieldRow>
         <InlineFieldRow>
           <InlineField label="Event Frames" labelWidth={LABEL_WIDTH} grow={true} disabled={!query.database?.WebId}>
