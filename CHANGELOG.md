@@ -97,6 +97,7 @@
 - "Forward OAuth Identity" and "Allowed cookies" are now passed to PI Web API
 - A Max Cache Time with decimals (or saved as text by provisioning) no longer breaks the datasource; it is rounded up to whole hours
 - Fixed queries whose name (RefID) contains a dot, bracket, quote or space failing until the WebID was cached
+- A batch request sent on a keep-alive connection that PI Web API (or a proxy) has just closed is sent again instead of failing the panel with `EOF` or "connection reset"
 - Recorded values return up to 1000 values by default (PI Web API's default) instead of the panel's maximum data points
 - Interpolate Period, Summary Period and Sample Interval are sent as entered, so every PI Web API time span works (e.g. `1h30m`, `1.5d`, `2 hours`); unknown values were silently replaced by `30s`
 - Fixed calculations without values in the time range failing every query of the request; calculation + summary returns one series per summary type, and calculation and summary values take the type of their values

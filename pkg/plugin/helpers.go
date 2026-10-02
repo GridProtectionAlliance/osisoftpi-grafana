@@ -82,6 +82,9 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 	req.Header.Set("X-Requested-With", "message/http")
 	req.Header.Set("X-PIWEBAPI-HTTP-METHOD", "GET")
 	req.Header.Set("X-PIWEBAPI-RESOURCE-ADDRESS", uri)
+	// The batch only contains GET sub-requests, so it can be sent again. A nil Idempotency-Key is not sent, but lets
+	// the HTTP client retry the request once when the server closed a reused keep-alive connection (EOF, reset).
+	req.Header["Idempotency-Key"] = nil
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {

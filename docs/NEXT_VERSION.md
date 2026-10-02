@@ -28,10 +28,6 @@ PI Web API simulator). Each item says where the change goes and what it brings.
   (`annotation_query.go`). Page through `Links.Next` or add a configurable maximum and a notice when truncated.
 - **Every failing target is logged at Error level**, also with "Ignore API Error?" on (`processBatchtoFrames`). Log
   hidden errors at Debug and one line per query otherwise.
-- **A batch request on a connection the server has just closed fails with `EOF`**: Go does not retry a POST on a
-  reused keep-alive connection. Seen with the simulator (uvicorn closes idle connections after 5 s) and a 5 s
-  dashboard refresh; PI Web API keeps idle connections longer than the client (120 s vs 90 s), so it is unlikely there.
-  The batch only reads data, so retry it once on a reused-connection error (set `GetBody` or an idempotency key).
 - **The call-rate limiter divides by zero** in the first second and sleeps while holding the datasource lock
   (`datasource.go`, `updateRate`). Replace it with `golang.org/x/time/rate` before the request, outside the lock, or
   remove it (it counts QueryData calls, not PI Web API requests).
