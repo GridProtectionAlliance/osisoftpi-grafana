@@ -47,6 +47,9 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	if err != nil {
 		return nil, fmt.Errorf("http client options: %w", err)
 	}
+	// Forward the headers Grafana adds to the requests (Forward OAuth Identity, Allowed cookies) to PI Web API.
+	// Requests made with the request context (queries, resources, health check) get them from the SDK middleware.
+	opts.ForwardHTTPHeaders = true
 
 	httpClient, err := httpclient.New(opts)
 	if err != nil {
