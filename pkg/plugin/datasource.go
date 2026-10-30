@@ -50,6 +50,16 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	// Forward the headers Grafana adds to the requests (Forward OAuth Identity, Allowed cookies) to PI Web API.
 	// Requests made with the request context (queries, resources, health check) get them from the SDK middleware.
 	opts.ForwardHTTPHeaders = true
+	// Let Go negotiate and decode compression instead of forwarding the browser's encodings.
+	// This must run after the SDK's contextual header forwarding.
+	opts.ConfigureMiddleware = func(_ httpclient.Options, middlewares []httpclient.Middleware) []httpclient.Middleware {
+		return append(middlewares, httpclient.MiddlewareFunc(func(_ httpclient.Options, next http.RoundTripper) http.RoundTripper {
+			return httpclient.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				req.Header.Del("Accept-Encoding")
+				return next.RoundTrip(req)
+			})
+		}))
+	}
 
 	httpClient, err := httpclient.New(opts)
 	if err != nil {

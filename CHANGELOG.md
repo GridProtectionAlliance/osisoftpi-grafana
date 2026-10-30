@@ -2,6 +2,7 @@
 
 ## 6.0.0
 
+- Fixed compressed PI Web API responses being returned as binary by the resource proxy or failing JSON parsing in queries when the browser's Accept-Encoding header was forwarded; the backend now negotiates and decompresses gzip itself.
 - Added live streaming of PI point and AF attribute values through PI Web API channels (WebSocket) - issue GridProtectionAlliance/osisoftpi-grafana#206 (thanks to Michael Bohan, @mbtx2)
   - enabled with "Enable Streaming Support" in the datasource configuration and "Enable Streaming" in the query, optionally controlled by a dashboard variable
   - streamed values follow the query settings (Replace Bad Data, Digital States, units); queries with a calculation, a summary, "Use Last Value", "Interpolate" or "Recorded Values" are not streamed, and the query editor only offers streaming, as the last option row, when none is selected

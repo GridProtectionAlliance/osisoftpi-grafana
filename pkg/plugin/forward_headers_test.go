@@ -1,9 +1,12 @@
 package plugin
 
 import (
+	"compress/gzip"
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,8 +25,27 @@ import (
 // The test runs the plugin behind the SDK's gRPC server with its default middlewares, as Grafana runs it.
 func TestForwardHTTPHeaders(t *testing.T) {
 	const authorization = "Bearer userA"
+	const browserEncoding = "gzip, deflate, br, zstd"
 	api := &fakeAnnotationAPI{databaseWebID: fakeDatabaseWebID, eventFrames: pumpTrips(), authorization: authorization}
-	server := api.start(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := httptest.NewRecorder()
+		api.serve(response, r)
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.WriteHeader(response.Code)
+			_, _ = w.Write(response.Body.Bytes())
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(response.Code)
+		writer := gzip.NewWriter(w)
+		if _, err := writer.Write(response.Body.Bytes()); err != nil {
+			t.Error(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
 
 	settings := &pluginv2.DataSourceInstanceSettings{
 		Uid: "pi", Name: "PI", Url: server.URL + "/piwebapi",
@@ -63,7 +85,7 @@ func TestForwardHTTPHeaders(t *testing.T) {
 
 	pluginContext := &pluginv2.PluginContext{OrgId: 1, PluginId: "gridprotectionalliance-osisoftpi-datasource",
 		DataSourceInstanceSettings: settings}
-	headers := map[string]string{"Authorization": authorization, "Cookie": "sess=1"}
+	headers := map[string]string{"Authorization": authorization, "Cookie": "sess=1", "http_Accept-Encoding": browserEncoding}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -76,6 +98,9 @@ func TestForwardHTTPHeaders(t *testing.T) {
 		last := received[len(received)-1]
 		if last.Get("Authorization") != authorization || last.Get("Cookie") != "sess=1" {
 			t.Errorf("%s: PI Web API received Authorization=%q Cookie=%q", path, last.Get("Authorization"), last.Get("Cookie"))
+		}
+		if got := last.Get("Accept-Encoding"); got != "gzip" {
+			t.Errorf("%s: PI Web API received Accept-Encoding=%q, want Go's automatic gzip negotiation", path, got)
 		}
 	}
 
@@ -99,7 +124,8 @@ func TestForwardHTTPHeaders(t *testing.T) {
 		stream, err := pluginv2.NewResourceClient(conn).CallResource(ctx, &pluginv2.CallResourceRequest{
 			PluginContext: pluginContext, Path: "assetservers", Method: http.MethodGet, Url: "assetservers",
 			Headers: map[string]*pluginv2.StringList{
-				"Authorization": {Values: []string{authorization}}, "Cookie": {Values: []string{"sess=1"}}},
+				"Authorization": {Values: []string{authorization}}, "Cookie": {Values: []string{"sess=1"}},
+				"Accept-Encoding": {Values: []string{browserEncoding}}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -110,6 +136,9 @@ func TestForwardHTTPHeaders(t *testing.T) {
 		}
 		if response.Code != http.StatusOK {
 			t.Errorf("resource status = %d", response.Code)
+		}
+		if string(response.Body) != `{"Items":[]}` {
+			t.Errorf("resource body is not the decompressed JSON: %q", response.Body)
 		}
 		checkForwarded(t, "CallResource")
 	})
