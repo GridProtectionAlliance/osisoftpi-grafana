@@ -45,7 +45,9 @@ func TestStreamKeepaliveAddsNoValues(t *testing.T) {
 
 	time.Sleep(300 * time.Millisecond) // several keepalive intervals
 	cancel()
-	<-errchan
+	if err := <-errchan; err != nil {
+		t.Fatalf("sendStreamData returned an error: %v", err)
+	}
 
 	recorder.mu.Lock()
 	packets := recorder.packets
