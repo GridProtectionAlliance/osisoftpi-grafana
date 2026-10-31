@@ -29,5 +29,5 @@ jobs:
           # creates a signed build provenance attestation to verify the authenticity of the plugin build
           attestation: true
           # grafana-plugin-sdk-go requires the Go version declared in go.mod
-          go-version: '1.26'
-          node-version: '22'
+          go-version: '1.27'
+          node-version: '24'

@@ -2,9 +2,10 @@
 
 ## Development
 
-- Frontend: `yarn install`, `yarn dev` (watch) or `yarn build`; checks: `yarn typecheck`, `yarn lint`, `yarn test:ci`
+- Tooling: Node 24 (`.nvmrc`) with npm 11, and Go as declared in `go.mod`
+- Frontend: `npm ci`, `npm run dev` (watch) or `npm run build`; checks: `npm run typecheck`, `npm run lint`, `npm run test:ci`
 - Backend: `mage -v build:linux` (or `mage -v` for every platform); checks: `golangci-lint run ./pkg/...`, `go test ./pkg/...`
-- End-to-end tests: `yarn server` starts Grafana with the plugin, then `yarn e2e`
+- End-to-end tests: `npm run server` starts Grafana with the plugin, then `npm run e2e`
 
 ## Releasing
 

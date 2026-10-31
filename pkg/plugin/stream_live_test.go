@@ -307,7 +307,8 @@ func runLiveStream(t *testing.T, d *Datasource, path string) *liveStream {
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-s.done:
+		case err := <-s.done:
+			_ = err // the tests check the error through wait
 		case <-time.After(5 * time.Second):
 			t.Error("the stream did not stop")
 		}
