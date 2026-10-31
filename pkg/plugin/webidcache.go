@@ -126,11 +126,11 @@ func (d *Datasource) getCachedWebID(path string) *WebIDCacheEntry {
 func (d *Datasource) getRequestWebId(path string, isPiPoint bool) string {
 	uri := ""
 	if isPiPoint {
-		uri = `points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=\\`
-		uri += strings.Replace(strings.Replace(path, "|", `\`, -1), ";", `\`, -1)
+		uri = `points?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Descriptor;EngineeringUnits&path=`
+		uri += queryEscape(`\\` + strings.ReplaceAll(strings.ReplaceAll(path, "|", `\`), ";", `\`))
 	} else {
-		uri = `attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=\\`
-		uri += path
+		uri = `attributes?selectedFields=WebId;Name;Path;Type;DigitalSetName;Description;DefaultUnitsName&path=`
+		uri += queryEscape(`\\` + path)
 	}
 	return uri
 }
@@ -180,15 +180,13 @@ func getValueType(Type string) reflect.Type {
 	switch Type {
 	case "Boolean":
 		dataType = reflect.TypeOf([]bool{})
-	case "Byte":
-		dataType = reflect.TypeOf([]byte{})
 	case "DateTime":
 		dataType = reflect.TypeOf([]time.Time{})
 	case "Single", "Double", "Float16", "Float32", "Float64":
 		dataType = reflect.TypeOf([]float64{})
 	case "GUID":
 		dataType = reflect.TypeOf([]string{})
-	case "Int16", "Int32", "EnumerationValue":
+	case "Byte", "Int16", "Int32", "EnumerationValue": // a byte slice cannot hold the JSON numbers (see compatible)
 		dataType = reflect.TypeOf([]int32{})
 	case "Int64":
 		dataType = reflect.TypeOf([]int64{})
@@ -198,102 +196,44 @@ func getValueType(Type string) reflect.Type {
 		dataType = reflect.TypeOf([]time.Time{})
 	case "Digital":
 		dataType = reflect.TypeOf([]int32{})
-	case "Blob":
-		dataType = reflect.TypeOf([]byte{})
 	default:
-		dataType = reflect.TypeOf([]string{})
+		// "<Anything>" (empty type, e.g. AF links), "Blob" (no numeric value) or a type the plugin does not know:
+		// the type is taken from the values returned by PI Web API (see inferValueType)
+		dataType = nil
 	}
 	return dataType
 }
 
-func cleanWebIDCache(cache WebIDCache) {
+// cleanWebIDCache removes the expired WebIDs. It runs on a schedule while queries use the cache, so it holds the
+// datasource lock.
+func (d *Datasource) cleanWebIDCache() {
+	d.datasourceMutex.Lock()
+	defer d.datasourceMutex.Unlock()
+	cache := d.webIDCache
 	now := time.Now()
 	log.DefaultLogger.Info("WebID cleared cached", "length", len(cache.webIDCache))
 	for key, entry := range cache.webIDCache {
 		if now.After(entry.ExpTime) {
 			log.DefaultLogger.Debug("WebID cache - removing aged WebID", "path", entry.Path)
 			delete(cache.webIDCache, key)
-			delete(cache.webIDPaths, entry.Path)
+			delete(cache.webIDPaths, entry.WebID)
 		}
 	}
 }
 
-func (d *Datasource) getTypeForWebID(webID string) reflect.Type {
+// getWebIDEntry returns the cached metadata of a WebID and extends its expiration time.
+func (d *Datasource) getWebIDEntry(webID string) (WebIDCacheEntry, bool) {
 	d.datasourceMutex.Lock()
 	defer d.datasourceMutex.Unlock()
 	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Type
-		}
+	if !exists {
+		return WebIDCacheEntry{}, false
 	}
-	// If the specified webID is not found in the webIDCache, return type of string.
-	return reflect.TypeOf([]string{})
-}
-
-func (d *Datasource) getDigitalStateForWebID(webID string) bool {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.DigitalState
-		}
+	entry, exists := d.webIDCache.webIDCache[path]
+	if !exists {
+		return WebIDCacheEntry{}, false
 	}
-	// If the specified webID is not found in the webIDCache, return false
-	return false
-}
-
-func (d *Datasource) getPointTypeForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.PointType
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
-}
-
-func (d *Datasource) getUnitsForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Units
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
-}
-
-func (d *Datasource) getDescriptionForWebID(webID string) string {
-	d.datasourceMutex.Lock()
-	defer d.datasourceMutex.Unlock()
-	path, exists := d.webIDCache.webIDPaths[webID]
-	if exists {
-		entry, exists := d.webIDCache.webIDCache[path]
-		if exists {
-			entry.ExpTime = time.Now().Add(d.webIDCache.duration)
-			d.webIDCache.webIDCache[path] = entry
-			return entry.Description
-		}
-	}
-	// If the specified webID is not found in the webIDCache, return empty string
-	return ""
+	entry.ExpTime = time.Now().Add(d.webIDCache.duration)
+	d.webIDCache.webIDCache[path] = entry
+	return entry, true
 }

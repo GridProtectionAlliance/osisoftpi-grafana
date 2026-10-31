@@ -19,22 +19,28 @@ type PiBatchDataWithFloatItem struct {
 }
 
 func (p PiBatchDataWithSingleItem) getUnits(typeFilter string) string {
+	if len(p.Items) == 0 {
+		return ""
+	}
 	return p.Items[0].Value.UnitsAbbreviation
 }
 
 func (p PiBatchDataWithSingleItem) getItems(typeFilter string) *[]PiBatchContentItem {
 	var items []PiBatchContentItem
-	items = append(items, p.Items[0].Value)
+	if len(p.Items) > 0 {
+		items = append(items, p.Items[0].Value)
+	}
 	return &items
 }
 
 func (p PiBatchDataWithSingleItem) getSummaryTypes() *[]string {
-	typeValues := make([]string, 1)
-	typeValues[0] = ""
-	return &typeValues
+	return singleSeries(len(p.Items))
 }
 
 func (p PiBatchDataWithFloatItem) getUnits(typeFilter string) string {
+	if len(p.Items) == 0 {
+		return ""
+	}
 	return p.Items[0].UnitsAbbreviation
 }
 
@@ -42,8 +48,17 @@ func (p PiBatchDataWithFloatItem) getItems(typeFilter string) *[]PiBatchContentI
 	return &p.Items
 }
 
+// getSummaryTypes returns no series for a calculation without values in the time range.
 func (p PiBatchDataWithFloatItem) getSummaryTypes() *[]string {
-	typeValues := make([]string, 1)
-	typeValues[0] = ""
+	return singleSeries(len(p.Items))
+}
+
+// singleSeries returns the summary types of a response without summary: one series, or none when the response has
+// no items.
+func singleSeries(items int) *[]string {
+	typeValues := []string{}
+	if items > 0 {
+		typeValues = append(typeValues, "")
+	}
 	return &typeValues
 }

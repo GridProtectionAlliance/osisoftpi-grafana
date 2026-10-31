@@ -2,15 +2,15 @@ package plugin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
@@ -27,35 +27,35 @@ type BatchSubRequestMap map[string]BatchSubRequest
 
 // processQuery is the main function for processing queries. It takes a query and returns a slice of PiProcessedQuery
 // that contains batched queries that are ready to be sent to the PI Web API.
-// If there is an error, the error is set in the PiProcessedQuery and the slice is returned, the error propogates through
-// the rest of the processing chain such that a dataframe with metadata is returned to the user to provide feedback to the user.
+// A query that cannot be processed gets a PiProcessedQuery with its RefID and the error, which is reported on
+// that query's response; the other queries are processed normally.
 func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID string) []PiProcessedQuery {
 	var ProcessedQuery []PiProcessedQuery
 
-	for k, query := range allQueries {
+	index := 0
+	for _, query := range allQueries {
 		var PiQuery Query
 
 		// Unmarshal the query into a PiQuery struct, and then unmarshal the PiQuery into a PiProcessedQuery
 		// if there are errors we'll set the error and return the PiProcessedQuery with an error set.
+		invalid := func(err error) {
+			ProcessedQuery = append(ProcessedQuery, PiProcessedQuery{RefID: query.RefID, Error: err, Status: http.StatusBadRequest})
+		}
 		tempJson, err := json.Marshal(query)
 		if err != nil {
 			log.DefaultLogger.Error("Process query - Error marshalling", "error", err)
-			piQuery := PiProcessedQuery{
-				Error: fmt.Errorf("error while processing the query"),
-			}
-			ProcessedQuery = append(ProcessedQuery, piQuery)
-			return ProcessedQuery
+			invalid(fmt.Errorf("error while processing the query"))
+			continue
 		}
 
 		err = json.Unmarshal(tempJson, &PiQuery)
 		if err != nil {
 			log.DefaultLogger.Error("Process query - Error unmarshalling", "error", err, "json", string(tempJson))
-			piQuery := PiProcessedQuery{
-				Error: fmt.Errorf("error while processing the query"),
-			}
-			ProcessedQuery = append(ProcessedQuery, piQuery)
-			return ProcessedQuery
+			invalid(fmt.Errorf("error while processing the query: %w", err))
+			continue
 		}
+
+		PiQuery.Pi.migrate()
 
 		// Determine if we are using units in the response.
 		// The front end doesn't guarantee that the UseUnit field will be set, so we need to check for nils
@@ -76,104 +76,138 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 		// if the query is empty, we'll return a PiProcessedQuery with an error set.
 		err = PiQuery.isValidQuery()
 		if err != nil {
-			piQuery := PiProcessedQuery{
-				Error: err,
-			}
-			ProcessedQuery = append(ProcessedQuery, piQuery)
-			return ProcessedQuery
+			invalid(err)
+			continue
 		}
 
 		// At this point we expect that the query is valid, so we can start processing it.
-		// the queries are may contain multiple targets, so we need to loop through them
-		for i, targetBasePath := range PiQuery.Pi.getTargetBasePaths() {
-			for j, attribute := range PiQuery.Pi.Attributes {
-				fullTargetPath := targetBasePath + PiQuery.Pi.getTargetPathSeparator() + attribute.Value.Value
-				// Create a processed query for the target
-				piQuery := PiProcessedQuery{
-					RefID:               PiQuery.RefID,
-					Label:               attribute.Value.Value,
-					UID:                 datasourceUID,
-					IntervalNanoSeconds: PiQuery.Interval,
-					IsPIPoint:           PiQuery.Pi.IsPiPoint,
-					HideError:           PiQuery.Pi.HideError,
-					Streamable:          PiQuery.isStreamable() && d.isUsingStreaming(),
-					FullTargetPath:      fullTargetPath,
-					TargetPath:          targetBasePath,
-					UseUnit:             UseUnit,
-					DigitalStates:       DigitalStates,
-					Display:             PiQuery.Pi.Display,
-					Regex:               PiQuery.Pi.Regex,
-					Nodata:              PiQuery.Pi.Nodata,
-					Summary:             PiQuery.Pi.Summary,
-					HashCode:            PiQuery.Pi.HashCode + "_" + attribute.Value.Value,
-					StartTime:           PiQuery.TimeRange.From.Truncate(time.Second),
-					EndTime:             PiQuery.TimeRange.To.Truncate(time.Second),
-					Variable:            PiQuery.Pi.getVariable(i),
-					Index:               (j + 1) + 100*(i+1) + (100*100)*(k+1),
-				}
+		// Multi-value template variables in the element path and in the attributes are expanded
+		// into every element/attribute combination.
+		targets, err := PiQuery.Pi.getExpandedTargets()
+		if err != nil {
+			log.DefaultLogger.Warn("Process query - Error expanding template variables", "RefID", PiQuery.RefID, "error", err)
+			invalid(err)
+			continue
+		}
 
-				WebID := d.getCachedWebID(fullTargetPath)
+		baseUrl := d.settings.URL
+		if !strings.HasSuffix(baseUrl, "/") {
+			baseUrl += "/"
+		}
+		queryBaseURL := baseUrl + PiQuery.getQueryBaseURL()
+		streamable := PiQuery.isStreamable() && d.isUsingStreaming() && rangeEndsNow(PiQuery.TimeRange.To)
+		startTime := PiQuery.TimeRange.From.Truncate(time.Second)
+		endTime := PiQuery.TimeRange.To.Truncate(time.Second)
+		separator := PiQuery.Pi.getTargetPathSeparator()
 
-				// initialize maps
-				piQuery.BatchRequest = make(map[string]BatchSubRequest)
-
-				var baseUrl = d.settings.URL
-				if !strings.HasSuffix(baseUrl, "/") {
-					baseUrl = baseUrl + "/"
-				}
-				dataId := fmt.Sprintf("%s_Req%d_Data", piQuery.RefID, piQuery.Index)
-				if WebID != nil && WebID.WebID != "" {
-					piQuery.WebID = WebID.WebID
-					// DATA FETCH
-					batchSubRequest := BatchSubRequest{
-						Method:   "GET",
-						Resource: baseUrl + PiQuery.getQueryBaseURL() + WebID.WebID,
-						Headers: map[string]string{
-							"Asset-Path": fullTargetPath,
-						},
-					}
-					piQuery.Resource = batchSubRequest.Resource
-					piQuery.BatchRequest[dataId] = batchSubRequest
-				} else {
-					parentId := fmt.Sprintf("%s_Req%d", piQuery.RefID, piQuery.Index)
-					parameter := "$." + parentId + ".Content.WebId"
-					// WEBID FETCH
-					piQuery.BatchRequest[parentId] = BatchSubRequest{
-						Method:   "GET",
-						Resource: baseUrl + d.getRequestWebId(fullTargetPath, piQuery.IsPIPoint),
-					}
-					// DATA FETCH
-					batchSubRequest := BatchSubRequest{
-						Method:     "GET",
-						ParentIds:  []string{parentId},
-						Parameters: []string{parameter},
-						Resource:   baseUrl + PiQuery.getQueryBaseURL() + "{0}",
-					}
-					piQuery.Resource = batchSubRequest.Resource
-					piQuery.BatchRequest[dataId] = batchSubRequest
-				}
-
-				ProcessedQuery = append(ProcessedQuery, piQuery)
+		for _, target := range targets {
+			targetBasePath := target.BasePath
+			fullTargetPath := targetBasePath + separator + target.Attribute
+			// Index is unique within the request and is used to build the batch request keys
+			index++
+			// Create a processed query for the target
+			piQuery := PiProcessedQuery{
+				RefID:          PiQuery.RefID,
+				Label:          target.Attribute,
+				UID:            datasourceUID,
+				IsPIPoint:      PiQuery.Pi.IsPiPoint,
+				HideError:      PiQuery.Pi.HideError,
+				Streamable:     streamable,
+				FullTargetPath: fullTargetPath,
+				TargetPath:     targetBasePath,
+				UseUnit:        UseUnit,
+				DigitalStates:  DigitalStates,
+				Display:        target.resolveDisplay(PiQuery.Pi.Display),
+				Regex:          PiQuery.Pi.Regex,
+				Nodata:         PiQuery.Pi.Nodata,
+				HashCode:       PiQuery.Pi.HashCode + "_" + fullTargetPath,
+				StartTime:      startTime,
+				EndTime:        endTime,
+				Variable:       target.Variable,
+				MultiVariable:  target.MultiVariable,
+				Index:          index,
+				PluginVersion:  PiQuery.Pi.PluginVersion,
+				StreamFillGaps: PiQuery.isStreamFillGaps(),
+				MaxDataPoints:  PiQuery.getMaxDataPoints(),
 			}
+
+			WebID := d.getCachedWebID(fullTargetPath)
+
+			// initialize maps
+			piQuery.BatchRequest = make(map[string]BatchSubRequest)
+
+			dataId := piQuery.dataRequestKey()
+			if WebID != nil && WebID.WebID != "" {
+				piQuery.WebID = WebID.WebID
+				// DATA FETCH
+				batchSubRequest := BatchSubRequest{
+					Method:   "GET",
+					Resource: queryBaseURL + WebID.WebID,
+					Headers: map[string]string{
+						"Asset-Path": fullTargetPath,
+					},
+				}
+				piQuery.Resource = batchSubRequest.Resource
+				piQuery.BatchRequest[dataId] = batchSubRequest
+			} else {
+				parentId := piQuery.webIDRequestKey()
+				parameter := "$." + parentId + ".Content.WebId"
+				// WEBID FETCH
+				piQuery.BatchRequest[parentId] = BatchSubRequest{
+					Method:   "GET",
+					Resource: baseUrl + d.getRequestWebId(fullTargetPath, piQuery.IsPIPoint),
+				}
+				// DATA FETCH
+				batchSubRequest := BatchSubRequest{
+					Method:     "GET",
+					ParentIds:  []string{parentId},
+					Parameters: []string{parameter},
+					Resource:   queryBaseURL + "{0}",
+				}
+				piQuery.Resource = batchSubRequest.Resource
+				piQuery.BatchRequest[dataId] = batchSubRequest
+			}
+
+			ProcessedQuery = append(ProcessedQuery, piQuery)
 		}
 	}
 
 	return ProcessedQuery
 }
 
+// batchRequest sends the processed queries to the PI Web API and groups them by RefID. Queries that already have
+// an error (they could not be processed) are not sent, and are returned with their error.
 func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiProcessedQuery) map[string][]PiProcessedQuery {
+	valid := make([]PiProcessedQuery, 0, len(PIWebAPIQueriesAll))
+	var invalid []PiProcessedQuery
+	for _, piQuery := range PIWebAPIQueriesAll {
+		if piQuery.Error != nil {
+			invalid = append(invalid, piQuery)
+		} else {
+			valid = append(valid, piQuery)
+		}
+	}
+	PIWebAPIQueries := d.sendBatch(ctx, valid)
+	for _, piQuery := range invalid {
+		PIWebAPIQueries[piQuery.RefID] = append(PIWebAPIQueries[piQuery.RefID], piQuery)
+	}
+	return PIWebAPIQueries
+}
+
+func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProcessedQuery) map[string][]PiProcessedQuery {
 	batchRequest := make(map[string]BatchSubRequest)
 	PIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	// create a map of the batch requests. This allows us to map the response back to the original query
 	for _, piQuery := range PIWebAPIQueriesAll {
-		if piQuery.Error != nil {
-			continue
-		}
 		for key, request := range piQuery.BatchRequest {
 			batchRequest[key] = request
 		}
 		piQuery.Cached = false
 		PIWebAPIQueries[piQuery.RefID] = append(PIWebAPIQueries[piQuery.RefID], piQuery)
+	}
+
+	if len(batchRequest) == 0 {
+		return PIWebAPIQueries
 	}
 
 	// request the data from the PI Web API
@@ -191,7 +225,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 					PIWebAPIQueries[RefID][i].Cached = true
 				} else {
 					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error during query: %s", err.Error())
-					PIWebAPIQueries[RefID][i].Status = http.StatusGatewayTimeout
+					PIWebAPIQueries[RefID][i].Status = http.StatusBadGateway
 				}
 			}
 		}
@@ -215,13 +249,15 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 		// map the response back to the original query
 		for i, query := range processedQuery {
 			// WEBID
-			var key = fmt.Sprintf("%s_Req%d", RefID, query.Index)
+			var key = query.webIDRequestKey()
 			WebIdData, ok := tempresponse[key]
 			if ok {
 				if WebIdData.Status == http.StatusOK {
 					PIWebAPIQueries[RefID][i].WebID = d.saveWebID(WebIdData.Content, query.FullTargetPath, query.IsPIPoint)
 				} else {
-					backend.Logger.Error("Batch request - request bad", "Content", WebIdData.Content)
+					backend.Logger.Debug("Batch request - WebID lookup failed", "RefID", RefID, "target", query.FullTargetPath,
+						"status", WebIdData.Status, "content", WebIdData.Content)
+					PIWebAPIQueries[RefID][i].Status = WebIdData.Status
 					jWebIdData, err := json.Marshal(WebIdData.Content)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
@@ -242,7 +278,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 				}
 			}
 			// DATA
-			key = fmt.Sprintf("%s_Req%d_Data", RefID, query.Index)
+			key = query.dataRequestKey()
 			ResponseData, ok := tempresponse[key]
 			if ok {
 				if ResponseData.Status == http.StatusOK {
@@ -258,7 +294,8 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 					PIWebAPIQueries[RefID][i].Status = http.StatusOK
 					PIWebAPIQueries[RefID][i].Cached = true
 				} else {
-					backend.Logger.Error("Batch request - bad", "Content", ResponseData.Content)
+					backend.Logger.Debug("Batch request - data request failed", "RefID", RefID, "target", query.FullTargetPath,
+						"status", ResponseData.Status, "content", ResponseData.Content)
 					d.webCache.Remove(query.HashCode)
 					PIWebAPIQueries[RefID][i].Status = ResponseData.Status
 					jResponseData, err := json.Marshal(ResponseData.Content)
@@ -273,7 +310,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 						continue
 					}
 					if errorResponse.Error != nil && len(errorResponse.Error.Errors) > 0 {
-						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", WebIdData.Status, errorResponse.Error.Errors[0])
+						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("api error %d - %s", ResponseData.Status, errorResponse.Error.Errors[0])
 					} else {
 						PIWebAPIQueries[RefID][i].Error = fmt.Errorf("unknown api error")
 					}
@@ -294,72 +331,125 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 	return PIWebAPIQueries
 }
 
-/// END NEW
+// webIDRequestKey is the key of the batch request that looks up the target's WebID, and dataRequestKey the key of
+// the request of its data. They are built from Index only, which is unique within the batch: the RefID is any text
+// the user typed, and in the JSONPath that passes the WebID to the data request, dots, brackets, quotes or spaces
+// are read as JSONPath syntax.
+func (q *PiProcessedQuery) webIDRequestKey() string {
+	return fmt.Sprintf("Req%d", q.Index)
+}
+
+func (q *PiProcessedQuery) dataRequestKey() string {
+	return fmt.Sprintf("Req%d_Data", q.Index)
+}
+
+// logFields returns the fields logged when the target fails: enough to reproduce the failing requests.
+func (q *PiProcessedQuery) logFields() []any {
+	fields := []any{"RefID", q.RefID, "target", q.FullTargetPath, "status", q.Status, "error", q.Error, "hideError", q.HideError}
+	if q.WebID != "" {
+		fields = append(fields, "webId", q.WebID)
+	}
+	if q.PluginVersion != "" {
+		fields = append(fields, "savedByPluginVersion", q.PluginVersion)
+	}
+	if q.Resource != "" {
+		fields = append(fields, "request", strings.ReplaceAll(q.Resource, "{0}", q.WebID))
+	}
+	if lookup, ok := q.BatchRequest[q.webIDRequestKey()]; ok {
+		fields = append(fields, "webIdRequest", lookup.Resource)
+	}
+	return fields
+}
 
 func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessedQuery) *backend.QueryDataResponse {
 	response := backend.NewQueryDataResponse()
 
+	// Pre-pass: collect all streamable WebIDs so every tag in this batch can share a
+	// single streamsets/channel WebSocket connection instead of one socket per tag.
+	var streamableWebIDs []string
+	for _, queries := range processedQuery {
+		for i := range queries {
+			if queries[i].Streamable && queries[i].WebID != "" {
+				streamableWebIDs = append(streamableWebIDs, queries[i].WebID)
+			}
+		}
+	}
+	var connectionKey string
+	var connectionWebIDs []string
+	if len(streamableWebIDs) > 0 {
+		sort.Strings(streamableWebIDs)
+		// Deduplicate (same tag may appear in multiple summary types)
+		connectionWebIDs = streamableWebIDs[:0]
+		for i, id := range streamableWebIDs {
+			if i == 0 || id != streamableWebIDs[i-1] {
+				connectionWebIDs = append(connectionWebIDs, id)
+			}
+		}
+		connectionKey = strings.Join(connectionWebIDs, "|")
+	}
+
 	for RefID, query := range processedQuery {
 		var subResponse backend.DataResponse
+		var errorStatus backend.Status
 		for _, q := range query {
-			// set response status
-			subResponse.Status = backend.Status(q.Status)
-			// if there is an error in the query, we set the error in the subresponse and break out of the loop returning the error.
+			// A failing target (e.g. an element of a multi-value variable without the attribute) reports its
+			// error and the other targets of the query still return their data.
 			if q.Error != nil {
-				backend.Logger.Error("Process batch to frames - Error processing query", "RefID", RefID, "query", q, "hide", q.HideError)
-				if !q.HideError && strings.Contains(q.Error.Error(), "api error") {
+				backend.Logger.Error("Query target failed", q.logFields()...)
+				if !q.HideError && subResponse.Error == nil {
 					subResponse.Error = q.Error
+					errorStatus = backend.Status(q.Status)
 				}
-				break
+				continue
 			}
+			subResponse.Status = backend.Status(q.Status)
 
 			for _, SummaryType := range *q.Response.getSummaryTypes() {
-				frame, err := convertItemsToDataFrame(&q, d, SummaryType)
-
-				// if there is an error on a single frame we set metadata and continue to the next frame
-				if err != nil {
-					backend.Logger.Error("Process batch to frames - convertItemsToDataFrame", "RefID", RefID, "query", q)
-					subResponse.Error = q.Error
-					continue
-				}
-
+				frame := convertItemsToDataFrame(&q, d, SummaryType)
 				frame.RefID = RefID
 				// meta data
 				frame.Meta.ExecutedQueryString = strings.ReplaceAll(q.Resource, "{0}", q.WebID)
 
-				// TODO: enable streaming
-				// If the query is streamable, then we need to set the channel URI
-				// and the executed query string.
+				// If the query is streamable, register a channel so Grafana subscribes to
+				// the live WebSocket stream for this tag.
 				if q.Streamable {
-					// Create a new channel for this frame request.
-					// Creating a new channel for each frame request is not ideal,
-					// but it is the only way to ensure that the frame data is refreshed
-					// on a time interval update.
-					channeluuid := uuid.New()
-					channelURI := "ds/" + q.UID + "/" + channeluuid.String()
-					channel := StreamChannelConstruct{
-						WebID:               q.WebID,
-						IntervalNanoSeconds: q.IntervalNanoSeconds,
-						tagLabel:            q.Label,
-						query:               &q,
-					}
-					d.channelConstruct[channeluuid.String()] = channel
-					frame.Meta.Channel = channelURI
+					channelKey := d.registerStreamChannel(&q, *q.Response.getItems(SummaryType), connectionKey, connectionWebIDs)
+					frame.Meta.Channel = "ds/" + q.UID + "/" + channelKey
 				}
 
 				subResponse.Frames = append(subResponse.Frames, frame)
 			}
+		}
+		if len(subResponse.Frames) == 0 && errorStatus != 0 {
+			subResponse.Status = errorStatus
 		}
 		response.Responses[RefID] = subResponse
 	}
 	return response
 }
 
+// streamSettings returns the query settings that change the streamed values. Panels showing the same
+// PI point with different settings get their own channel; the stream sends values only, so settings such as the
+// display name do not matter.
+func streamSettings(q *PiProcessedQuery) string {
+	return fmt.Sprintf("digitalStates=%t|nodata=%s|fillGaps=%t", q.DigitalStates, q.getNoDataReplace(), q.StreamFillGaps)
+}
+
+// channelKeyFor returns the channel path of a query's PI tag: a 16-char hex key of the tag, the stream settings,
+// and the time range and maximum data points of the query. Each query result gets its own channel: Grafana keeps
+// the buffer of a channel it already streams and ignores the frame of a new query result (e.g. after a time range
+// change or a refresh), and the panels using a channel share its buffer.
+func channelKeyFor(q *PiProcessedQuery) string {
+	h := sha256.Sum256([]byte(fmt.Sprintf("%s|%s|%d|%d|%d", q.WebID, streamSettings(q),
+		q.StartTime.UnixNano(), q.EndTime.UnixNano(), q.MaxDataPoints)))
+	return hex.EncodeToString(h[:8])
+}
+
 func (q *PIWebAPIQuery) isSummary() bool {
 	if q.Summary == nil {
 		return false
 	}
-	if q.Summary.Enable == nil {
+	if q.Summary.Enable == nil || q.Summary.Basis == nil || q.Summary.Types == nil {
 		return false
 	}
 	return *q.Summary.Enable && *q.Summary.Basis != "" && len(*q.Summary.Types) > 0
@@ -396,77 +486,28 @@ func (q *PiProcessedQuery) isRegexQuery() bool {
 	return true
 }
 
-// getSummaryDuration returns the summary duration in the format piwebapi expects
-// The summary duration is provided by the frontend in the format: <number><short_name>
-// The short name can be one of the following: ms, s, m, h, d, mo, w, wd, yd
-// A default of 30s is returned if the summary duration is not provided by the frontend
-// or if the format is invalid
-func (q *PIWebAPIQuery) getSummaryDuration() string {
-	// Return the default value if the summary is not provided by the frontend
-	if q.Summary == nil || q.Summary.Duration == nil || *q.Summary.Duration == "" {
-		return "30s"
-	}
-	return _getDurationBase(*q.Summary.Duration)
-}
-
-func (q *PIWebAPIQuery) getSampleInterval() string {
-	// Return the default value if the summary is not provided by the frontend
-	if q.Summary == nil || q.Summary.SampleInterval == nil || *q.Summary.SampleInterval == "" {
-		return "30s"
-	}
-	return _getDurationBase(*q.Summary.SampleInterval)
-}
-
-func _getDurationBase(duration string) string {
-	// If the summary duration is provided, then validate the format piwebapi expects
-	// Regular expression to match the format: <number><short_name>
-	pattern := `^(\d+(\.\d+)?)\s*(ms|s|m|h|d|mo|w|wd|yd)$`
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(duration)
-
-	if len(matches) != 4 {
-		return "30s" // Return the default value if the format is invalid
-	}
-
-	// Extract the numeric part and the short name from the interval
-	numericPartStr := matches[1]
-	shortName := matches[3]
-
-	// Convert the numeric part to a float64
-	numericPart, err := strconv.ParseFloat(numericPartStr, 64)
-	if err != nil {
-		return "30s" // Return the default value if conversion fails
-	}
-
-	// Check if the short name is valid and whether fractions are allowed for that time unit
-	switch shortName {
-	case "ms", "s", "m", "h":
-		// Fractions allowed for millisecond, second, minute, and hour
-		return duration
-	case "d", "mo", "w", "wd", "yd":
-		// No fractions allowed for day, month, week, weekday, yearday
-		if numericPart == float64(int64(numericPart)) {
-			return duration
-		}
-	default:
-		return "30s" // Return the default value if the short name or fractions are not allowed
-	}
-
-	return "30s" // Return the default value if the short name or fractions are not allowed
+// timeSpanParameter returns a time span (summary duration, sample interval or interpolation interval) as a URL query
+// parameter value. It is sent as entered: PI Web API accepts many AFTimeSpan forms ("1y", "1.5d", "2 hours",
+// "1h30m"...) and returns its own error for an invalid one.
+func timeSpanParameter(span string) string {
+	return queryEscape(strings.TrimSpace(span))
 }
 
 func (q *PIWebAPIQuery) getSummaryURIComponent() string {
+	if !q.isSummary() {
+		return ""
+	}
 	uri := ""
 	for _, t := range *q.Summary.Types {
 		uri += "&summaryType=" + t.Value.Value
 	}
 	uri += "&calculationBasis=" + *q.Summary.Basis
-	if q.Summary.Duration != nil && *q.Summary.Duration != "" {
-		uri += "&summaryDuration=" + q.getSummaryDuration()
+	if q.Summary.Duration != nil && strings.TrimSpace(*q.Summary.Duration) != "" {
+		uri += "&summaryDuration=" + timeSpanParameter(*q.Summary.Duration)
 	}
 	if q.Summary.SampleTypeInterval != nil && *q.Summary.SampleTypeInterval &&
-		q.Summary.SampleInterval != nil && *q.Summary.SampleInterval != "" {
-		uri += "&sampleType=Interval&sampleInterval=" + q.getSampleInterval()
+		q.Summary.SampleInterval != nil && strings.TrimSpace(*q.Summary.SampleInterval) != "" {
+		uri += "&sampleType=Interval&sampleInterval=" + timeSpanParameter(*q.Summary.SampleInterval)
 	}
 	return uri
 }
@@ -500,81 +541,11 @@ func (q *PIWebAPIQuery) getBasePath() string {
 	return (*q.Target)[:semiIndex]
 }
 
-func (q *PIWebAPIQuery) getTargetBasePaths() []string {
-	if q.Target == nil {
-		return []string{}
-	}
-	basePath := q.getBasePath()
-
-	// Find and process a pattern like {<variable1>,< variable2>,..., <variable20>}
-	startIndex := strings.Index(basePath, "{")
-	endIndex := strings.Index(basePath, "}")
-
-	if startIndex != -1 && endIndex != -1 && startIndex < endIndex {
-		globalPrefix := basePath[:startIndex]
-		globalSuffix := basePath[endIndex+1:]
-		suffixes := basePath[startIndex+1 : endIndex]
-		suffixList := strings.Split(suffixes, ",")
-
-		basePaths := make([]string, 0, len(suffixList))
-		for _, suffix := range suffixList {
-			basePaths = append(basePaths, globalPrefix+strings.TrimSpace(suffix)+globalSuffix)
-		}
-		return basePaths
-	}
-
-	// If no pattern was found, return the base path as the only item in the slice
-	return []string{basePath}
-}
-
-func (q *PIWebAPIQuery) getVariable(index int) string {
-	basePath := q.getBasePath()
-
-	// Find and process a pattern like {<variable1>,< variable2>,..., <variable20>}
-	startIndex := strings.Index(basePath, "{")
-	endIndex := strings.Index(basePath, "}")
-
-	if startIndex != -1 && endIndex != -1 && startIndex < endIndex {
-		suffixes := basePath[startIndex+1 : endIndex]
-		suffixList := strings.Split(suffixes, ",")
-		if index < len(suffixList) {
-			return suffixList[index]
-		}
-	}
-	return ""
-}
-
-// func (q *PIWebAPIQuery) getfullTargetPath(target string) string {
-// 	fullTargetPath := q.getBasePath()
-// 	if q.IsPiPoint {
-// 		fullTargetPath += `\` + target
-// 	} else {
-// 		fullTargetPath += "|" + target
-// 	}
-// 	return fullTargetPath
-// }
-
 func (q *PIWebAPIQuery) getTargetPathSeparator() string {
 	if q.IsPiPoint {
 		return `\`
 	}
 	return "|"
-}
-
-// func (q *PIWebAPIQuery) getTargets() []string {
-// 	if q.Target == nil {
-// 		return nil
-// 	}
-
-// 	semiIndex := strings.Index(*q.Target, ";")
-// 	if semiIndex == -1 || semiIndex == len(*q.Target)-1 {
-// 		return nil
-// 	}
-// 	return strings.Split((*q.Target)[semiIndex+1:], ";")
-// }
-
-func (q *PIWebAPIQuery) checkNilSegments() bool {
-	return q.Target == nil
 }
 
 func (q *PIWebAPIQuery) checkValidTargets() bool {
@@ -587,7 +558,7 @@ func (q *PIWebAPIQuery) checkValidTargets() bool {
 		return false
 	}
 	// check if the target provided ends with a semicolon
-	if q.Target == nil || strings.HasSuffix(*q.Target, ";") {
+	if strings.HasSuffix(*q.Target, ";") {
 		return false
 	}
 
@@ -604,15 +575,25 @@ func (q *PIWebAPIQuery) isUseLastValue() bool {
 	return *q.UseLastValue.Enable
 }
 
+// getMaxDataPoints returns the panel's max data points.
 func (q *Query) getMaxDataPoints() int {
-	if q.Pi.RecordedValues.MaxNumber != nil {
-		return *q.Pi.RecordedValues.MaxNumber
-	}
 	return q.MaxDataPoints
 }
 
+// defaultMaxRecordedValues is the number of recorded values returned when "Max Recorded Values" is not set: the
+// default maxCount of PI Web API, and the placeholder of the query editor.
+const defaultMaxRecordedValues = 1000
+
+// getMaxRecordedValues returns "Max Recorded Values", or defaultMaxRecordedValues when it is not set.
+func (q *Query) getMaxRecordedValues() int {
+	if q.Pi.RecordedValues != nil && q.Pi.RecordedValues.MaxNumber != nil && *q.Pi.RecordedValues.MaxNumber > 0 {
+		return *q.Pi.RecordedValues.MaxNumber
+	}
+	return defaultMaxRecordedValues
+}
+
 func (q *Query) getBoundaryType() string {
-	if q.Pi.RecordedValues.BoundaryType != nil {
+	if q.Pi.RecordedValues != nil && q.Pi.RecordedValues.BoundaryType != nil {
 		return *q.Pi.RecordedValues.BoundaryType
 	}
 	return "Inside"
@@ -629,15 +610,14 @@ func (q Query) getQueryBaseURL() string {
 				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
 				uri += "/intervals" + q.getTimeRangeURIComponent()
-				uri += fmt.Sprintf("&sampleInterval=%s", q.getIntervalTime())
+				uri += "&sampleInterval=" + timeSpanParameter(q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			} else {
-				// uri += "/times?" + q.getWindowedTimeStampURI()
 				uri += "/recorded" + q.getTimeRangeURIComponent()
 			}
 		}
-		uri += "&expression=" + q.Pi.Expression + "&webId="
+		uri += "&expression=" + queryEscape(q.Pi.Expression) + "&webId="
 		log.DefaultLogger.Debug("Calculation log", "uri", uri)
 	} else {
 		uri += "streamsets"
@@ -651,9 +631,9 @@ func (q Query) getQueryBaseURL() string {
 			if q.Pi.isSummary() {
 				uri += "/summary" + q.getTimeRangeURIComponent() + q.Pi.getSummaryURIComponent()
 			} else if q.Pi.isInterpolated() {
-				uri += "/interpolated" + q.getTimeRangeURIComponent() + fmt.Sprintf("&interval=%s", q.getIntervalTime())
+				uri += "/interpolated" + q.getTimeRangeURIComponent() + "&interval=" + timeSpanParameter(q.getIntervalTime())
 			} else if q.Pi.isRecordedValues() {
-				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxDataPoints()) + "&boundaryType=" + q.getBoundaryType()
+				uri += "/recorded" + q.getTimeRangeURIComponent() + fmt.Sprintf("&maxCount=%d", q.getMaxRecordedValues()) + "&boundaryType=" + q.getBoundaryType()
 			} else {
 				uri += "/plot" + q.getTimeRangeURIComponent() + fmt.Sprintf("&intervals=%d", q.getMaxDataPoints())
 			}
