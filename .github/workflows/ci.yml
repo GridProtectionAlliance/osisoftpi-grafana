@@ -34,20 +34,20 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
-          cache: 'yarn'
+          node-version: '24'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
       - name: Check types
-        run: yarn typecheck
+        run: npm run typecheck
       - name: Lint
-        run: yarn lint
+        run: npm run lint
       - name: Unit tests
-        run: yarn test:ci
+        run: npm run test:ci
       - name: Build frontend
-        run: yarn build
+        run: npm run build
 
       - name: Check for backend
         id: check-for-backend
@@ -94,7 +94,7 @@ jobs:
           fi
 
       - name: Sign plugin
-        run: yarn sign
+        run: npm run sign
         if: ${{ env.GRAFANA_ACCESS_POLICY_TOKEN != '' }}
 
       - name: Get plugin metadata
@@ -179,11 +179,11 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v6
         with:
-          node-version: '22'
-          cache: 'yarn'
+          node-version: '24'
+          cache: 'npm'
 
       - name: Install dev dependencies
-        run: yarn install --frozen-lockfile
+        run: npm ci
 
       - name: Start Grafana
         run: |
@@ -196,11 +196,11 @@ jobs:
           url: http://localhost:3000/login
 
       - name: Install Playwright Browsers
-        run: yarn playwright install chromium --with-deps
+        run: npx playwright install chromium --with-deps
 
       - name: Run Playwright tests
         id: run-tests
-        run: yarn e2e
+        run: npm run e2e
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v7

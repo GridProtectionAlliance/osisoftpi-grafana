@@ -12,6 +12,7 @@
 - Annotation query editor: the AF server is selected in a new dropdown, and the category is a dropdown of the database categories (element categories, also used by event frames); the AF server and database set in the datasource configuration are pre-selected and cannot be changed
 - Variable queries use a query language: `points PIT-*`, `elements AFSERVER\Database\Plant searchFullHierarchy=true templateName=Pump`, `attributes AFSERVER\Database\Element nameFilter=Fl*` with the PI Web API filters (`nameFilter`, `descriptionFilter`, `categoryName`, `templateName`, `elementType`, `valueType`) and paging (`sortField`, `sortOrder`, `startIndex`, `maxCount`), shown with its help in a new variable query editor; JSON queries of earlier versions keep working
 - Rebuilt the plugin with current Grafana tooling to fix it failing to load on Grafana 12.3 and later - issue GridProtectionAlliance/osisoftpi-grafana#197
+- Built with the Grafana 13.1 libraries, @grafana/plugin-ui 0.17.4, Go 1.27.3 and grafana-plugin-sdk-go 0.297.0; Grafana 11.6.0 or later is still required
 - Fixed units from PI not being added to data frames when "Enable Unit From Data" and "Use unit from datapoints" are enabled - issue GridProtectionAlliance/osisoftpi-grafana#208
 - Improved template variables support - issue GridProtectionAlliance/osisoftpi-grafana#187
   - more than one multi-value variable can be used in the element path; every combination is queried
