@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -46,25 +46,35 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	if err != nil {
 		return nil, fmt.Errorf("http client options: %w", err)
 	}
+	// Forward the headers Grafana adds to the requests (Forward OAuth Identity, Allowed cookies) to PI Web API.
+	// Requests made with the request context (queries, resources, health check) get them from the SDK middleware.
+	opts.ForwardHTTPHeaders = true
+	// Let Go negotiate and decode compression instead of forwarding the browser's encodings.
+	// This must run after the SDK's contextual header forwarding.
+	opts.ConfigureMiddleware = func(_ httpclient.Options, middlewares []httpclient.Middleware) []httpclient.Middleware {
+		return append(middlewares, httpclient.MiddlewareFunc(func(_ httpclient.Options, next http.RoundTripper) http.RoundTripper {
+			return httpclient.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				req.Header.Del("Accept-Encoding")
+				return next.RoundTrip(req)
+			})
+		}))
+	}
 
 	httpClient, err := httpclient.New(opts)
 	if err != nil {
 		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
-
-	var maxDuration int
-	if dataSourceOptions.MaxCacheTime != nil && *dataSourceOptions.MaxCacheTime > 0 {
-		maxDuration = *dataSourceOptions.MaxCacheTime
-	} else {
-		maxDuration = 12
+	websocketTLS, websocketDial, err := websocketTransport(opts)
+	if err != nil {
+		return nil, fmt.Errorf("websocket transport: %w", err)
 	}
+
+	maxDuration := dataSourceOptions.MaxCacheTime.orDefault()
 	webIDCache := newWebIDCache(maxDuration)
 	webCache := newCache[string, PiBatchData]()
 
 	// Create a new scheduler that will be used to clean the webIDCache every MaxCacheTime hours.
 	scheduler := gocron.NewScheduler(time.UTC)
-	scheduler.Every(maxDuration).Hour().Do(cleanWebIDCache, webIDCache)
-	scheduler.StartAsync()
 
 	ds := &Datasource{
 		settings:                  settings,
@@ -76,9 +86,12 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 		datasourceMutex:           &sync.Mutex{},
 		channelConstruct:          make(map[string]StreamChannelConstruct),
 		websocketConnections:      make(map[string]*websocket.Conn),
-		sendersByWebID:            make(map[string]map[*backend.StreamSender]bool),
-		streamChannels:            make(map[string]chan []byte),
+		senderChannels:            make(map[string]map[*backend.StreamSender]chan StreamData),
 		dataSourceOptions:         &dataSourceOptions,
+		websocketHeader:           websocketHeader(opts),
+		websocketTLS:              websocketTLS,
+		websocketDial:             websocketDial,
+		websocketTimeout:          websocketTimeout(opts),
 		initalTime:                time.Now(),
 		totalCalls:                0,
 		callRate:                  0.0,
@@ -86,8 +99,11 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 
 	// Create a new query mux and assign it to the datasource.
 	ds.queryMux = ds.newQueryMux()
+	_, _ = scheduler.Every(maxDuration).Hour().Do(ds.cleanWebIDCache)
+	scheduler.StartAsync()
+	ds.takeOverStreamChannels()
 
-	log.DefaultLogger.Info("PIWebAPI Datasource Created", "UID", settings.UID, "Name", settings.Name)
+	backend.Logger.Info("datasource_created", "dsUid", settings.UID, "dsName", settings.Name)
 
 	return ds, nil
 }
@@ -96,7 +112,9 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *Datasource) Dispose() {
+	d.scheduler.Stop()
 	d.httpClient.CloseIdleConnections()
+	d.releaseStreamChannels()
 }
 
 // update call rate - enforce max call rate of 500 req/s
@@ -144,10 +162,10 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return d.queryMux.QueryData(ctx, req)
 }
 
-// TODO: Missing functionality: Add Replace Bad Values
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
+	ctx = withDashboardLogAttributes(ctx, req)
 
 	// tracer
 	ctx, span := tracing.DefaultTracer().Start(
@@ -157,7 +175,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	defer span.End()
 
 	// Process queries generic query objects and turn them into a suitable format for the PI Web API
-	processedPIWebAPIQueries := d.processQuery(req.Queries, datasourceUID)
+	processedPIWebAPIQueries := d.processQuery(ctx, req.Queries, datasourceUID)
 
 	// span
 	span.AddEvent("Completed processing query request")
@@ -169,7 +187,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	span.AddEvent("Completed processing batch request")
 
 	// Convert the PI Web API response into Grafana frames
-	response := d.processBatchtoFrames(processedQueries_temp)
+	response := d.processBatchtoFrames(ctx, processedQueries_temp)
 
 	// span
 	span.AddEvent("Completed processing batch to frames")
@@ -182,6 +200,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 
 // QueryAnnotations recevies annotation queries from the frontend and returns dataframes that contain json raw messages containing the annotations.
 func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+	ctx = withDashboardLogAttributes(ctx, req)
 	response := &backend.QueryDataResponse{}
 	response.Responses = make(map[string]backend.DataResponse)
 
@@ -205,43 +224,76 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 		ProcessedAnnotationQuery := d.processAnnotationQuery(ctx, q)
 		span.AddEvent("Completed processing annotation query request")
 
-		url := ProcessedAnnotationQuery.getEventFrameQueryURL()
-
-		var batchReq AnnotationBatchRequest
-
-		if len(ProcessedAnnotationQuery.Attributes) > 0 {
-			attributeURLs, err := ProcessedAnnotationQuery.getEventFrameAttributeQueryURL()
-			if err != nil {
-				return nil, fmt.Errorf("error getting attribute URLs: %w", err)
-			}
-			batchReq = d.buildAnnotationBatch(url, attributeURLs...)
-		} else {
-			batchReq = d.buildAnnotationBatch(url)
-		}
-
-		span.AddEvent("Generated PI API URL for annotation query")
-
-		r, err := apiBatchRequest(ctx, d, batchReq)
-		if err != nil {
-			return nil, fmt.Errorf("error getting data from PI Web API: %w", err)
-		}
-
-		span.AddEvent("Recieved response from PI Web API")
-
-		annotationFrame, err := convertAnnotationResponseToFrame(ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
-		if err != nil {
-			return nil, fmt.Errorf("error converting response to frame: %w", err)
-		}
-
-		span.AddEvent("Converted response to Grafana frame")
-
-		// complete batch request
-		var subResponse backend.DataResponse
-		subResponse.Frames = append(subResponse.Frames, annotationFrame)
-		response.Responses[q.RefID] = subResponse
+		response.Responses[q.RefID] = d.queryAnnotation(ctx, span, ProcessedAnnotationQuery)
 	}
 
 	return response, nil
+}
+
+// queryAnnotation runs one processed annotation query. Errors are returned in the DataResponse of the query, with the
+// PI Web API error message, so they reach the annotation layer and do not fail the other queries of the request.
+func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, ProcessedAnnotationQuery PiProcessedAnnotationQuery) backend.DataResponse {
+	// failed logs the failure of the query and returns it with the error source of its type. The log has the status
+	// returned by PI Web API (requestStatus) when it differs from the status returned to Grafana.
+	failed := func(status backend.Status, requestStatus int, errorType string, message string) backend.DataResponse {
+		if requestStatus == 0 {
+			requestStatus = int(status)
+		}
+		if ctx.Err() == nil { // a query cancelled by Grafana is not a failure
+			logError(contextLogger(ctx), "annotation_query_failed", errorType, "refId", ProcessedAnnotationQuery.RefID,
+				"status", requestStatus, "error", message)
+		}
+		return backend.ErrDataResponseWithSource(status, errorSourceOf(errorType), message)
+	}
+	if ProcessedAnnotationQuery.Error != nil {
+		return failed(backend.StatusBadRequest, 0, errInvalidQuery, "invalid annotation query: "+ProcessedAnnotationQuery.Error.Error())
+	}
+	if ProcessedAnnotationQuery.Database.WebId == "" {
+		return failed(backend.StatusBadRequest, 0, errInvalidQuery, "invalid annotation query: select an AF database")
+	}
+
+	url := ProcessedAnnotationQuery.getEventFrameQueryURL()
+
+	var batchReq AnnotationBatchRequest
+
+	if ProcessedAnnotationQuery.AttributesEnabled {
+		attributeURLs, err := ProcessedAnnotationQuery.getEventFrameAttributeQueryURL()
+		if err != nil {
+			return failed(backend.StatusBadRequest, 0, errInvalidQuery, "error getting attribute URLs: "+err.Error())
+		}
+		batchReq = d.buildAnnotationBatch(url, attributeURLs...)
+	} else {
+		batchReq = d.buildAnnotationBatch(url)
+	}
+
+	span.AddEvent("Generated PI API URL for annotation query")
+
+	r, err := apiBatchRequest(ctx, d, batchReq)
+	if err != nil {
+		// 502, not the status of PI Web API: a 401 or 403 returned for a query could be taken by Grafana for a
+		// rejection of the user's own session
+		errorType, requestStatus := requestErrorType(err, errUnreachable)
+		return failed(backend.StatusBadGateway, requestStatus, errorType, "error getting data from PI Web API: "+err.Error())
+	}
+
+	span.AddEvent("Recieved response from PI Web API")
+
+	annotationFrame, err := convertAnnotationResponseToFrame(ctx, ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
+	if err != nil {
+		var apiErr *annotationAPIError
+		if errors.As(err, &apiErr) {
+			return failed(backend.Status(apiErr.status), 0, errorTypeForStatus(apiErr.status),
+				"error getting event frames from PI Web API: "+err.Error())
+		}
+		return failed(backend.StatusBadGateway, 0, errResponseDecode, "error converting response to frame: "+err.Error())
+	}
+
+	span.AddEvent("Converted response to Grafana frame")
+
+	// complete batch request
+	var subResponse backend.DataResponse
+	subResponse.Frames = append(subResponse.Frames, annotationFrame)
+	return subResponse
 }
 
 // This function provides a way to proxy requests to the PI Web API. It is used to limit access from the frontend to the PI Web API.
@@ -261,32 +313,22 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 	)
 	defer span.End()
 
-	var isAllowed = true
-	var allowedBasePaths = []string{
-		"/assetdatabases",
-		"/elements",
-		"/assetservers",
-		"/points",
-		"/attributes",
-		"/dataservers",
-		"/annotations",
-	}
-	for _, path := range allowedBasePaths {
-		if strings.HasPrefix(req.Path, path) {
-			isAllowed = true
-			break
-		}
-	}
-
+	resourceURL, isAllowed := allowedResourceURL(req.URL)
 	if !isAllowed {
+		logError(contextLogger(ctx), "resource_path_not_allowed", errPathNotAllowed, "path", req.Path)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusForbidden,
 			Body:   nil,
 		})
 	}
 
-	r, err := apiGet(ctx, d, req.URL)
+	r, err := apiGet(ctx, d, resourceURL)
 	if err != nil {
+		if ctx.Err() == nil {
+			errorType, status := requestErrorType(err, errUnreachable)
+			logError(contextLogger(ctx), "resource_request_failed", errorType, "path", resourceURL, "status", status,
+				"error", err.Error())
+		}
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
 			Body:   []byte(`{}`),
@@ -311,7 +353,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.DefaultLogger.Error("PiWebAPI Check health: failed to close response body", "err", err.Error())
+			logError(contextLogger(ctx), "response_body_close_failed", errInternal, "error", err.Error())
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
@@ -337,12 +379,16 @@ func (d *Datasource) isUsingNewFormat() bool {
 	return d.dataSourceOptions.NewFormat != nil && *d.dataSourceOptions.NewFormat
 }
 
-// isUsingStreaming checks whether the datasource has streaming enabled in experimental mode.
-// This requires both the UseExperimental and UseStreaming options to be set and enabled.
-// Returns true if both options are enabled; otherwise, false.
+// isUsingUnits checks whether the datasource is configured to add units defined in PI to data frames.
+// This is determined by the UseUnit option ("Enable Unit From Data") in dataSourceOptions.
+// Returns true if UseUnit is set and enabled; otherwise, false.
+func (d *Datasource) isUsingUnits() bool {
+	return d.dataSourceOptions.UseUnit != nil && *d.dataSourceOptions.UseUnit
+}
+
+// isUsingStreaming checks whether "Enable Streaming Support" is enabled in the datasource configuration.
 func (d *Datasource) isUsingStreaming() bool {
-	return d.dataSourceOptions.UseExperimental != nil && *d.dataSourceOptions.UseExperimental &&
-		d.dataSourceOptions.UseStreaming != nil && *d.dataSourceOptions.UseStreaming
+	return d.dataSourceOptions.UseStreaming != nil && *d.dataSourceOptions.UseStreaming
 }
 
 // isUsingResponseCache checks if response caching is enabled in experimental mode for the datasource.
@@ -351,4 +397,42 @@ func (d *Datasource) isUsingStreaming() bool {
 func (d *Datasource) isUsingResponseCache() bool {
 	return d.dataSourceOptions.UseExperimental != nil && *d.dataSourceOptions.UseExperimental &&
 		d.dataSourceOptions.UseResponseCache != nil && *d.dataSourceOptions.UseResponseCache
+}
+
+// allowedResourcePaths are the PI Web API collections the frontend may read through CallResource
+// while configuring the datasource, queries and annotations (src/datasource.ts restGet). Points and attributes are
+// only read as sub-collections (dataservers/{webId}/points, elements/{webId}/attributes).
+var allowedResourcePaths = []string{
+	"assetdatabases",
+	"elements",
+	"assetservers",
+	"dataservers",
+}
+
+// allowedResourceURL returns the resource URL to forward to PI Web API when its first path segment is one of
+// allowedResourcePaths. Dot segments, backslashes and '%' are rejected because PI Web API would resolve them to
+// other endpoints (e.g. elements/../batch); valid requests only have WebIDs in the path.
+func allowedResourceURL(resourceURL string) (string, bool) {
+	path, query, hasQuery := strings.Cut(resourceURL, "?")
+	path = strings.Trim(path, "/")
+	if path == "" || strings.ContainsAny(path, `\%#`) {
+		return "", false
+	}
+
+	segments := strings.Split(path, "/")
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return "", false
+		}
+	}
+
+	for _, allowed := range allowedResourcePaths {
+		if strings.EqualFold(segments[0], allowed) {
+			if hasQuery {
+				return path + "?" + query, true
+			}
+			return path, true
+		}
+	}
+	return "", false
 }

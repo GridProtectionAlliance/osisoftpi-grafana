@@ -14,15 +14,19 @@ type PiBatchDataWithSubItems struct {
 }
 
 func (p PiBatchDataWithSubItems) getUnits(typeFilter string) string {
+	if len(p.Items) == 0 {
+		return ""
+	}
 	return p.Items[0].UnitsAbbreviation
 }
 
 func (p PiBatchDataWithSubItems) getItems(typeFilter string) *[]PiBatchContentItem {
+	if len(p.Items) == 0 {
+		return &[]PiBatchContentItem{}
+	}
 	return &p.Items[0].Items
 }
 
 func (p PiBatchDataWithSubItems) getSummaryTypes() *[]string {
-	typeValues := make([]string, 1)
-	typeValues[0] = ""
-	return &typeValues
+	return singleSeries(len(p.Items))
 }

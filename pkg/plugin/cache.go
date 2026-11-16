@@ -42,18 +42,3 @@ func (c *Cache[K, V]) Remove(key K) {
 
 	delete(c.items, key)
 }
-
-// Pop removes and returns the value associated with the specified key from the cache.
-func (c *Cache[K, V]) Pop(key K) (V, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	value, found := c.items[key]
-
-	// If the key is found, delete the key-value pair from the cache.
-	if found {
-		delete(c.items, key)
-	}
-
-	return value, found
-}

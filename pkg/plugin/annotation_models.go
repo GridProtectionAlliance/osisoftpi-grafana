@@ -24,7 +24,6 @@ type PIWebAPIAnnotationQuery struct {
 	NameFilter    string              `json:"nameFilter"`
 	Attribute     AnnotationAttribute `json:"attribute"`
 	Database      AFDatabase          `json:"database"`
-	Datasource    Datasource          `json:"datasource"`
 	DatasourceID  int                 `json:"datasourceId"`
 	IsAnnotation  bool                `json:"isAnnotation"`
 	MaxDataPoints int                 `json:"maxDataPoints"`
@@ -55,28 +54,6 @@ type ExtendedProperties struct {
 
 type ValueContainer struct {
 	Value string `json:"Value"`
-}
-
-type AssetDatabaseLinks struct {
-	AnalysisCategories  string `json:"AnalysisCategories"`
-	AnalysisTemplates   string `json:"AnalysisTemplates"`
-	AssetServer         string `json:"AssetServer"`
-	AttributeCategories string `json:"AttributeCategories"`
-	ElementCategories   string `json:"ElementCategories"`
-	ElementTemplates    string `json:"ElementTemplates"`
-	Elements            string `json:"Elements"`
-	EnumerationSets     string `json:"EnumerationSets"`
-	EventFrames         string `json:"EventFrames"`
-	Security            string `json:"Security"`
-	SecurityEntries     string `json:"SecurityEntries"`
-	Self                string `json:"Self"`
-	TableCategories     string `json:"TableCategories"`
-	Tables              string `json:"Tables"`
-}
-
-type GrafanaDatasource struct {
-	Type string `json:"type"`
-	Uid  string `json:"uid"`
 }
 
 type EventFrameTemplate struct {

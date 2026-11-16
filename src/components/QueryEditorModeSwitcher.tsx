@@ -6,7 +6,7 @@ type Props = {
   onChange: (newIsRaw: boolean) => void;
 };
 
-export const QueryEditorModeSwitcher = ({ isRaw, onChange }: Props): JSX.Element => {
+export const QueryEditorModeSwitcher = ({ isRaw, onChange }: Props): React.JSX.Element => {
   const [isModalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {

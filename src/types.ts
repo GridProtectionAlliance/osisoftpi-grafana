@@ -1,17 +1,5 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData, SelectableValue } from '@grafana/data';
-import internal from 'stream';
-
-export interface PiwebapiElementPath {
-  path: string;
-  variable: string;
-}
-
-export interface PiwebapiInternalRsp {
-  data: PiwebapiRsp;
-  status: number;
-  url: string;
-}
 
 export interface PiwebapiRsp {
   Name?: string;
@@ -63,10 +51,6 @@ export interface PiWebAPISummary extends PiWebAPIEnable {
   sampleInterval?: string
 }
 
-export interface PIWebAPIAnnotationsQuery extends DataQuery {
-  target: string;
-}
-
 export interface PIWebAPIQuery extends DataQuery {
   target: string;
   attributes: Array<SelectableValue<PIWebAPISelectableValue>>;
@@ -82,7 +66,6 @@ export interface PIWebAPIQuery extends DataQuery {
   elementPath?: string;
   hideError?: boolean;
   isAnnotation?: boolean;
-  webid?: string;
   display?: any;
   nodata?: string,
   enableStreaming?: any;
@@ -90,6 +73,8 @@ export interface PIWebAPIQuery extends DataQuery {
   rawQuery?: boolean;
   query?: string;
   // annotations items
+  // annotations: AF server, database and event frame template
+  afServer?: PiwebapiRsp;
   database?: PiwebapiRsp;
   template?: PiwebapiRsp;
   showEndTime?: boolean;
@@ -97,6 +82,10 @@ export interface PIWebAPIQuery extends DataQuery {
   nameFilter?: string;
   categoryName?: string;
   hashCode?: string;
+  // format version of the saved query (see QUERY_VERSION); missing in queries saved before 6.0
+  queryVersion?: number;
+  // version of the plugin that last saved the query, for information only
+  pluginVersion?: string;
 }
 
 export const defaultQuery: Partial<PIWebAPIQuery> = {
@@ -118,7 +107,7 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
   useLastValue: { enable: false },
   recordedValues: { enable: false, boundaryType: 'Inside' },
   digitalStates: { enable: false },
-  enableStreaming: { enable: false },
+  enableStreaming: { enable: false, variable: '' },
   useUnit: { enable: false },
   isPiPoint: false,
 };
@@ -127,8 +116,6 @@ export const defaultQuery: Partial<PIWebAPIQuery> = {
  * These are options configured for each DataSource instance
  */
 export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
-  url?: string;
-  access?: string;
   piserver?: string;
   afserver?: string;
   afdatabase?: string;
@@ -141,9 +128,7 @@ export interface PIWebAPIDataSourceJsonData extends DataSourceJsonData {
   useResponseCache?: boolean;
 }
 
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface PIWebAPISecureJsonData {
-  apiKey?: string;
+/** A query variable: `query` is written in the variable query language (see variableQuery.ts). */
+export interface PIWebAPIVariableQuery extends DataQuery {
+  query: string;
 }

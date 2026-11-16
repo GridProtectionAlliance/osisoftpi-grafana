@@ -1,0 +1,272 @@
+[
+  {
+    "name": "4.x AF query with summary",
+    "saved": {
+      "refId": "A",
+      "target": "AFSIM\\TankControlSim\\SimPlant\\U-100\\T-101;Level",
+      "elementPath": "AFSIM\\TankControlSim\\SimPlant\\U-100\\T-101",
+      "isPiPoint": false,
+      "segments": [
+        {
+          "label": "AFSIM",
+          "value": {
+            "value": "AFSIM",
+            "expandable": true
+          }
+        },
+        {
+          "label": "TankControlSim",
+          "value": {
+            "value": "TankControlSim",
+            "expandable": true
+          }
+        },
+        {
+          "label": "SimPlant",
+          "value": {
+            "value": "SimPlant",
+            "expandable": true
+          }
+        },
+        {
+          "label": "U-100",
+          "value": {
+            "value": "U-100",
+            "expandable": true
+          }
+        },
+        {
+          "label": "T-101",
+          "value": {
+            "value": "T-101",
+            "expandable": true
+          }
+        }
+      ],
+      "attributes": [
+        {
+          "label": "Level",
+          "value": {
+            "value": "Level",
+            "expandable": false
+          }
+        }
+      ],
+      "summary": {
+        "types": [
+          {
+            "label": "Average",
+            "value": {
+              "value": "Average",
+              "expandable": true
+            }
+          }
+        ],
+        "basis": "TimeWeighted",
+        "interval": "10m",
+        "nodata": "Previous"
+      },
+      "interpolate": {
+        "enable": false
+      },
+      "recordedValues": {
+        "enable": false
+      },
+      "useLastValue": {
+        "enable": false
+      },
+      "digitalStates": {
+        "enable": false
+      },
+      "useUnit": {
+        "enable": false
+      },
+      "regex": {
+        "enable": false
+      },
+      "expression": "",
+      "display": ""
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Previous",
+      "summary": {
+        "enable": true,
+        "duration": "10m",
+        "basis": "TimeWeighted",
+        "types": [
+          {
+            "label": "Average",
+            "value": {
+              "value": "Average",
+              "expandable": true
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "5.0 PI point query with summary",
+    "saved": {
+      "refId": "A",
+      "target": "PISIM;T-101.Level",
+      "elementPath": "PISIM",
+      "isPiPoint": true,
+      "enableStreaming": {
+        "enable": false
+      },
+      "segments": [
+        {
+          "label": "PISIM",
+          "value": {
+            "value": "PISIM",
+            "expandable": false
+          }
+        }
+      ],
+      "attributes": [
+        {
+          "label": "T-101.Level",
+          "value": {
+            "value": "T-101.Level",
+            "expandable": false
+          }
+        }
+      ],
+      "summary": {
+        "types": [
+          {
+            "label": "Maximum",
+            "value": {
+              "value": "Maximum",
+              "expandable": true
+            }
+          }
+        ],
+        "basis": "EventWeighted",
+        "interval": "15m",
+        "nodata": "Null"
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Null",
+      "summary": {
+        "enable": true,
+        "duration": "15m",
+        "types": [
+          {
+            "label": "Maximum",
+            "value": {
+              "value": "Maximum",
+              "expandable": true
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "4.x query re-saved by 5.1 or 5.2",
+    "saved": {
+      "refId": "A",
+      "target": "AFSIM\\TankControlSim\\E;Level",
+      "attributes": [
+        {
+          "label": "Level",
+          "value": {
+            "value": "Level",
+            "expandable": false
+          }
+        }
+      ],
+      "nodata": "Null",
+      "summary": {
+        "enable": false,
+        "duration": "",
+        "sampleTypeInterval": false,
+        "sampleInterval": "",
+        "types": [
+          {
+            "label": "Average",
+            "value": {
+              "value": "Average",
+              "expandable": true
+            }
+          }
+        ],
+        "basis": "TimeWeighted",
+        "interval": "30m",
+        "nodata": "Drop"
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Drop",
+      "summary": {
+        "enable": true,
+        "duration": "30m"
+      }
+    }
+  },
+  {
+    "name": "4.x query without summary",
+    "saved": {
+      "refId": "A",
+      "target": "AFSIM\\TankControlSim\\E;Level",
+      "attributes": [
+        {
+          "label": "Level",
+          "value": {
+            "value": "Level",
+            "expandable": false
+          }
+        }
+      ],
+      "summary": {
+        "types": [],
+        "basis": "EventWeighted",
+        "interval": "",
+        "nodata": "Zero"
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Zero",
+      "summary": {
+        "enable": false
+      }
+    }
+  },
+  {
+    "name": "Replace Bad Data changed after the upgrade",
+    "saved": {
+      "refId": "A",
+      "target": "AFSIM\\TankControlSim\\E;Level",
+      "attributes": [
+        {
+          "label": "Level",
+          "value": {
+            "value": "Level",
+            "expandable": false
+          }
+        }
+      ],
+      "nodata": "Previous",
+      "summary": {
+        "types": [],
+        "basis": "EventWeighted",
+        "interval": "",
+        "nodata": "Zero"
+      }
+    },
+    "expected": {
+      "queryVersion": 1,
+      "nodata": "Previous",
+      "summary": {
+        "enable": false
+      }
+    }
+  }
+]
