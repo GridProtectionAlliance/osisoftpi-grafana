@@ -23,10 +23,9 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 	// if there are errors we'll set the error and return the PiProcessedQuery with an error set.
 	tempJson, err := json.Marshal(query)
 	if err != nil {
-		contextLogger(ctx).Error("Process annotation - Error marshalling", "error", err)
-
-		// create a processed query with the error set
+		// create a processed query with the error set (logged by queryAnnotation)
 		ProcessedQuery = PiProcessedAnnotationQuery{
+			RefID: query.RefID,
 			Error: err,
 		}
 		return ProcessedQuery
@@ -34,10 +33,12 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 
 	err = json.Unmarshal(tempJson, &PiAnnotationQuery)
 	if err != nil {
-		contextLogger(ctx).Error("Process annotation - Error unmarshalling", "error", err)
-
+		// the failure line of queryAnnotation has the error; this one the start of the saved query
+		logError(contextLogger(ctx), "query_unreadable", errInvalidQuery, "refId", query.RefID, "error", err.Error(),
+			"query", bodyExcerpt(query.JSON))
 		// create a processed query with the error set
 		ProcessedQuery = PiProcessedAnnotationQuery{
+			RefID: query.RefID,
 			Error: err,
 		}
 		return ProcessedQuery
@@ -288,14 +289,17 @@ func convertAnnotationResponseToFrame(ctx context.Context, refID string, rawAnno
 		for _, key := range annotationAttributeKeys(annotationResponse) {
 			value := annotationResponse[key]
 			if value.Status >= http.StatusBadRequest {
-				logger.Warn("Annotation attribute request failed", "refID", refID, "status", value.Status, "error", batchErrorMessage(value.Content))
+				logError(logger, "annotation_attribute_failed", errorTypeForStatus(value.Status), "refId", refID,
+					"status", value.Status, "error", batchErrorMessage(value.Content))
 				continue
 			}
 
 			var attributes EventFrameAttribute
 			err = json.Unmarshal(value.Content, &attributes)
 			if err != nil {
-				logger.Error("Error unmarshalling attribute response", "error", err)
+				logError(logger, "piwebapi_response_unreadable", errResponseDecode, "refId", refID,
+					"reason", "event frame attributes", "bodySize", len(value.Content), "body", bodyExcerpt(value.Content),
+					"error", err.Error())
 				continue
 			}
 

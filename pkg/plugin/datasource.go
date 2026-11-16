@@ -16,7 +16,6 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -104,7 +103,7 @@ func NewPIWebAPIDatasource(ctx context.Context, settings backend.DataSourceInsta
 	scheduler.StartAsync()
 	ds.takeOverStreamChannels()
 
-	log.DefaultLogger.Info("PIWebAPI Datasource Created", "UID", settings.UID, "Name", settings.Name)
+	backend.Logger.Info("datasource_created", "dsUid", settings.UID, "dsName", settings.Name)
 
 	return ds, nil
 }
@@ -234,11 +233,23 @@ func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDat
 // queryAnnotation runs one processed annotation query. Errors are returned in the DataResponse of the query, with the
 // PI Web API error message, so they reach the annotation layer and do not fail the other queries of the request.
 func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, ProcessedAnnotationQuery PiProcessedAnnotationQuery) backend.DataResponse {
+	// failed logs the failure of the query and returns it with the error source of its type. The log has the status
+	// returned by PI Web API (requestStatus) when it differs from the status returned to Grafana.
+	failed := func(status backend.Status, requestStatus int, errorType string, message string) backend.DataResponse {
+		if requestStatus == 0 {
+			requestStatus = int(status)
+		}
+		if ctx.Err() == nil { // a query cancelled by Grafana is not a failure
+			logError(contextLogger(ctx), "annotation_query_failed", errorType, "refId", ProcessedAnnotationQuery.RefID,
+				"status", requestStatus, "error", message)
+		}
+		return backend.ErrDataResponseWithSource(status, errorSourceOf(errorType), message)
+	}
 	if ProcessedAnnotationQuery.Error != nil {
-		return backend.ErrDataResponse(backend.StatusBadRequest, "invalid annotation query: "+ProcessedAnnotationQuery.Error.Error())
+		return failed(backend.StatusBadRequest, 0, errInvalidQuery, "invalid annotation query: "+ProcessedAnnotationQuery.Error.Error())
 	}
 	if ProcessedAnnotationQuery.Database.WebId == "" {
-		return backend.ErrDataResponse(backend.StatusBadRequest, "invalid annotation query: select an AF database")
+		return failed(backend.StatusBadRequest, 0, errInvalidQuery, "invalid annotation query: select an AF database")
 	}
 
 	url := ProcessedAnnotationQuery.getEventFrameQueryURL()
@@ -248,7 +259,7 @@ func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, Proce
 	if ProcessedAnnotationQuery.AttributesEnabled {
 		attributeURLs, err := ProcessedAnnotationQuery.getEventFrameAttributeQueryURL()
 		if err != nil {
-			return backend.ErrDataResponse(backend.StatusBadRequest, "error getting attribute URLs: "+err.Error())
+			return failed(backend.StatusBadRequest, 0, errInvalidQuery, "error getting attribute URLs: "+err.Error())
 		}
 		batchReq = d.buildAnnotationBatch(url, attributeURLs...)
 	} else {
@@ -259,8 +270,10 @@ func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, Proce
 
 	r, err := apiBatchRequest(ctx, d, batchReq)
 	if err != nil {
-		return backend.ErrDataResponseWithSource(backend.StatusBadGateway, backend.ErrorSourceDownstream,
-			"error getting data from PI Web API: "+err.Error())
+		// 502, not the status of PI Web API: a 401 or 403 returned for a query could be taken by Grafana for a
+		// rejection of the user's own session
+		errorType, requestStatus := requestErrorType(err, errUnreachable)
+		return failed(backend.StatusBadGateway, requestStatus, errorType, "error getting data from PI Web API: "+err.Error())
 	}
 
 	span.AddEvent("Recieved response from PI Web API")
@@ -269,11 +282,10 @@ func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, Proce
 	if err != nil {
 		var apiErr *annotationAPIError
 		if errors.As(err, &apiErr) {
-			return backend.ErrDataResponseWithSource(backend.Status(apiErr.status), backend.ErrorSourceDownstream,
+			return failed(backend.Status(apiErr.status), 0, errorTypeForStatus(apiErr.status),
 				"error getting event frames from PI Web API: "+err.Error())
 		}
-		return backend.ErrDataResponseWithSource(backend.StatusBadGateway, backend.ErrorSourceDownstream,
-			"error converting response to frame: "+err.Error())
+		return failed(backend.StatusBadGateway, 0, errResponseDecode, "error converting response to frame: "+err.Error())
 	}
 
 	span.AddEvent("Converted response to Grafana frame")
@@ -303,7 +315,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 
 	resourceURL, isAllowed := allowedResourceURL(req.URL)
 	if !isAllowed {
-		contextLogger(ctx).Warn("Call resource - path not allowed", "path", req.Path)
+		logError(contextLogger(ctx), "resource_path_not_allowed", errPathNotAllowed, "path", req.Path)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusForbidden,
 			Body:   nil,
@@ -312,6 +324,11 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 
 	r, err := apiGet(ctx, d, resourceURL)
 	if err != nil {
+		if ctx.Err() == nil {
+			errorType, status := requestErrorType(err, errUnreachable)
+			logError(contextLogger(ctx), "resource_request_failed", errorType, "path", resourceURL, "status", status,
+				"error", err.Error())
+		}
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
 			Body:   []byte(`{}`),
@@ -336,7 +353,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			contextLogger(ctx).Error("PiWebAPI Check health: failed to close response body", "err", err.Error())
+			logError(contextLogger(ctx), "response_body_close_failed", errInternal, "error", err.Error())
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {

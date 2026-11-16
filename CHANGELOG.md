@@ -3,7 +3,8 @@
 ## 6.0.0
 
 - Fixed compressed PI Web API responses being returned as binary by the resource proxy or failing JSON parsing in queries when the browser's Accept-Encoding header was forwarded; the backend now negotiates and decompresses gzip itself.
-- The errors and warnings logged for a query name the dashboard and panel it comes from (`dashboardUID`, `dashboardTitle`, `panelID`, `panelTitle`), with the datasource (`dsName`, `dsUid`) and the user (`uname`); live streams log the dashboard and panel of the query that started them
+- Logs that can be filtered and counted (e.g. in Loki): each line has a fixed event name (e.g. `query_target_failed`), one field per value, and errors and warnings have an error type (`not_found`, `auth`, `piwebapi_unreachable`, `response_decode`, …) and source (`plugin` or `downstream`); the lines of a query name its dashboard and panel, datasource and user. Responses and values are logged as short excerpts instead of whole objects, and cancelled queries are not logged as errors - see docs/logging.md
+- A PI Web API response that the plugin cannot read now fails the query target with an error, instead of returning an empty series
 - Added live streaming of PI point and AF attribute values through PI Web API channels (WebSocket) - issue GridProtectionAlliance/osisoftpi-grafana#206 (thanks to Michael Bohan, @mbtx2)
   - enabled with "Enable Streaming Support" in the datasource configuration and "Enable Streaming" in the query, optionally controlled by a dashboard variable
   - streamed values follow the query settings (Replace Bad Data, Digital States, units); queries with a calculation, a summary, "Use Last Value", "Interpolate" or "Recorded Values" are not streamed, and the query editor only offers streaming, as the last option row, when none is selected

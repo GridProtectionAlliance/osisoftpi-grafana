@@ -63,7 +63,7 @@ func dashboardRequest(t *testing.T, target string) *backend.QueryDataRequest {
 func targetFailures(capture *captureLogger) []logEntry {
 	var failures []logEntry
 	for _, e := range capture.entries {
-		if e.msg == "Query target failed" {
+		if e.msg == "query_target_failed" {
 			failures = append(failures, e)
 		}
 	}

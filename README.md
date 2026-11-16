@@ -147,6 +147,13 @@ Add an annotation query with this datasource:
 - **Enable Attribute Usage**: adds the values of the given event frame attributes (comma separated) to the annotation
   text.
 
+# Logs
+
+The backend logs each error with a fixed event name and an error type (e.g. `not_found`, `auth`,
+`piwebapi_unreachable`), the query target and, for dashboard panels, the dashboard and panel, so that the logs can be
+filtered and counted, e.g. in Loki. See [Logs](https://github.com/GridProtectionAlliance/osisoftpi-grafana/blob/master/docs/logging.md)
+for the Grafana settings, every message and field, and example queries.
+
 # Installation
 
 Install the plugin from the Grafana plugin catalog (Administration > Plugins and data > Plugins), or with the Grafana

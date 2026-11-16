@@ -116,7 +116,7 @@ func (d *Datasource) getCachedWebID(path string) *WebIDCacheEntry {
 
 	entry, ok := d.webIDCache.webIDCache[path]
 	if ok && time.Now().Before(entry.ExpTime) {
-		log.DefaultLogger.Debug("WebID cache - found", "path", path)
+		log.DefaultLogger.Debug("webid_cache_hit", "target", path)
 		d.webIDCache.webIDPaths[entry.WebID] = path
 		return &entry
 	}
@@ -141,7 +141,8 @@ func (d *Datasource) saveWebID(data interface{}, path string, isPiPoint bool) st
 
 	r, err := json.Marshal(data)
 	if err != nil {
-		backend.Logger.Warn("Error saving web id", "data", data)
+		logError(backend.Logger, "piwebapi_response_unreadable", errResponseDecode, "reason", "WebID lookup response",
+			"target", path, "error", err.Error())
 		return ""
 	}
 
@@ -153,8 +154,8 @@ func (d *Datasource) saveWebID(data interface{}, path string, isPiPoint bool) st
 	}
 	err = json.Unmarshal(r, &response)
 	if err != nil {
-		// Handle unmarshaling error
-		backend.Logger.Error("Error unmarshaling JSON response", "error", err)
+		logError(backend.Logger, "piwebapi_response_unreadable", errResponseDecode, "reason", "WebID lookup response",
+			"target", path, "bodySize", len(r), "body", bodyExcerpt(r), "error", err.Error())
 		return ""
 	}
 
@@ -211,10 +212,10 @@ func (d *Datasource) cleanWebIDCache() {
 	defer d.datasourceMutex.Unlock()
 	cache := d.webIDCache
 	now := time.Now()
-	log.DefaultLogger.Info("WebID cleared cached", "length", len(cache.webIDCache))
+	log.DefaultLogger.Info("webid_cache_cleaned", "entries", len(cache.webIDCache))
 	for key, entry := range cache.webIDCache {
 		if now.After(entry.ExpTime) {
-			log.DefaultLogger.Debug("WebID cache - removing aged WebID", "path", entry.Path)
+			log.DefaultLogger.Debug("webid_cache_expired", "target", entry.Path)
 			delete(cache.webIDCache, key)
 			delete(cache.webIDPaths, entry.WebID)
 		}
