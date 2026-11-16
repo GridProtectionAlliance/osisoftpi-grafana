@@ -199,7 +199,7 @@ func queryChannels(t *testing.T, d *Datasource, from, to time.Time, maxDataPoint
 		dataQueries = append(dataQueries, backend.DataQuery{RefID: q.point, JSON: raw, MaxDataPoints: maxDataPoints,
 			Interval: time.Minute, TimeRange: backend.TimeRange{From: from, To: to}})
 	}
-	response := d.processBatchtoFrames(d.batchRequest(t.Context(), d.processQuery(dataQueries, d.settings.UID)))
+	response := d.processBatchtoFrames(t.Context(), d.batchRequest(t.Context(), d.processQuery(t.Context(), dataQueries, d.settings.UID)))
 	channels := map[string]string{}
 	for refID, r := range response.Responses {
 		if r.Error != nil {

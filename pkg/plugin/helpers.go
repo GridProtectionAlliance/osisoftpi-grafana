@@ -49,7 +49,7 @@ func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.DefaultLogger.Error("API Get - request failed", "error", err, "uri", uri, "body", string(body))
+		contextLogger(ctx).Error("API Get - request failed", "error", err, "uri", uri, "body", string(body))
 		return nil, err
 	}
 	return body, nil
@@ -58,6 +58,7 @@ func apiGet(ctx context.Context, d *Datasource, path string) ([]byte, error) {
 // apiBatchRequest performs a batch request against the PI Web API. It returns the response body as a byte slice.
 // If the request fails, an error is returned.
 func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interface{}) ([]byte, error) {
+	logger := contextLogger(ctx)
 	var uri = d.settings.URL
 	if strings.HasSuffix(uri, "/") {
 		uri = uri + "batch"
@@ -67,13 +68,13 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 
 	jsonValue, err := json.Marshal(BatchSubRequests)
 	if err != nil {
-		log.DefaultLogger.Error("Batch request - marshal", "error", err)
+		logger.Error("Batch request - marshal", "error", err)
 		return nil, fmt.Errorf("request failed. parsing request")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewBuffer(jsonValue))
 	if err != nil {
-		log.DefaultLogger.Error("Batch request - create", "error", err)
+		logger.Error("Batch request - create", "error", err)
 		return nil, fmt.Errorf("request failed")
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -88,20 +89,20 @@ func apiBatchRequest(ctx context.Context, d *Datasource, BatchSubRequests interf
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		log.DefaultLogger.Error("Batch request - do", "error", err)
+		logger.Error("Batch request - do", "error", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
 	defer func() {
 		err := resp.Body.Close()
 		if err != nil {
-			log.DefaultLogger.Error("Batch request failed. body closed", "error", err, "uri", uri)
+			logger.Error("Batch request failed. body closed", "error", err, "uri", uri)
 		}
 	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.DefaultLogger.Error("Batch request failed", "error", err, "uri", uri)
+		logger.Error("Batch request failed", "error", err, "uri", uri)
 		return nil, fmt.Errorf("request failed. failed reading response body")
 	}
 
@@ -195,7 +196,7 @@ func compatible(actual reflect.Type, expected reflect.Type) bool {
 }
 
 func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, description string,
-	units string, summaryLabel string) map[string]string {
+	units string, summaryLabel string, logger log.Logger) map[string]string {
 	var frameLabel map[string]string
 	summaryType := summaryLabel
 	if summaryLabel != "" {
@@ -259,7 +260,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 		if regex, err := regexp.Compile(*q.Regex.Search); err == nil {
 			frameLabel["name"] = regex.ReplaceAllString(frameLabel["name"], *q.Regex.Replace)
 		} else {
-			log.DefaultLogger.Warn("Invalid regex in query, the label is not replaced", "search", *q.Regex.Search, "error", err)
+			orDefaultLogger(logger).Warn("Invalid regex in query, the label is not replaced", "search", *q.Regex.Search, "error", err)
 		}
 	} else if q.Display != nil && strings.TrimSpace(*q.Display) != "" {
 		// Old format with display name
@@ -268,7 +269,7 @@ func getDataLabels(useNewFormat bool, q *PiProcessedQuery, pointType string, des
 	return frameLabel
 }
 
-func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) *data.Frame {
+func convertItemsToDataFrame(ctx context.Context, processedQuery *PiProcessedQuery, d *Datasource, SummaryType string) *data.Frame {
 	// when the WebID is not cached, the type is taken from the values and the metadata is empty
 	metadata, _ := d.getWebIDEntry(processedQuery.WebID)
 	// calculations list their values directly; calculation/summary responses are summaries
@@ -280,17 +281,19 @@ func convertItemsToDataFrame(processedQuery *PiProcessedQuery, d *Datasource, Su
 		newFormat:      d.isUsingNewFormat(),
 		units:          d.isUsingUnits(),
 		typeFromValues: isCalculation || SummaryType != "",
+		logger:         contextLogger(ctx),
 	})
 }
 
 // convertStreamItemsToFrame converts the values of one stream of a PI Web API channel message, with the same
 // rules as the query responses.
-func convertStreamItemsToFrame(processedQuery *PiProcessedQuery, stream StreamData, cache streamFrameCache) *data.Frame {
+func convertStreamItemsToFrame(ctx context.Context, processedQuery *PiProcessedQuery, stream StreamData, cache streamFrameCache) *data.Frame {
 	return itemsToFrame(processedQuery, stream.Items, frameOptions{
 		metadata:      cache.metadata,
 		responseUnits: stream.UnitsAbbreviation,
 		newFormat:     cache.newFormat,
 		units:         cache.units,
+		logger:        contextLogger(ctx),
 	})
 }
 
@@ -304,11 +307,13 @@ type frameOptions struct {
 	// typeFromValues is set for calculations and summaries: their values have their own type (the text result of
 	// an expression on a numeric point, the average of an integer point), not the type of the point or attribute
 	typeFromValues bool
+	logger         log.Logger // the logger of the request (see contextLogger); nil is the default logger
 }
 
 // itemsToFrame converts the values of a PI point or AF attribute to a data frame.
 func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, o frameOptions) *data.Frame {
 	metadata := o.metadata
+	logger := orDefaultLogger(o.logger)
 	// Units are only added when enabled in both the datasource configuration and the query.
 	includeMetaData := processedQuery.UseUnit && o.units
 	digitalStates := processedQuery.DigitalStates
@@ -338,7 +343,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 
 	// get frame name
 	frameLabel := getDataLabels(o.newFormat, processedQuery, metadata.PointType,
-		metadata.Description, units, o.summaryType)
+		metadata.Description, units, o.summaryType, logger)
 
 	var labels map[string]string
 
@@ -349,7 +354,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 
 	for _, item := range items {
 		if item.Value == nil {
-			log.DefaultLogger.Debug("Convert items to frames - nil", "value", item.Value, "item", item)
+			logger.Debug("Convert items to frames - nil", "value", item.Value, "item", item)
 			fP = updateBadData(fP, item.Timestamp, noDataReplace)
 			continue
 		}
@@ -363,7 +368,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 			var err error
 			fP.val, err = getTimeStamp(fP.val)
 			if err != nil {
-				log.DefaultLogger.Error("Convert items to frames - timestamp value", "error", err.Error(), "item", item)
+				logger.Error("Convert items to frames - timestamp value", "error", err.Error(), "item", item)
 				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				continue
 			}
@@ -390,12 +395,12 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 					fP.prevVal = itemValue
 				} else {
 					// should not happen
-					log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
+					logger.Error("Convert items to frames - error unmarshalling digital state", "error", err)
 					fP = updateBadData(fP, item.Timestamp, noDataReplace)
 				}
 			} else {
 				// should not happen
-				log.DefaultLogger.Error("Convert items to frames - error unmarshalling digital state", err)
+				logger.Error("Convert items to frames - error unmarshalling digital state", "error", err)
 				fP = updateBadData(fP, item.Timestamp, noDataReplace)
 			}
 		} else if fP.val.Type().Kind() != fP.sliceType.Elem().Kind() { // mismatch - try conversion
@@ -404,11 +409,11 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 				fP.timestamps = append(fP.timestamps, item.Timestamp)
 				fP.values = reflect.Append(reflect.ValueOf(fP.values), converted).Interface()
 				fP.prevVal = converted
-				log.DefaultLogger.Debug("Convert items to frames - Mismatch compatible", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
+				logger.Debug("Convert items to frames - Mismatch compatible", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
 					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			} else {
 				fP = updateBadData(fP, item.Timestamp, noDataReplace)
-				log.DefaultLogger.Warn("Convert items to frames - Mismatch", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
+				logger.Warn("Convert items to frames - Mismatch", "ValKind", fP.val.Type().String(), "Val", fP.val.Interface(),
 					"SliceKind", fP.sliceType.Elem().String(), "item", item)
 			}
 		} else { // normal
@@ -419,7 +424,7 @@ func itemsToFrame(processedQuery *PiProcessedQuery, items []PiBatchContentItem, 
 	}
 
 	// Response cache
-	log.DefaultLogger.Debug("Convert items to frames - Cache", "Cached", processedQuery.Cached, "TimeLen", len(fP.timestamps),
+	logger.Debug("Convert items to frames - Cache", "Cached", processedQuery.Cached, "TimeLen", len(fP.timestamps),
 		"RefID", processedQuery.RefID)
 	if processedQuery.Cached {
 		if len(fP.timestamps) > 1 && fP.prevVal.IsValid() {

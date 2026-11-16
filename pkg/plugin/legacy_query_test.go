@@ -85,7 +85,7 @@ func TestLegacySummaryQueries(t *testing.T) {
 	now := time.Now()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			processed := d.processQuery([]backend.DataQuery{{
+			processed := d.processQuery(t.Context(), []backend.DataQuery{{
 				RefID: "A", JSON: []byte(tt.query), MaxDataPoints: 100,
 				TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now},
 			}}, "uid")

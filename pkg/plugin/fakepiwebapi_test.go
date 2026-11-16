@@ -161,14 +161,14 @@ func runFakeQuery(t *testing.T, d *Datasource, query map[string]interface{}) bac
 		t.Fatal(err)
 	}
 	now := time.Now()
-	processed := d.processQuery([]backend.DataQuery{{
+	processed := d.processQuery(t.Context(), []backend.DataQuery{{
 		RefID:         "A",
 		JSON:          raw,
 		MaxDataPoints: 100,
 		Interval:      time.Minute,
 		TimeRange:     backend.TimeRange{From: now.Add(-time.Hour), To: now},
 	}}, "uid")
-	response := d.processBatchtoFrames(d.batchRequest(t.Context(), processed))
+	response := d.processBatchtoFrames(t.Context(), d.batchRequest(t.Context(), processed))
 	return response.Responses["A"]
 }
 

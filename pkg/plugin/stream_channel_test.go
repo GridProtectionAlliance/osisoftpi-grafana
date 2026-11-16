@@ -28,9 +28,9 @@ func TestStreamChannelPerQuerySettings(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		processed := d.processQuery([]backend.DataQuery{{RefID: "A", JSON: raw, MaxDataPoints: 100, Interval: time.Minute,
+		processed := d.processQuery(t.Context(), []backend.DataQuery{{RefID: "A", JSON: raw, MaxDataPoints: 100, Interval: time.Minute,
 			TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}}}, "uid")
-		r := d.processBatchtoFrames(d.batchRequest(t.Context(), processed)).Responses["A"]
+		r := d.processBatchtoFrames(t.Context(), d.batchRequest(t.Context(), processed)).Responses["A"]
 		if r.Error != nil || len(r.Frames) != 1 || r.Frames[0].Meta == nil || r.Frames[0].Meta.Channel == "" {
 			t.Fatalf("expected one streaming frame, got %+v", r)
 		}

@@ -166,6 +166,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 // QueryTSData is called by Grafana when a user executes a time series data query.
 func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	datasourceUID := req.PluginContext.DataSourceInstanceSettings.UID
+	ctx = withDashboardLogAttributes(ctx, req)
 
 	// tracer
 	ctx, span := tracing.DefaultTracer().Start(
@@ -175,7 +176,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	defer span.End()
 
 	// Process queries generic query objects and turn them into a suitable format for the PI Web API
-	processedPIWebAPIQueries := d.processQuery(req.Queries, datasourceUID)
+	processedPIWebAPIQueries := d.processQuery(ctx, req.Queries, datasourceUID)
 
 	// span
 	span.AddEvent("Completed processing query request")
@@ -187,7 +188,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 	span.AddEvent("Completed processing batch request")
 
 	// Convert the PI Web API response into Grafana frames
-	response := d.processBatchtoFrames(processedQueries_temp)
+	response := d.processBatchtoFrames(ctx, processedQueries_temp)
 
 	// span
 	span.AddEvent("Completed processing batch to frames")
@@ -200,6 +201,7 @@ func (d *Datasource) QueryTSData(ctx context.Context, req *backend.QueryDataRequ
 
 // QueryAnnotations recevies annotation queries from the frontend and returns dataframes that contain json raw messages containing the annotations.
 func (d *Datasource) QueryAnnotations(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+	ctx = withDashboardLogAttributes(ctx, req)
 	response := &backend.QueryDataResponse{}
 	response.Responses = make(map[string]backend.DataResponse)
 
@@ -263,7 +265,7 @@ func (d *Datasource) queryAnnotation(ctx context.Context, span trace.Span, Proce
 
 	span.AddEvent("Recieved response from PI Web API")
 
-	annotationFrame, err := convertAnnotationResponseToFrame(ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
+	annotationFrame, err := convertAnnotationResponseToFrame(ctx, ProcessedAnnotationQuery.RefID, r, ProcessedAnnotationQuery.AttributesEnabled)
 	if err != nil {
 		var apiErr *annotationAPIError
 		if errors.As(err, &apiErr) {
@@ -301,7 +303,7 @@ func (d *Datasource) CallResource(ctx context.Context, req *backend.CallResource
 
 	resourceURL, isAllowed := allowedResourceURL(req.URL)
 	if !isAllowed {
-		log.DefaultLogger.Warn("Call resource - path not allowed", "path", req.Path)
+		contextLogger(ctx).Warn("Call resource - path not allowed", "path", req.Path)
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusForbidden,
 			Body:   nil,
@@ -334,7 +336,7 @@ func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequ
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.DefaultLogger.Error("PiWebAPI Check health: failed to close response body", "err", err.Error())
+			contextLogger(ctx).Error("PiWebAPI Check health: failed to close response body", "err", err.Error())
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
