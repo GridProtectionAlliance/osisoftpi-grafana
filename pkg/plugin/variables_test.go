@@ -175,7 +175,7 @@ func TestProcessQueryExpandsVariables(t *testing.T) {
 		{RefID: "A", JSON: queryJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
 	}
 
-	processed := d.processQuery(queries, "uid")
+	processed := d.processQuery(t.Context(), queries, "uid")
 	if len(processed) != 8 { // 4 element paths x 2 attributes
 		t.Fatalf("expected 8 processed queries, got %d", len(processed))
 	}
@@ -227,7 +227,7 @@ func TestProcessQueryResolvesDisplayPerTarget(t *testing.T) {
 		{RefID: "A", JSON: queryJSON, TimeRange: backend.TimeRange{From: now.Add(-time.Hour), To: now}},
 	}
 
-	processed := d.processQuery(queries, "uid")
+	processed := d.processQuery(t.Context(), queries, "uid")
 	got := make([]string, 0, len(processed))
 	for _, q := range processed {
 		got = append(got, *q.Display)

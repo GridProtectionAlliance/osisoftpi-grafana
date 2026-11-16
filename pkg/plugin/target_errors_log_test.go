@@ -48,7 +48,8 @@ func captureBackendLogs(t *testing.T) *captureLogger {
 	return logger
 }
 
-// A failing target is logged once at error level with the requests sent for it, not as a dump of the query.
+// A failing target is logged once (query_target_failed) with its error type and the requests sent for it, not as a
+// dump of the query.
 func TestFailingTargetIsLoggedWithRequests(t *testing.T) {
 	server := (&fakePIWebAPI{attributes: map[string]fakeAttribute{
 		`\\AF\DB\E|Level`: {dataStatus: http.StatusBadRequest},
@@ -58,10 +59,10 @@ func TestFailingTargetIsLoggedWithRequests(t *testing.T) {
 
 	runFakeQuery(t, d, map[string]interface{}{"target": `AF\DB\E;Level;Missing`})
 
-	var errors []logEntry
+	var failures []logEntry
 	for _, e := range logger.entries {
-		if e.level == "error" {
-			errors = append(errors, e)
+		if e.msg == "query_target_failed" {
+			failures = append(failures, e)
 		}
 		for key, value := range e.args {
 			if _, ok := value.(PiProcessedQuery); ok {
@@ -69,20 +70,29 @@ func TestFailingTargetIsLoggedWithRequests(t *testing.T) {
 			}
 		}
 	}
-	if len(errors) != 2 {
-		t.Fatalf("expected one error per failing target, got %+v", errors)
+	if len(failures) != 2 {
+		t.Fatalf("expected one line per failing target, got %+v", logger.entries)
 	}
-	for _, e := range errors {
-		if e.args["RefID"] != "A" || e.args["error"] == nil || e.args["status"] == nil {
+	for _, e := range failures {
+		if e.args["refId"] != "A" || e.args["error"] == nil || e.args["errorSource"] != "downstream" || e.args["queryType"] != "plot" {
 			t.Errorf("missing fields in %+v", e.args)
+		}
+		if _, isText := e.args["error"].(string); !isText {
+			t.Errorf("the error is not logged as text: %#v", e.args["error"])
 		}
 		request, _ := e.args["request"].(string)
 		switch e.args["target"] {
 		case `AF\DB\E|Level`:
+			if e.level != "warn" || e.args["errorType"] != errBadRequest || e.args["status"] != http.StatusBadRequest {
+				t.Errorf("%s %v (status %v), want warn piwebapi_bad_request (400)", e.level, e.args["errorType"], e.args["status"])
+			}
 			if e.args["webId"] == nil || strings.Contains(request, "{0}") || !strings.Contains(request, "streamsets/plot") {
 				t.Errorf("data request not logged: %+v", e.args)
 			}
 		case `AF\DB\E|Missing`:
+			if e.level != "warn" || e.args["errorType"] != errNotFound || e.args["status"] != http.StatusNotFound {
+				t.Errorf("%s %v (status %v), want warn not_found (404)", e.level, e.args["errorType"], e.args["status"])
+			}
 			if lookup, _ := e.args["webIdRequest"].(string); !strings.Contains(lookup, "attributes?") {
 				t.Errorf("WebID request not logged: %+v", e.args)
 			}

@@ -194,9 +194,14 @@ type PiProcessedQuery struct {
 	MaxDataPoints  int
 	RefID          string
 	Error          error
+	ErrorType      string // the errorType Error is logged with (see logging.go)
 	Status         int
-	Cached         bool
-	Index          int
+	// RequestStatus is the HTTP status PI Web API returned when the batch request failed (e.g. 401), for the log.
+	// Status is then 502, as before: a 401 or 403 returned for a query could be taken by Grafana for a rejection of
+	// the user's own session.
+	RequestStatus int
+	Cached        bool
+	Index         int
 }
 
 type Links struct {

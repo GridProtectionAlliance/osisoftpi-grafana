@@ -60,7 +60,7 @@ func TestConvertItemsToDataFrameUnits(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := newUnitsTestDatasource(tt.datasourceUnits, tt.cachedUnits)
 			q := newUnitsTestQuery(tt.queryUnits)
-			frame := convertItemsToDataFrame(q, d, "")
+			frame := convertItemsToDataFrame(t.Context(), q, d, "")
 			if len(frame.Fields) != 2 {
 				t.Fatalf("expected 2 fields, got %d", len(frame.Fields))
 			}

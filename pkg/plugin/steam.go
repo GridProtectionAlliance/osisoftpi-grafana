@@ -39,6 +39,9 @@ type StreamChannelConstruct struct {
 	query            *PiProcessedQuery
 	frameCache       streamFrameCache // pre-computed static WebID metadata; see buildStreamFrameCache
 	state            *streamChannelState
+	// logAttributes are the dashboard and panel of the query that registered the channel (see
+	// withDashboardLogAttributes): the stream logs them, since Grafana runs it without the query headers
+	logAttributes []any
 }
 
 // streamChannelState is the state of a channel that outlives each run of its stream by Grafana. It is shared with
@@ -203,7 +206,7 @@ const streamChannelTTL = 2 * time.Minute
 // registerStreamChannel registers the channel that streams the live values of the query's PI tag after the values
 // of the query response, and returns its path. connectionKey and connectionWebIDs identify the WebSocket connection
 // shared by the streamed tags of the request.
-func (d *Datasource) registerStreamChannel(q *PiProcessedQuery, items []PiBatchContentItem, connectionKey string, connectionWebIDs []string) string {
+func (d *Datasource) registerStreamChannel(ctx context.Context, q *PiProcessedQuery, items []PiBatchContentItem, connectionKey string, connectionWebIDs []string) string {
 	path := channelKeyFor(q)
 	d.datasourceMutex.Lock()
 	construct, exists := d.channelConstruct[path]
@@ -221,6 +224,7 @@ func (d *Datasource) registerStreamChannel(q *PiProcessedQuery, items []PiBatchC
 			query:            &streamQuery,
 			frameCache:       buildStreamFrameCache(d, q),
 			state:            &streamChannelState{lastUsed: time.Now()},
+			logAttributes:    dashboardLogAttributes(ctx),
 		}
 		d.datasourceMutex.Lock()
 		if registered, ok := d.channelConstruct[path]; ok { // registered concurrently
@@ -319,7 +323,7 @@ func (d *Datasource) streamChannel(path string) (StreamChannelConstruct, bool) {
 		d.channelConstruct[path] = construct
 	}
 	d.datasourceMutex.Unlock()
-	backend.Logger.Debug("Streaming: channel taken over from the previous datasource instance", "path", path)
+	backend.Logger.Debug("stream_channel_taken_over", "path", path)
 	return construct, true
 }
 
@@ -349,6 +353,7 @@ func (d *Datasource) RunStream(ctx context.Context, req *backend.RunStreamReques
 	if !ok {
 		return fmt.Errorf("streaming: no channel construct registered for path %q", req.Path)
 	}
+	ctx = withLogAttributes(ctx, construct.logAttributes)
 	construct.state.start()
 	defer construct.state.end()
 
@@ -374,7 +379,7 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, connect
 	_, ok := d.websocketConnections[connectionKey]
 	d.websocketConnectionsMutex.Unlock()
 	if ok {
-		backend.Logger.Debug("Streaming: reusing existing WebSocket connection", "connectionKey", connectionKey)
+		backend.Logger.Debug("stream_connection_reused", "connectionKey", connectionKey)
 		return nil
 	}
 
@@ -390,7 +395,7 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, connect
 	if _, ok := d.websocketConnections[connectionKey]; ok {
 		// Another goroutine won the race; discard our duplicate connection.
 		_ = conn.Close()
-		backend.Logger.Debug("Streaming: closing duplicate WebSocket connection (concurrent dial)", "connectionKey", connectionKey)
+		backend.Logger.Debug("stream_connection_duplicate_closed", "connectionKey", connectionKey)
 		return nil
 	}
 	d.websocketConnections[connectionKey] = conn
@@ -399,7 +404,7 @@ func (d *Datasource) getOrCreateWebsocketConnection(ctx context.Context, connect
 	// StreamingResponse and routing individual StreamData items to per-tag sender channels.
 	go d.readWebsocketMessages(conn, connectionKey, webIDs)
 
-	backend.Logger.Info("Streaming: WebSocket connection opened", "connectionKey", connectionKey, "tags", len(webIDs))
+	backend.Logger.Info("stream_connection_opened", "connectionKey", connectionKey, "tags", len(webIDs))
 	return nil
 }
 
@@ -520,10 +525,14 @@ func (d *Datasource) createWebsocketConnection(ctx context.Context, webIDs []str
 		stopCancel()
 	}
 	if err != nil {
+		status := 0
 		if resp != nil {
+			status = resp.StatusCode
 			err = fmt.Errorf("%w: %s", err, resp.Status)
 		}
-		backend.Logger.Error("Streaming: WebSocket dial failed", "uri", uri, "error", err)
+		if ctx.Err() == nil { // a stream stopped by Grafana is not a failure
+			logError(contextLogger(ctx), "stream_connect_failed", errStreamConnect, "url", uri, "status", status, "error", err.Error())
+		}
 		return nil, err
 	}
 	return conn, nil
@@ -551,13 +560,12 @@ func (d *Datasource) readWebsocketMessages(conn *websocket.Conn, connectionKey s
 
 		var streamResp StreamingResponse
 		if err := json.Unmarshal(message, &streamResp); err != nil {
-			backend.Logger.Error("Streaming: failed to unmarshal WebSocket message",
-				"connectionKey", connectionKey, "error", err)
+			logError(backend.Logger, "stream_message_unreadable", errResponseDecode, "connectionKey", connectionKey,
+				"bodySize", len(message), "body", bodyExcerpt(message), "error", err.Error())
 			continue
 		}
 
-		backend.Logger.Debug("Streaming: WebSocket message received",
-			"connectionKey", connectionKey, "items", len(streamResp.Items))
+		backend.Logger.Debug("stream_message_received", "connectionKey", connectionKey, "items", len(streamResp.Items))
 
 		// Route each StreamData item to the sender channels for its specific WebId.
 		d.datasourceMutex.Lock()
@@ -566,7 +574,8 @@ func (d *Datasource) readWebsocketMessages(conn *websocket.Conn, connectionKey s
 				select {
 				case ch <- item:
 				default:
-					backend.Logger.Warn("Streaming: sender channel full, dropping message", "webID", item.WebId)
+					logWarning(backend.Logger, "stream_values_dropped", errStreamSend, "connectionKey", connectionKey,
+						"webId", item.WebId, "error", "the stream is not reading its values fast enough")
 				}
 			}
 		}
@@ -582,11 +591,12 @@ func (d *Datasource) websocketConnectionLost(conn *websocket.Conn, connectionKey
 	d.websocketConnectionsMutex.Lock()
 	defer d.websocketConnectionsMutex.Unlock()
 	if d.websocketConnections[connectionKey] != conn {
-		backend.Logger.Debug("Streaming: WebSocket connection closed cleanly", "connectionKey", connectionKey)
+		backend.Logger.Debug("stream_connection_closed", "connectionKey", connectionKey)
 		return
 	}
 	delete(d.websocketConnections, connectionKey)
-	backend.Logger.Error("Streaming: WebSocket read error, connection removed", "connectionKey", connectionKey, "error", err)
+	// its streams reconnect, and log stream_reconnect_exhausted when they cannot
+	logWarning(backend.Logger, "stream_connection_lost", errStreamConnect, "connectionKey", connectionKey, "error", err.Error())
 
 	d.datasourceMutex.Lock()
 	defer d.datasourceMutex.Unlock()
@@ -611,14 +621,14 @@ func (d *Datasource) teardownStream(construct StreamChannelConstruct, sender *ba
 // Previous", the last good value of the channel is converted first and left out of the frame, so that a bad value
 // at the start of the values is replaced by it: PI Web API channels usually send one value per message. With
 // Previous, each value gives one row of the frame.
-func convertStreamValues(construct StreamChannelConstruct, stream StreamData) *data.Frame {
+func convertStreamValues(ctx context.Context, construct StreamChannelConstruct, stream StreamData) *data.Frame {
 	previous := construct.state.previousGood()
 	if previous == nil || construct.query.getNoDataReplace() != "Previous" {
-		return convertStreamItemsToFrame(construct.query, stream, construct.frameCache)
+		return convertStreamItemsToFrame(ctx, construct.query, stream, construct.frameCache)
 	}
 	withPrevious := stream
 	withPrevious.Items = append([]PiBatchContentItem{*previous}, stream.Items...)
-	frame := convertStreamItemsToFrame(construct.query, withPrevious, construct.frameCache)
+	frame := convertStreamItemsToFrame(ctx, construct.query, withPrevious, construct.frameCache)
 	frame.DeleteRow(0)
 	return frame
 }
@@ -628,6 +638,7 @@ func convertStreamValues(construct StreamChannelConstruct, stream StreamData) *d
 // while the stream was disconnected would otherwise only appear at the next refresh of the panel. At most the
 // query's maximum data points are sent; a failure is logged and leaves the gap until the next refresh.
 func (d *Datasource) fillStreamGap(ctx context.Context, path string, construct StreamChannelConstruct, sender *backend.StreamSender) {
+	logger := contextLogger(ctx)
 	if construct.query == nil || !construct.query.StreamFillGaps {
 		return
 	}
@@ -643,12 +654,15 @@ func (d *Datasource) fillStreamGap(ctx context.Context, path string, construct S
 		construct.WebID, queryEscape(last.UTC().Format(time.RFC3339Nano)), maxCount)
 	body, err := apiGet(ctx, d, uri)
 	if err != nil {
-		backend.Logger.Warn("Streaming: could not fill the gap after reconnect", "path", path, "webID", construct.WebID, "error", err)
+		errorType, status := requestErrorType(err, errUnreachable)
+		logError(logger, "stream_fill_failed", errStreamFill, "path", path, "webId", construct.WebID, "requestErrorType", errorType,
+			"status", status, "error", err.Error())
 		return
 	}
 	var recorded StreamData
 	if err := json.Unmarshal(body, &recorded); err != nil {
-		backend.Logger.Warn("Streaming: could not read the values to fill the gap", "path", path, "webID", construct.WebID, "error", err)
+		logError(logger, "stream_fill_failed", errStreamFill, "path", path, "webId", construct.WebID,
+			"requestErrorType", errResponseDecode, "bodySize", len(body), "body", bodyExcerpt(body), "error", err.Error())
 		return
 	}
 	newItems := recorded.Items[:0]
@@ -660,14 +674,14 @@ func (d *Datasource) fillStreamGap(ctx context.Context, path string, construct S
 	if recorded.Items = newItems; len(recorded.Items) == 0 {
 		return
 	}
-	frame := convertStreamValues(construct, recorded)
+	frame := convertStreamValues(ctx, construct, recorded)
 	if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
-		backend.Logger.Warn("Streaming: could not send the values filling the gap", "path", path, "webID", construct.WebID, "error", err)
+		logError(logger, "stream_send_failed", errStreamSend, "path", path, "webId", construct.WebID, "error", err.Error())
 		return
 	}
 	construct.state.sent(recorded.Items)
 	construct.state.filled(recorded.Items[len(recorded.Items)-1].Timestamp)
-	backend.Logger.Info("Streaming: filled the gap after reconnect", "path", path, "webID", construct.WebID, "values", len(recorded.Items))
+	logger.Info("stream_gap_filled", "path", path, "webId", construct.WebID, "values", len(recorded.Items))
 }
 
 // streamKeepaliveInterval is how long a stream waits for a new value before sending a keepalive to the panel.
@@ -693,6 +707,7 @@ func (d *Datasource) sendStreamData(
 	senderCh <-chan StreamData,
 	construct StreamChannelConstruct,
 ) error {
+	logger := contextLogger(ctx)
 	webID := construct.WebID
 
 	// Keepalive: if no data arrives within this interval, re-send the last known
@@ -708,7 +723,7 @@ func (d *Datasource) sendStreamData(
 	for {
 		select {
 		case <-ctx.Done():
-			backend.Logger.Info("Streaming: subscriber context done", "path", path, "webID", webID)
+			logger.Info("stream_stopped", "path", path, "webId", webID)
 			d.teardownStream(construct, sender)
 			return nil
 
@@ -717,12 +732,12 @@ func (d *Datasource) sendStreamData(
 			// Grafana streaming channel alive without adding the last values to the panel again.
 			if lastFrame != nil {
 				if err := sender.SendFrame(lastFrame.EmptyCopy(), data.IncludeDataOnly); err != nil {
-					backend.Logger.Error("Streaming: keepalive send failed",
-						"webID", webID, "error", err)
+					logError(logger, "stream_send_failed", errStreamSend, "path", path, "webId", webID, "keepalive", true,
+						"error", err.Error())
 					d.teardownStream(construct, sender)
 					return fmt.Errorf("streaming: keepalive send failed: %w", err)
 				}
-				backend.Logger.Debug("Streaming: keepalive frame sent", "webID", webID)
+				logger.Debug("stream_keepalive_sent", "path", path, "webId", webID)
 			}
 			keepalive.Reset(keepaliveInterval)
 
@@ -738,30 +753,30 @@ func (d *Datasource) sendStreamData(
 						select {
 						case <-ctx.Done():
 							t.Stop()
-							backend.Logger.Info("Streaming: context cancelled during reconnect", "path", path, "webID", webID)
+							logger.Info("stream_stopped", "path", path, "webId", webID, "reconnecting", true)
 							d.teardownStream(construct, sender)
 							return nil
 						case <-t.C:
 						}
 					}
-					backend.Logger.Info("Streaming: connection lost, attempting reconnect",
-						"path", path, "webID", webID, "attempt", attempt)
+					logger.Info("stream_reconnecting", "path", path, "webId", webID, "attempt", attempt)
 					newSenderCh = d.addStreamSender(construct.ConnectionKey, webID, sender)
 					if err := d.getOrCreateWebsocketConnection(ctx, construct.ConnectionKey, construct.connectionWebIDs); err != nil {
-						backend.Logger.Warn("Streaming: reconnect attempt failed",
-							"path", path, "webID", webID, "attempt", attempt, "error", err)
+						logWarning(logger, "stream_reconnect_failed", errStreamConnect, "path", path, "webId", webID,
+							"attempt", attempt, "error", err.Error())
 						d.removeStreamSender(construct.ConnectionKey, webID, sender)
 						newSenderCh = nil
 						continue
 					}
-					backend.Logger.Info("Streaming: reconnected successfully", "path", path, "webID", webID, "attempt", attempt)
+					logger.Info("stream_reconnected", "path", path, "webId", webID, "attempt", attempt)
 					break
 				}
 
 				if newSenderCh == nil {
 					// Grafana runs the stream again every 5 s while the panel is subscribed, so the channel stays
 					// registered (same key) and one of those runs reconnects once PI Web API is back.
-					backend.Logger.Error("Streaming: all reconnect attempts exhausted", "path", path, "webID", webID)
+					logError(logger, "stream_reconnect_exhausted", errStreamConnect, "path", path, "webId", webID,
+						"attempts", streamReconnectAttempts)
 					d.teardownStream(construct, sender)
 					return errors.New("streaming: connection lost and reconnect failed")
 				}
@@ -775,11 +790,10 @@ func (d *Datasource) sendStreamData(
 					continue
 				}
 			}
-			frame := convertStreamValues(construct, item)
+			frame := convertStreamValues(ctx, construct, item)
 
 			if err := sender.SendFrame(frame, data.IncludeDataOnly); err != nil {
-				backend.Logger.Error("Streaming: failed to send frame to subscriber",
-					"webID", webID, "error", err)
+				logError(logger, "stream_send_failed", errStreamSend, "path", path, "webId", webID, "error", err.Error())
 				d.teardownStream(construct, sender)
 				return fmt.Errorf("streaming: send frame failed: %w", err)
 			}
@@ -787,8 +801,7 @@ func (d *Datasource) sendStreamData(
 			keepalive.Reset(keepaliveInterval)
 			construct.state.sent(item.Items)
 
-			backend.Logger.Debug("Streaming: frame sent to subscriber",
-				"webID", webID, "items", len(item.Items))
+			logger.Debug("stream_values_sent", "path", path, "webId", webID, "values", len(item.Items))
 		}
 	}
 }
@@ -821,7 +834,7 @@ func (d *Datasource) checkForOrphanedWebSocket(connectionKey string, webIDs []st
 	if ws, ok := d.websocketConnections[connectionKey]; ok {
 		delete(d.websocketConnections, connectionKey)
 		_ = ws.Close()
-		backend.Logger.Info("Streaming: closed orphaned WebSocket connection", "connectionKey", connectionKey)
+		backend.Logger.Info("stream_connection_orphan_closed", "connectionKey", connectionKey)
 	}
 }
 
@@ -836,7 +849,7 @@ func (d *Datasource) addStreamSender(connectionKey, webID string, sender *backen
 	}
 	d.senderChannels[key][sender] = ch
 	d.datasourceMutex.Unlock()
-	backend.Logger.Debug("Streaming: sender registered", "webID", webID)
+	backend.Logger.Debug("stream_sender_registered", "webId", webID)
 	return ch
 }
 
@@ -855,7 +868,7 @@ func (d *Datasource) removeStreamSender(connectionKey, webID string, sender *bac
 		}
 	}
 	d.datasourceMutex.Unlock()
-	backend.Logger.Debug("Streaming: sender deregistered", "webID", webID)
+	backend.Logger.Debug("stream_sender_deregistered", "webId", webID)
 }
 
 // streamRangeEndTolerance is how long before now a query's time range may end and still be streamed: the end of a

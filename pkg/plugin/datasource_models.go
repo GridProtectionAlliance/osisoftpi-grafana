@@ -14,7 +14,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 )
 
 type Datasource struct {
@@ -99,17 +98,20 @@ func (h *hours) UnmarshalJSON(raw []byte) error {
 		}
 		parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
 		if err != nil {
-			log.DefaultLogger.Warn("Max Cache Time is not a number, using the default", "maxCacheTime", string(raw), "default", defaultMaxCacheTime)
+			logError(backend.Logger, "invalid_setting", errInvalidSetting, "setting", "maxCacheTime", "value", string(raw),
+				"default", int(defaultMaxCacheTime), "error", "not a number")
 			return nil
 		}
 		n = parsed
 	default:
-		log.DefaultLogger.Warn("Max Cache Time is not a number, using the default", "maxCacheTime", string(raw), "default", defaultMaxCacheTime)
+		logError(backend.Logger, "invalid_setting", errInvalidSetting, "setting", "maxCacheTime", "value", string(raw),
+			"default", int(defaultMaxCacheTime), "error", "not a number")
 		return nil
 	}
 
 	if math.IsNaN(n) || n > maxCacheTimeLimit {
-		log.DefaultLogger.Warn("Max Cache Time is out of range, using the default", "maxCacheTime", string(raw), "default", defaultMaxCacheTime)
+		logError(backend.Logger, "invalid_setting", errInvalidSetting, "setting", "maxCacheTime", "value", string(raw),
+			"default", int(defaultMaxCacheTime), "error", "out of range")
 		return nil
 	}
 	if n > 0 {

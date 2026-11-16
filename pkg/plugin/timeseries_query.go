@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -29,7 +30,8 @@ type BatchSubRequestMap map[string]BatchSubRequest
 // that contains batched queries that are ready to be sent to the PI Web API.
 // A query that cannot be processed gets a PiProcessedQuery with its RefID and the error, which is reported on
 // that query's response; the other queries are processed normally.
-func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID string) []PiProcessedQuery {
+func (d *Datasource) processQuery(ctx context.Context, allQueries []backend.DataQuery, datasourceUID string) []PiProcessedQuery {
+	logger := contextLogger(ctx)
 	var ProcessedQuery []PiProcessedQuery
 
 	index := 0
@@ -38,20 +40,22 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 
 		// Unmarshal the query into a PiQuery struct, and then unmarshal the PiQuery into a PiProcessedQuery
 		// if there are errors we'll set the error and return the PiProcessedQuery with an error set.
-		invalid := func(err error) {
-			ProcessedQuery = append(ProcessedQuery, PiProcessedQuery{RefID: query.RefID, Error: err, Status: http.StatusBadRequest})
+		invalid := func(errorType string, err error) {
+			ProcessedQuery = append(ProcessedQuery, PiProcessedQuery{RefID: query.RefID, Error: err, ErrorType: errorType,
+				Status: http.StatusBadRequest})
 		}
 		tempJson, err := json.Marshal(query)
 		if err != nil {
-			log.DefaultLogger.Error("Process query - Error marshalling", "error", err)
-			invalid(fmt.Errorf("error while processing the query"))
+			invalid(errInternal, fmt.Errorf("error while processing the query: %w", err))
 			continue
 		}
 
 		err = json.Unmarshal(tempJson, &PiQuery)
 		if err != nil {
-			log.DefaultLogger.Error("Process query - Error unmarshalling", "error", err, "json", string(tempJson))
-			invalid(fmt.Errorf("error while processing the query: %w", err))
+			// the target line has the error; this one the start of the saved query
+			logError(logger, "query_unreadable", errInvalidQuery, "refId", query.RefID, "error", err.Error(),
+				"query", bodyExcerpt(query.JSON))
+			invalid(errInvalidQuery, fmt.Errorf("error while processing the query: %w", err))
 			continue
 		}
 
@@ -76,7 +80,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 		// if the query is empty, we'll return a PiProcessedQuery with an error set.
 		err = PiQuery.isValidQuery()
 		if err != nil {
-			invalid(err)
+			invalid(errInvalidQuery, err)
 			continue
 		}
 
@@ -85,8 +89,7 @@ func (d *Datasource) processQuery(allQueries []backend.DataQuery, datasourceUID 
 		// into every element/attribute combination.
 		targets, err := PiQuery.Pi.getExpandedTargets()
 		if err != nil {
-			log.DefaultLogger.Warn("Process query - Error expanding template variables", "RefID", PiQuery.RefID, "error", err)
-			invalid(err)
+			invalid(errTemplateVariable, err)
 			continue
 		}
 
@@ -195,6 +198,7 @@ func (d *Datasource) batchRequest(ctx context.Context, PIWebAPIQueriesAll []PiPr
 }
 
 func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProcessedQuery) map[string][]PiProcessedQuery {
+	logger := contextLogger(ctx)
 	batchRequest := make(map[string]BatchSubRequest)
 	PIWebAPIQueries := make(map[string][]PiProcessedQuery)
 	// create a map of the batch requests. This allows us to map the response back to the original query
@@ -215,17 +219,24 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 
 	// process response
 	if err != nil {
+		errorType, requestStatus := requestErrorType(err, errUnreachable)
+		if ctx.Err() == nil { // a query cancelled by Grafana is not a failure of PI Web API
+			// the targets without a cached response are also logged by processBatchtoFrames (query_target_failed)
+			logError(logger, "batch_request_failed", errorType, "status", requestStatus, "error", err.Error(),
+				"targets", len(PIWebAPIQueriesAll))
+		}
 		for RefID, processedQuery := range PIWebAPIQueries {
-			backend.Logger.Error("Batch request", "RefID", RefID, "error", err)
 			for i, query := range processedQuery {
 				if data, found := d.webCache.Get(query.HashCode); d.isUsingResponseCache() && found {
-					log.DefaultLogger.Debug("Batch request - Cache get operation", "RefID", RefID, "index", query.Index)
+					logger.Debug("response_cache_hit", "refId", RefID, "index", query.Index)
 					PIWebAPIQueries[RefID][i].Response = data
 					PIWebAPIQueries[RefID][i].Status = http.StatusOK
 					PIWebAPIQueries[RefID][i].Cached = true
 				} else {
-					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error during query: %s", err.Error())
+					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error during query: %w", err)
+					PIWebAPIQueries[RefID][i].ErrorType = errorType
 					PIWebAPIQueries[RefID][i].Status = http.StatusBadGateway
+					PIWebAPIQueries[RefID][i].RequestStatus = requestStatus
 				}
 			}
 		}
@@ -235,10 +246,12 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 	tempresponse := make(map[string]PIBatchResponse)
 	err = json.Unmarshal(batchRequestResponse, &tempresponse)
 	if err != nil {
+		logError(logger, "piwebapi_response_unreadable", errResponseDecode, "reason", "batch response", "error", err.Error(),
+			"bodySize", len(batchRequestResponse), "body", bodyExcerpt(batchRequestResponse))
 		for RefID, processedQuery := range PIWebAPIQueries {
-			backend.Logger.Error("Batch request - Unmarshal", "RefID", RefID, "error", err, "tempresponse", tempresponse)
 			for i := range processedQuery {
 				PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error during query. bad response format")
+				PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 				PIWebAPIQueries[RefID][i].Status = http.StatusInternalServerError
 			}
 		}
@@ -255,18 +268,19 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 				if WebIdData.Status == http.StatusOK {
 					PIWebAPIQueries[RefID][i].WebID = d.saveWebID(WebIdData.Content, query.FullTargetPath, query.IsPIPoint)
 				} else {
-					backend.Logger.Debug("Batch request - WebID lookup failed", "RefID", RefID, "target", query.FullTargetPath,
-						"status", WebIdData.Status, "content", WebIdData.Content)
 					PIWebAPIQueries[RefID][i].Status = WebIdData.Status
+					PIWebAPIQueries[RefID][i].ErrorType = errorTypeForStatus(WebIdData.Status)
 					jWebIdData, err := json.Marshal(WebIdData.Content)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
+						PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 						continue
 					}
 					var errorResponse PiBatchDataError
 					err = json.Unmarshal(jWebIdData, &errorResponse)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
+						PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 						continue
 					}
 					if errorResponse.Error != nil && len(errorResponse.Error.Errors) > 0 {
@@ -281,32 +295,39 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 			key = query.dataRequestKey()
 			ResponseData, ok := tempresponse[key]
 			if ok {
-				if ResponseData.Status == http.StatusOK {
+				if unreadable, ok := ResponseData.Content.(*PiBatchDataError); ok && ResponseData.Status == http.StatusOK {
+					// PI Web API answered, but the plugin cannot read the response (see PIBatchResponse.UnmarshalJSON)
+					d.webCache.Remove(query.HashCode)
+					PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error during query: %s", strings.Join(unreadable.Error.Errors, "; "))
+					PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
+					PIWebAPIQueries[RefID][i].Status = http.StatusInternalServerError
+				} else if ResponseData.Status == http.StatusOK {
 					PIWebAPIQueries[RefID][i].Response = ResponseData.Content.(PiBatchData)
 					PIWebAPIQueries[RefID][i].Status = ResponseData.Status
 					if d.isUsingResponseCache() {
-						log.DefaultLogger.Debug("Batch request - Cache set", "RefID", RefID, "index", query.Index)
+						logger.Debug("response_cache_set", "refId", RefID, "index", query.Index)
 						d.webCache.Set(query.HashCode, PIWebAPIQueries[RefID][i].Response)
 					}
 				} else if data, found := d.webCache.Get(query.HashCode); d.isUsingResponseCache() && found {
-					log.DefaultLogger.Debug("Batch request - Cache get", "RefID", RefID, "index", query.Index)
+					logger.Debug("response_cache_hit", "refId", RefID, "index", query.Index)
 					PIWebAPIQueries[RefID][i].Response = data
 					PIWebAPIQueries[RefID][i].Status = http.StatusOK
 					PIWebAPIQueries[RefID][i].Cached = true
 				} else {
-					backend.Logger.Debug("Batch request - data request failed", "RefID", RefID, "target", query.FullTargetPath,
-						"status", ResponseData.Status, "content", ResponseData.Content)
 					d.webCache.Remove(query.HashCode)
 					PIWebAPIQueries[RefID][i].Status = ResponseData.Status
+					PIWebAPIQueries[RefID][i].ErrorType = errorTypeForStatus(ResponseData.Status)
 					jResponseData, err := json.Marshal(ResponseData.Content)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
+						PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 						continue
 					}
 					var errorResponse PiBatchDataError
 					err = json.Unmarshal(jResponseData, &errorResponse)
 					if err != nil {
 						PIWebAPIQueries[RefID][i].Error = err
+						PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 						continue
 					}
 					if errorResponse.Error != nil && len(errorResponse.Error.Errors) > 0 {
@@ -316,13 +337,14 @@ func (d *Datasource) sendBatch(ctx context.Context, PIWebAPIQueriesAll []PiProce
 					}
 				}
 			} else if data, found := d.webCache.Get(query.HashCode); d.isUsingResponseCache() && found {
-				log.DefaultLogger.Debug("Batch request - Cache get", "RefID", RefID, "index", query.Index)
+				logger.Debug("response_cache_hit", "refId", RefID, "index", query.Index)
 				PIWebAPIQueries[RefID][i].Response = data
 				PIWebAPIQueries[RefID][i].Status = http.StatusOK
 				PIWebAPIQueries[RefID][i].Cached = true
 			} else {
 				d.webCache.Remove(query.HashCode)
 				PIWebAPIQueries[RefID][i].Error = fmt.Errorf("error finding key %s in response", key)
+				PIWebAPIQueries[RefID][i].ErrorType = errResponseDecode
 				PIWebAPIQueries[RefID][i].Status = http.StatusInternalServerError
 			}
 		}
@@ -345,14 +367,28 @@ func (q *PiProcessedQuery) dataRequestKey() string {
 
 // logFields returns the fields logged when the target fails: enough to reproduce the failing requests.
 func (q *PiProcessedQuery) logFields() []any {
-	fields := []any{"RefID", q.RefID, "target", q.FullTargetPath, "status", q.Status, "error", q.Error, "hideError", q.HideError}
+	status := q.Status
+	if q.RequestStatus != 0 {
+		status = q.RequestStatus // the status returned by PI Web API, not the 502 returned to Grafana
+	}
+	fields := []any{"refId", q.RefID, "target", q.FullTargetPath, "status", status, "error", q.Error.Error(),
+		"hideError", q.HideError}
+	if queryType := queryTypeOf(q.Resource); queryType != "" {
+		fields = append(fields, "queryType", queryType)
+	}
+	if nodata := q.getNoDataReplace(); nodata != "" {
+		fields = append(fields, "nodata", nodata)
+	}
+	if !q.StartTime.IsZero() {
+		fields = append(fields, "startTime", q.StartTime.UTC().Format(time.RFC3339), "endTime", q.EndTime.UTC().Format(time.RFC3339))
+	}
 	if q.WebID != "" {
 		fields = append(fields, "webId", q.WebID)
 	}
 	if q.PluginVersion != "" {
 		fields = append(fields, "savedByPluginVersion", q.PluginVersion)
 	}
-	if q.Resource != "" {
+	if q.Resource != "" && (q.WebID != "" || !strings.Contains(q.Resource, "{0}")) { // not sent without a WebID
 		fields = append(fields, "request", strings.ReplaceAll(q.Resource, "{0}", q.WebID))
 	}
 	if lookup, ok := q.BatchRequest[q.webIDRequestKey()]; ok {
@@ -361,7 +397,23 @@ func (q *PiProcessedQuery) logFields() []any {
 	return fields
 }
 
-func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcessedQuery) *backend.QueryDataResponse {
+// queryTypeOf returns the type of the data request of a target: plot, recorded, interpolated, summary, lastValue
+// (streamsets/value, or streamsets/end with recorded values) or calculation; "" without a request.
+func queryTypeOf(resource string) string {
+	path, _, _ := strings.Cut(resource, "?")
+	switch {
+	case path == "":
+		return ""
+	case strings.Contains(path, "/calculation"):
+		return "calculation"
+	case strings.HasSuffix(path, "/streamsets/value"), strings.HasSuffix(path, "/streamsets/end"):
+		return "lastValue"
+	}
+	return path[strings.LastIndex(path, "/")+1:]
+}
+
+func (d *Datasource) processBatchtoFrames(ctx context.Context, processedQuery map[string][]PiProcessedQuery) *backend.QueryDataResponse {
+	logger := contextLogger(ctx)
 	response := backend.NewQueryDataResponse()
 
 	// Pre-pass: collect all streamable WebIDs so every tag in this batch can share a
@@ -395,9 +447,19 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 			// A failing target (e.g. an element of a multi-value variable without the attribute) reports its
 			// error and the other targets of the query still return their data.
 			if q.Error != nil {
-				backend.Logger.Error("Query target failed", q.logFields()...)
+				errorType := q.ErrorType
+				if errorType == "" {
+					errorType = errInternal
+				}
+				if errors.Is(q.Error, context.Canceled) {
+					// Grafana cancels the queries of a panel that is refreshed or closed
+					logger.Debug("query_canceled", q.logFields()...)
+				} else {
+					logError(logger, "query_target_failed", errorType, q.logFields()...)
+				}
 				if !q.HideError && subResponse.Error == nil {
 					subResponse.Error = q.Error
+					subResponse.ErrorSource = errorSourceOf(errorType)
 					errorStatus = backend.Status(q.Status)
 				}
 				continue
@@ -405,7 +467,7 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 			subResponse.Status = backend.Status(q.Status)
 
 			for _, SummaryType := range *q.Response.getSummaryTypes() {
-				frame := convertItemsToDataFrame(&q, d, SummaryType)
+				frame := convertItemsToDataFrame(ctx, &q, d, SummaryType)
 				frame.RefID = RefID
 				// meta data
 				frame.Meta.ExecutedQueryString = strings.ReplaceAll(q.Resource, "{0}", q.WebID)
@@ -413,7 +475,7 @@ func (d *Datasource) processBatchtoFrames(processedQuery map[string][]PiProcesse
 				// If the query is streamable, register a channel so Grafana subscribes to
 				// the live WebSocket stream for this tag.
 				if q.Streamable {
-					channelKey := d.registerStreamChannel(&q, *q.Response.getItems(SummaryType), connectionKey, connectionWebIDs)
+					channelKey := d.registerStreamChannel(ctx, &q, *q.Response.getItems(SummaryType), connectionKey, connectionWebIDs)
 					frame.Meta.Channel = "ds/" + q.UID + "/" + channelKey
 				}
 
@@ -618,7 +680,7 @@ func (q Query) getQueryBaseURL() string {
 			}
 		}
 		uri += "&expression=" + queryEscape(q.Pi.Expression) + "&webId="
-		log.DefaultLogger.Debug("Calculation log", "uri", uri)
+		log.DefaultLogger.Debug("calculation_request", "url", uri)
 	} else {
 		uri += "streamsets"
 		if q.Pi.isUseLastValue() {

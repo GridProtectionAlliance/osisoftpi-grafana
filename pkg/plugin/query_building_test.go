@@ -71,7 +71,7 @@ func TestRefIDWithJSONPathCharacters(t *testing.T) {
 	}
 
 	// the WebID is not cached: every query looks it up in the same batch as its data
-	response := d.processBatchtoFrames(d.batchRequest(t.Context(), d.processQuery(queries, "uid")))
+	response := d.processBatchtoFrames(t.Context(), d.batchRequest(t.Context(), d.processQuery(t.Context(), queries, "uid")))
 	for _, refID := range refIDs {
 		r := response.Responses[refID]
 		if r.Error != nil || len(r.Frames) != 1 {
@@ -171,7 +171,7 @@ func TestUnusedQueryModelFieldsAreIgnored(t *testing.T) {
 		`"elementPath":{}`,
 	} {
 		t.Run(extra, func(t *testing.T) {
-			processed := d.processQuery([]backend.DataQuery{{
+			processed := d.processQuery(t.Context(), []backend.DataQuery{{
 				RefID: "A",
 				JSON:  json.RawMessage(`{"target":"AF\\DB\\U-100\\P-101;Flow",` + extra + `}`),
 			}}, "uid")

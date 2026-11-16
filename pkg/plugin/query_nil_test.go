@@ -25,7 +25,7 @@ func processTestQuery(t *testing.T, d *Datasource, query map[string]interface{})
 		t.Fatal(err)
 	}
 	now := time.Now()
-	return d.processQuery([]backend.DataQuery{{
+	return d.processQuery(t.Context(), []backend.DataQuery{{
 		RefID:         "A",
 		JSON:          raw,
 		MaxDataPoints: 500,
@@ -109,7 +109,7 @@ func TestDataLabelsWithInvalidRegex(t *testing.T) {
 		FullTargetPath: `\\AF\DB\Element|Temperature`,
 		Regex:          &Regex{Enable: &enable, Search: &search, Replace: &replace},
 	}
-	if got := getDataLabels(false, q, "Float32", "", "", "")["name"]; got != "Element|Temperature" {
+	if got := getDataLabels(false, q, "Float32", "", "", "", nil)["name"]; got != "Element|Temperature" {
 		t.Errorf("label = %q, want the unmodified label", got)
 	}
 }

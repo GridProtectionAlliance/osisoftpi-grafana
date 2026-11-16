@@ -92,7 +92,7 @@ func runFakeQueries(t *testing.T, d *Datasource, queries map[string]map[string]i
 				t.Fatalf("query panicked: %v", p)
 			}
 		}()
-		response = d.processBatchtoFrames(d.batchRequest(t.Context(), d.processQuery(dataQueries, "uid")))
+		response = d.processBatchtoFrames(t.Context(), d.batchRequest(t.Context(), d.processQuery(t.Context(), dataQueries, "uid")))
 	}()
 	return response.Responses
 }

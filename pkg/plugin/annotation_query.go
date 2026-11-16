@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
-	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
@@ -24,10 +23,9 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 	// if there are errors we'll set the error and return the PiProcessedQuery with an error set.
 	tempJson, err := json.Marshal(query)
 	if err != nil {
-		log.DefaultLogger.Error("Process annotation - Error marshalling", "error", err)
-
-		// create a processed query with the error set
+		// create a processed query with the error set (logged by queryAnnotation)
 		ProcessedQuery = PiProcessedAnnotationQuery{
+			RefID: query.RefID,
 			Error: err,
 		}
 		return ProcessedQuery
@@ -35,10 +33,12 @@ func (d *Datasource) processAnnotationQuery(ctx context.Context, query backend.D
 
 	err = json.Unmarshal(tempJson, &PiAnnotationQuery)
 	if err != nil {
-		log.DefaultLogger.Error("Process annotation - Error unmarshalling", "error", err)
-
+		// the failure line of queryAnnotation has the error; this one the start of the saved query
+		logError(contextLogger(ctx), "query_unreadable", errInvalidQuery, "refId", query.RefID, "error", err.Error(),
+			"query", bodyExcerpt(query.JSON))
 		// create a processed query with the error set
 		ProcessedQuery = PiProcessedAnnotationQuery{
+			RefID: query.RefID,
 			Error: err,
 		}
 		return ProcessedQuery
@@ -239,7 +239,8 @@ var annotationFieldNames = map[string]bool{"time": true, "timeEnd": true, "title
 // filter, the attribute values of every event frame in the same order (Items[i] belongs to event frame i). When
 // attributes are enabled, a field is added for each attribute found, with no value for the event frames that lack
 // it, and attributeText holds the attributes of each event frame.
-func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte, attributesEnabled bool) (*data.Frame, error) {
+func convertAnnotationResponseToFrame(ctx context.Context, refID string, rawAnnotationResponse []byte, attributesEnabled bool) (*data.Frame, error) {
+	logger := contextLogger(ctx)
 	var annotationResponse map[string]AnnotationBatchResponse
 
 	err := json.Unmarshal(rawAnnotationResponse, &annotationResponse)
@@ -288,14 +289,17 @@ func convertAnnotationResponseToFrame(refID string, rawAnnotationResponse []byte
 		for _, key := range annotationAttributeKeys(annotationResponse) {
 			value := annotationResponse[key]
 			if value.Status >= http.StatusBadRequest {
-				backend.Logger.Warn("Annotation attribute request failed", "refID", refID, "status", value.Status, "error", batchErrorMessage(value.Content))
+				logError(logger, "annotation_attribute_failed", errorTypeForStatus(value.Status), "refId", refID,
+					"status", value.Status, "error", batchErrorMessage(value.Content))
 				continue
 			}
 
 			var attributes EventFrameAttribute
 			err = json.Unmarshal(value.Content, &attributes)
 			if err != nil {
-				backend.Logger.Error("Error unmarshalling attribute response", "error", err)
+				logError(logger, "piwebapi_response_unreadable", errResponseDecode, "refId", refID,
+					"reason", "event frame attributes", "bodySize", len(value.Content), "body", bodyExcerpt(value.Content),
+					"error", err.Error())
 				continue
 			}
 

@@ -35,7 +35,7 @@ func TestConvertStreamItemsToFrame_Float64(t *testing.T) {
 		{Timestamp: ts.Add(time.Second), Value: float64(2.72), Good: true},
 	}
 
-	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame == nil {
 		t.Fatal("expected non-nil frame")
 	}
@@ -79,7 +79,7 @@ func TestConvertStreamItemsToFrame_EmptyItems(t *testing.T) {
 	ds := newTestDatasource()
 	query := makeTestQuery(webID)
 
-	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: []PiBatchContentItem{}}, buildStreamFrameCache(ds, query))
 	if frame == nil {
 		t.Fatal("expected non-nil frame")
 	}
@@ -109,7 +109,7 @@ func TestConvertStreamItemsToFrame_NilValue(t *testing.T) {
 		{Timestamp: ts, Value: nil, Good: false},
 	}
 
-	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame.Fields[0].Len() != 1 {
 		t.Fatalf("expected 1 row (timestamp retained), got %d", frame.Fields[0].Len())
 	}
@@ -145,7 +145,7 @@ func TestConvertStreamItemsToFrame_NodataDrop(t *testing.T) {
 		{Timestamp: ts.Add(2 * time.Second), Value: float64(3.0), Good: true},
 	}
 
-	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	// The nil/bad value is dropped, so only 2 rows remain.
 	if frame.Fields[0].Len() != 2 {
 		t.Errorf("expected 2 rows after drop, got %d", frame.Fields[0].Len())
@@ -176,7 +176,7 @@ func TestConvertStreamItemsToFrame_NodataPrevious(t *testing.T) {
 		{Timestamp: ts.Add(time.Second), Value: nil, Good: false}, // replaced by previous
 	}
 
-	frame := convertStreamItemsToFrame(query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: items}, buildStreamFrameCache(ds, query))
 	if frame.Fields[0].Len() != 2 {
 		t.Errorf("expected 2 rows, got %d", frame.Fields[0].Len())
 	}
@@ -218,7 +218,7 @@ func TestConvertStreamItemsToFrame_CachedMetadata(t *testing.T) {
 	query.UseUnit = true
 
 	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	frame := convertStreamItemsToFrame(query, StreamData{Items: []PiBatchContentItem{{Timestamp: ts, Value: float64(3), Good: true}}},
+	frame := convertStreamItemsToFrame(t.Context(), query, StreamData{Items: []PiBatchContentItem{{Timestamp: ts, Value: float64(3), Good: true}}},
 		buildStreamFrameCache(ds, query))
 	field := frame.Fields[1]
 	if field.Type() != data.FieldTypeNullableInt32 {
